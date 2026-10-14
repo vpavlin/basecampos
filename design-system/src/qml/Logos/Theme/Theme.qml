@@ -41,7 +41,7 @@ QtObject {
 
     // id -> { id, name, author, mode, builtin }
     readonly property var themeInfo: {
-        var info = { "dark": { id: "dark", name: "Logos Dark", author: "Logos", mode: "dark", builtin: true } }
+        var info = { "dark": { id: "dark", name: "Dark", author: "Logos", mode: "dark", builtin: true } }
         var installed = ThemeRegistry.themes
         for (var i = 0; i < installed.length; ++i) {
             var t = installed[i]

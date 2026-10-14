@@ -1,9 +1,9 @@
 {
   "$schema": "https://logos.co/schemas/basecamp-theme/1.json",
   "formatVersion": 1,
-  "id": "logos.paper",
-  "name": "Logos Paper",
-  "author": "Logos",
+  "id": "alisher.paper",
+  "name": "Paper",
+  "author": "Alisher",
   "mode": "light",
   "palette": {
     "background": "#FAF7F2",
