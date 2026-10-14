@@ -16,7 +16,27 @@ QtObject {
     readonly property ColorPalette colors: ColorPalette {}
     
     // ===== DESIGN TOKENS =====
-    readonly property Spacing spacing: Spacing {}
+    readonly property Spacing spacing: Spacing {
+        radiusOverrides: theme._activeRadius.overrides
+        radiusScale: theme._activeRadius.scale
+    }
+
+    // radius block of the active installed theme, split into per-step
+    // overrides and the overall scale (defaults for built-in dark).
+    readonly property var _activeRadius: {
+        var installed = ThemeRegistry.themes
+        for (var i = 0; i < installed.length; ++i) {
+            if (installed[i].id !== currentTheme)
+                continue
+            var r = installed[i].radius || {}
+            var overrides = {}
+            for (var k in r)
+                if (k !== "scale")
+                    overrides[k] = r[k]
+            return { overrides: overrides, scale: r.scale !== undefined ? r.scale : 1.0 }
+        }
+        return { overrides: {}, scale: 1.0 }
+    }
     readonly property Typography typography: Typography {
         familyOverride: theme._activeTypography.family || ""
         monoOverride: theme._activeTypography.monoFamily || ""

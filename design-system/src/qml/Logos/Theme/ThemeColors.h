@@ -41,4 +41,8 @@ private:
 // look is unchanged. Re-read it on ThemeNotifier::currentChanged.
 QColor themeColor(const QString& token, const QColor& fallback);
 
+// The active theme's `radius.scale` (0 = square corners, 1 = as designed).
+// Multiply C++-drawn corner radii by it; re-read on currentChanged.
+double themeRadiusScale();
+
 } // namespace Logos

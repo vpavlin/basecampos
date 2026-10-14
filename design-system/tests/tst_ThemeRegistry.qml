@@ -264,4 +264,34 @@ TestCase {
         compare(field.textInput.font.family, fam, "LogosTextField")
         compare(primaryBtn.labelItem.font.family, fam, "LogosButton")
     }
+
+    // ----- corners and font fallback lists -----
+
+    function test_radius_scale_parses_and_clamps() {
+        var r = ThemeRegistry.parse(minimalDoc({ radius: { scale: 3, small: 2 } }))
+        verify(r.ok)
+        compare(r.theme.radius.scale, 1)
+        compare(r.theme.radius.small, 2)
+        verify(r.warnings.join(" ").indexOf("scale") >= 0)
+    }
+
+    function test_radius_scale_squares_everything() {
+        compare(Theme.spacing.radiusLarge, 8)
+        compare(Theme.spacing.roundness, 1)
+        Theme.setTheme("test.square")
+        compare(Theme.spacing.radiusLarge, 0)     // override 20, scaled by 0
+        compare(Theme.spacing.radiusPill, 0)
+        compare(Theme.spacing.roundness, 0)
+        compare(sw.handleColor !== undefined, true)
+        Theme.setTheme("dark")
+        compare(Theme.spacing.radiusLarge, 8)
+    }
+
+    function test_family_fallback_list_picks_first_installed() {
+        Theme.setTheme("test.square")
+        compare(Theme.typography.family, "Public Sans")
+        verify(Theme.typography.familyAvailable)
+        compare(Theme.typography.familyRequested, "No Such Font, Public Sans")
+        Theme.setTheme("dark")
+    }
 }

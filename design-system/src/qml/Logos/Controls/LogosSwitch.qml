@@ -36,7 +36,7 @@ Switch {
         Rectangle {
             id: focusRing
             anchors.fill: parent
-            radius: height / 2
+            radius: height / 2 * Theme.spacing.roundness
             color: "transparent"
             border.width: root.visualFocus ? 2 : 0
             border.color: Theme.palette.focus
@@ -47,7 +47,7 @@ Switch {
             anchors.centerIn: parent
             width: 36
             height: 20
-            radius: height / 2
+            radius: height / 2 * Theme.spacing.roundness
             color: root.checked ? root.trackColorOn : root.trackColorOff
             border.color: Theme.palette.border
             border.width: 1
@@ -57,7 +57,7 @@ Switch {
                 id: handle
                 width: parent.height - Theme.spacing.tiny
                 height: width
-                radius: height / 2
+                radius: height / 2 * Theme.spacing.roundness
                 color: root.handleColor
                 x: root.checked
                    ? parent.width - width - Theme.spacing.tiny / 2

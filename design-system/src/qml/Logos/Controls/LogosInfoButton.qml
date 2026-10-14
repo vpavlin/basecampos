@@ -96,7 +96,7 @@ LogosAbstractButton {
 
     background: Rectangle {
         id: ring
-        radius: width / 2
+        radius: width / 2 * Theme.spacing.roundness
         color: "transparent"
         border.width: 1
         border.color: d.lit ? Theme.palette.text : Theme.palette.borderGlyph

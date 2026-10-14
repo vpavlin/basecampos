@@ -16,25 +16,44 @@ QtObject {
     }
     // Families the active theme asks for (names of fonts installed on the
     // system; set by Theme.qml). Empty = use the defaults below.
-    property string familyOverride: ""
-    property string monoOverride: ""
+    // Each may be a name or a fallback list of names; the first installed wins.
+    property var familyOverride: ""
+    property var monoOverride: ""
 
     // Installed families, read once; a theme naming a missing font falls back.
     readonly property var _installed: Qt.fontFamilies()
-    readonly property bool familyAvailable: familyOverride.length === 0 || _installed.indexOf(familyOverride) >= 0
-    readonly property bool monoAvailable: monoOverride.length === 0 || _installed.indexOf(monoOverride) >= 0
+    // A list arriving from C++ is a sequence wrapper, not a JS Array, so test
+    // for "string" rather than Array.isArray().
+    function _names(wanted) {
+        if (!wanted) return []
+        if (typeof wanted === "string") return [wanted]
+        return Array.prototype.slice.call(wanted)
+    }
+    function _pick(wanted) {
+        const list = _names(wanted)
+        for (let i = 0; i < list.length; ++i)
+            if (_installed.indexOf(list[i]) >= 0)
+                return list[i]
+        return ""
+    }
+    readonly property string _familyPick: _pick(familyOverride)
+    readonly property string _monoPick: _pick(monoOverride)
+    readonly property bool familyAvailable: _names(familyOverride).length === 0 || _familyPick.length > 0
+    readonly property bool monoAvailable: _names(monoOverride).length === 0 || _monoPick.length > 0
+    // What the theme asked for, for display ("JetBrains Mono, …").
+    readonly property string familyRequested: _names(familyOverride).join(", ")
 
     readonly property string _bundledSans: publicSansRegular.status == FontLoader.Ready ? publicSansRegular.name : "sans-serif"
 
     // Body family. Kept under its historical name: every control reads it, so
     // a theme's family restyles all text. Fallback: bundled Public Sans.
-    readonly property string publicSans: familyOverride.length > 0 && familyAvailable ? familyOverride : _bundledSans
+    readonly property string publicSans: _familyPick.length > 0 ? _familyPick : _bundledSans
     // Same value under a role name, for new code.
     readonly property string family: publicSans
 
     // Family for hex identifiers, addresses and code, where fixed-width glyphs
     // aid scanning and copying. Defaults to the platform's monospace.
-    readonly property string mono: monoOverride.length > 0 && monoAvailable ? monoOverride : "monospace"
+    readonly property string mono: _monoPick.length > 0 ? _monoPick : "monospace"
 
     // weights
     readonly property int weightRegular: 400

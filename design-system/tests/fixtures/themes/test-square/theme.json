@@ -1,0 +1,17 @@
+{
+  "formatVersion": 1,
+  "id": "test.square",
+  "name": "Square",
+  "author": "tests",
+  "mode": "dark",
+  "radius": {
+    "scale": 0,
+    "large": 20
+  },
+  "typography": {
+    "family": [
+      "No Such Font",
+      "Public Sans"
+    ]
+  }
+}

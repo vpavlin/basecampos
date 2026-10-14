@@ -131,7 +131,7 @@ Control {
             Layout.alignment: Qt.AlignTop
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
-            radius: width / 2
+            radius: width / 2 * Theme.spacing.roundness
             color: Theme.palette.surface
 
             LogosIcon {

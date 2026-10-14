@@ -63,7 +63,7 @@ TabBar {
             z: 1
             height: root.indicatorHeight
             color: root.indicatorColor
-            radius: height / 2
+            radius: height / 2 * Theme.spacing.roundness
             y: parent.height - height
             x: 0
             width: 0

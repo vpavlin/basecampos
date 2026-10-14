@@ -49,7 +49,7 @@ TabButton {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             height: 2
-            radius: height / 2
+            radius: height / 2 * Theme.spacing.roundness
             color: root.visualFocus && !root.checked
                    ? Theme.palette.overlayOrange
                    : "transparent"

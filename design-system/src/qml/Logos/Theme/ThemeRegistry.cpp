@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -355,7 +356,22 @@ QVariantMap ThemeRegistry::parseDocument(const QByteArray& data)
     }
 
     const QVariantMap spacing = parseIntGroup(doc, "spacing", spacingRanges(), warnings);
-    const QVariantMap radius = parseIntGroup(doc, "radius", radiusRanges(), warnings);
+    QJsonObject radiusDoc = doc.value("radius").toObject();
+    const QJsonValue scaleValue = radiusDoc.take(QStringLiteral("scale"));
+    QJsonObject radiusOnly = doc;
+    radiusOnly.insert(QStringLiteral("radius"), radiusDoc);
+    QVariantMap radius = parseIntGroup(radiusOnly, "radius", radiusRanges(), warnings);
+    if (!scaleValue.isUndefined()) {
+        if (!scaleValue.isDouble()) {
+            warnings << QStringLiteral("'radius.scale' is not a number; ignored");
+        } else {
+            const double raw = scaleValue.toDouble();
+            const double clamped = qBound(0.0, raw, 1.0);
+            if (clamped != raw)
+                warnings << QStringLiteral("'radius.scale' clamped to %1").arg(clamped);
+            radius.insert(QStringLiteral("scale"), clamped);
+        }
+    }
     QVariantMap typography;
     const QJsonValue tv = doc.value("typography");
     if (tv.isObject()) {
@@ -370,12 +386,20 @@ QVariantMap ThemeRegistry::parseDocument(const QByteArray& data)
             const QJsonValue fv = tobj.value(QLatin1String(k));
             if (fv.isUndefined())
                 continue;
-            const QString fam = fv.toString().trimmed();
+            // A name, or a fallback list of names (first installed one wins).
+            const QJsonArray names = fv.isArray() ? fv.toArray() : QJsonArray{ fv };
             static const QRegularExpression ok(QStringLiteral("^[\\p{L}\\p{N} ._'-]{1,64}$"));
-            if (!fv.isString() || !ok.match(fam).hasMatch())
-                warnings << QStringLiteral("'typography.%1' must be a font family name; ignored").arg(QLatin1String(k));
-            else
-                typography.insert(QLatin1String(k), fam);
+            QStringList valid;
+            for (const QJsonValue& n : names) {
+                const QString fam = n.toString().trimmed();
+                if (n.isString() && ok.match(fam).hasMatch() && valid.size() < 8)
+                    valid << fam;
+                else
+                    warnings << QStringLiteral("'typography.%1' entry must be a font family name; ignored").arg(QLatin1String(k));
+            }
+            if (!valid.isEmpty())
+                typography.insert(QLatin1String(k), valid.size() == 1 && !fv.isArray()
+                                                       ? QVariant(valid.first()) : QVariant(valid));
         }
         typography.insert("sizes", parseIntGroup(tobj, "sizes", sizeRanges(), warnings));
         typography.insert("weights", parseIntGroup(tobj, "weights", weightRanges(), warnings));
@@ -436,28 +460,41 @@ void Logos::ThemeNotifier::setCurrent(const QString& id)
     emit currentChanged();
 }
 
-QColor Logos::themeColor(const QString& token, const QColor& fallback)
+namespace {
+// The active theme's resolved document, rescanned only when the id changes.
+const QVariantMap& activeThemeDocument()
 {
-    // Palette of the active theme, rescanned only when the id changes.
     static QString cachedId;
-    static QVariantMap cachedPalette;
-    const QString id = ThemeNotifier::instance()->current();
+    static QVariantMap cached;
+    const QString id = Logos::ThemeNotifier::instance()->current();
     if (id != cachedId) {
         cachedId = id;
-        cachedPalette.clear();
+        cached.clear();
         if (id != QLatin1String("dark")) {
             ThemeRegistry registry;
             for (const QVariant& t : registry.themes()) {
                 const QVariantMap theme = t.toMap();
                 if (theme.value("id").toString() == id) {
-                    cachedPalette = theme.value("palette").toMap();
+                    cached = theme;
                     break;
                 }
             }
         }
     }
-    const QVariant v = cachedPalette.value(token);
+    return cached;
+}
+} // namespace
+
+QColor Logos::themeColor(const QString& token, const QColor& fallback)
+{
+    const QVariant v = activeThemeDocument().value("palette").toMap().value(token);
     return v.isValid() ? v.value<QColor>() : fallback;
+}
+
+double Logos::themeRadiusScale()
+{
+    const QVariant v = activeThemeDocument().value("radius").toMap().value("scale");
+    return v.isValid() ? v.toDouble() : 1.0;
 }
 
 QVariantMap Logos::installThemeFile(const QString& path)

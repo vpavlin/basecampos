@@ -8,8 +8,8 @@ ProgressBar {
 
     property color trackColor: Theme.palette.backgroundSecondary
     property color fillColor: Theme.palette.primary
-    property real trackRadius: height / 2
-    property real fillRadius: height / 2
+    property real trackRadius: height / 2 * Theme.spacing.roundness
+    property real fillRadius: height / 2 * Theme.spacing.roundness
 
     // Exposed for inspection (e.g., from tests). Read-only.
     readonly property alias backgroundItem: bg
