@@ -199,4 +199,19 @@ TestCase {
         // accentForeground keeps the black glyph dark already draws on accentOrange.
         compare(Theme.darkTheme.accentForeground, Theme.darkTheme.backgroundBlack)
     }
+
+    // ----- process-wide current theme -----
+
+    function test_current_is_shared_state() {
+        Theme.setTheme("logos.light")
+        compare(ThemeRegistry.current, "logos.light")
+        // Writing the shared state directly (what another engine's setTheme
+        // does) moves this engine's Theme too.
+        ThemeRegistry.current = "dark"
+        compare(Theme.currentTheme, "dark")
+        compare(Theme.palette, Theme.darkTheme)
+        ThemeRegistry.current = "logos.light"
+        compare(Theme.palette.background.toString(), "#fafafa")
+        Theme.setTheme("dark")
+    }
 }

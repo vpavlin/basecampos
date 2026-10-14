@@ -27,6 +27,8 @@ class ThemeRegistry : public QObject
     Q_PROPERTY(QStringList searchPaths READ searchPaths NOTIFY themesChanged)
     Q_PROPERTY(QStringList paletteTokens READ paletteTokens CONSTANT)
     Q_PROPERTY(int formatVersion READ formatVersion CONSTANT)
+    // Active theme id, shared by every engine in the process (ThemeNotifier).
+    Q_PROPERTY(QString current READ current WRITE setCurrent NOTIFY currentChanged)
 
 public:
     explicit ThemeRegistry(QObject* parent = nullptr);
@@ -36,7 +38,10 @@ public:
     static QStringList paletteTokens();
     static int formatVersion() { return 1; }
 
-    // Re-scan the search paths.
+    QString current() const;
+    void setCurrent(const QString& id);
+
+    // Re-scan the search paths in every engine of this process.
     Q_INVOKABLE void reload();
 
     // Parse one theme document. Returns
@@ -52,8 +57,11 @@ public:
 
 signals:
     void themesChanged();
+    void currentChanged();
 
 private:
+    void rescan();
+
     QStringList m_searchPaths;
     QVariantList m_themes;
 };

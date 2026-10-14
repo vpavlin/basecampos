@@ -61,8 +61,10 @@ QtObject {
 
     // The stored choice if it is still installed, else the default. The
     // setting itself is left alone so a temporarily missing theme comes back.
+    // ThemeRegistry.current is shared by every engine in the process, so a
+    // change made anywhere restyles every view live; `settings` persists it.
     readonly property string currentTheme:
-        settings && availableThemes[settings.theme] ? settings.theme : "dark"
+        availableThemes[ThemeRegistry.current] ? ThemeRegistry.current : "dark"
 
     // ===== CURRENT THEME (Semantic Palette) =====
     readonly property var palette: availableThemes[currentTheme]
@@ -77,8 +79,7 @@ QtObject {
         var themes = Object.keys(availableThemes)
         var currentIndex = themes.indexOf(currentTheme)
         var nextIndex = (currentIndex + 1) % themes.length
-        settings.theme = themes[nextIndex]
-        console.log("Theme switched to:", settings.theme)
+        setTheme(themes[nextIndex])
     }
     
     function setTheme(themeName) {
@@ -87,7 +88,8 @@ QtObject {
             return
         }
         settings.theme = themeName
-        console.log("Theme set to:", settings.theme)
+        ThemeRegistry.current = themeName
+        console.log("Theme set to:", themeName)
     }
     
     function setDark() {

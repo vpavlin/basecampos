@@ -183,7 +183,20 @@ QVariantMap parseIntGroup(const QJsonObject& doc, const QString& group,
 ThemeRegistry::ThemeRegistry(QObject* parent)
     : QObject(parent)
 {
-    reload();
+    rescan();
+    auto* bus = Logos::ThemeNotifier::instance();
+    connect(bus, &Logos::ThemeNotifier::currentChanged, this, &ThemeRegistry::currentChanged);
+    connect(bus, &Logos::ThemeNotifier::themesChanged, this, &ThemeRegistry::rescan);
+}
+
+QString ThemeRegistry::current() const
+{
+    return Logos::ThemeNotifier::instance()->current();
+}
+
+void ThemeRegistry::setCurrent(const QString& id)
+{
+    Logos::ThemeNotifier::instance()->setCurrent(id);
 }
 
 QStringList ThemeRegistry::paletteTokens()
@@ -192,6 +205,12 @@ QStringList ThemeRegistry::paletteTokens()
 }
 
 void ThemeRegistry::reload()
+{
+    // Rescans every registry in the process, this one included.
+    Logos::ThemeNotifier::instance()->announceThemesChanged();
+}
+
+void ThemeRegistry::rescan()
 {
     QStringList paths;
     const QString env = qEnvironmentVariable("LOGOS_THEME_PATH");
@@ -383,22 +402,47 @@ QVariantMap ThemeRegistry::parseDocument(const QByteArray& data)
     return result(true);
 }
 
+Logos::ThemeNotifier* Logos::ThemeNotifier::instance()
+{
+    static ThemeNotifier* n = new ThemeNotifier;   // lives for the process
+    return n;
+}
+
+Logos::ThemeNotifier::ThemeNotifier()
+    : m_current(QSettings().value(QStringLiteral("LogosDesignSystem/theme"),
+                                  QStringLiteral("dark")).toString())
+{
+}
+
+void Logos::ThemeNotifier::setCurrent(const QString& id)
+{
+    if (id.isEmpty() || id == m_current)
+        return;
+    m_current = id;
+    emit currentChanged();
+}
+
 QColor Logos::themeColor(const QString& token, const QColor& fallback)
 {
-    // Same key Theme.qml's Settings block persists to.
-    static const QVariantMap active = [] {
-        const QString id = QSettings().value(QStringLiteral("LogosDesignSystem/theme")).toString();
-        if (id.isEmpty() || id == QLatin1String("dark"))
-            return QVariantMap{};
-        ThemeRegistry registry;
-        for (const QVariant& t : registry.themes()) {
-            const QVariantMap theme = t.toMap();
-            if (theme.value("id").toString() == id)
-                return theme.value("palette").toMap();
+    // Palette of the active theme, rescanned only when the id changes.
+    static QString cachedId;
+    static QVariantMap cachedPalette;
+    const QString id = ThemeNotifier::instance()->current();
+    if (id != cachedId) {
+        cachedId = id;
+        cachedPalette.clear();
+        if (id != QLatin1String("dark")) {
+            ThemeRegistry registry;
+            for (const QVariant& t : registry.themes()) {
+                const QVariantMap theme = t.toMap();
+                if (theme.value("id").toString() == id) {
+                    cachedPalette = theme.value("palette").toMap();
+                    break;
+                }
+            }
         }
-        return QVariantMap{};
-    }();
-    const QVariant v = active.value(token);
+    }
+    const QVariant v = cachedPalette.value(token);
     return v.isValid() ? v.value<QColor>() : fallback;
 }
 
