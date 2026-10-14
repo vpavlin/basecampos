@@ -40,9 +40,10 @@ Anything you leave out comes from Logos Dark, **token by token**, so a three-col
 | `author` | yes | Shown next to the name (`Sunset · yourname`). Plain text, ≤ 40 chars. |
 | `mode` | yes | `"dark"` or `"light"`. Apps read it (`Theme.isDark`) to choose matching assets. |
 | `palette` | no | Colour tokens (below). |
-| `typography.family` | no | Body font, **by name**, of a font installed on the user's system (e.g. `"Noto Serif"`). Applied to all text, live. Missing → bundled Public Sans, and Settings says so. |
+| `typography.family` | no | Body font, **by name**, of a font installed on the user's system, or a **fallback list** (`["JetBrains Mono", "JetBrainsMono Nerd Font"]`, first installed wins). Applied to all text, live. None installed → bundled Public Sans, and Settings says so. |
 | `typography.monoFamily` | no | Font for code, hashes and addresses. Missing → platform monospace. |
-| `spacing`, `radius`, `typography.sizes/weights` | no | Accepted and validated, **not applied yet**. Leave them out for now. |
+| `radius` | no | Corner radii: `tiny small medium large xlarge pill` (px) and **`scale`** (0–1) that multiplies every corner, including round buttons. `{"scale": 0}` = square everything. Radio buttons stay round on purpose. |
+| `spacing`, `typography.sizes/weights` | no | Accepted and validated, **not applied yet**. Leave them out for now. |
 | `$schema` | no | Point it at the schema for editor autocompletion. |
 
 **Colours:** `#RRGGBB` or `#RRGGBBAA`, with alpha **last, as in CSS and Figma**. (Qt's own string

@@ -286,7 +286,7 @@
     },
     "radius": {
       "type": "object",
-      "description": "Parsed and validated; not applied yet.",
+      "description": "Corner radii in px per step, plus scale (0..1) multiplying every corner incl. round buttons.",
       "properties": {
         "tiny": {
           "type": "integer",
@@ -317,6 +317,11 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 999
+        },
+        "scale": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
       }
     },
@@ -390,14 +395,44 @@
           }
         },
         "family": {
-          "type": "string",
-          "pattern": "^[\\p{L}\\p{N} ._'-]{1,64}$",
-          "description": "Name of a font installed on the system."
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[\\p{L}\\p{N} ._'-]{1,64}$",
+              "description": "Name of a font installed on the system."
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[\\p{L}\\p{N} ._'-]{1,64}$",
+                "description": "Name of a font installed on the system."
+              },
+              "minItems": 1,
+              "maxItems": 8
+            }
+          ],
+          "description": "A font name, or a fallback list (first installed wins)."
         },
         "monoFamily": {
-          "type": "string",
-          "pattern": "^[\\p{L}\\p{N} ._'-]{1,64}$",
-          "description": "Monospace font for code/hashes; name of an installed font."
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[\\p{L}\\p{N} ._'-]{1,64}$",
+              "description": "Name of a font installed on the system."
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[\\p{L}\\p{N} ._'-]{1,64}$",
+                "description": "Name of a font installed on the system."
+              },
+              "minItems": 1,
+              "maxItems": 8
+            }
+          ],
+          "description": "A font name, or a fallback list (first installed wins)."
         }
       }
     }
