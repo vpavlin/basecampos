@@ -263,15 +263,27 @@ void MainContainer::setupUi()
     setPalette(p);
 
     // The host window (app/window.cpp) fills #171717 around us and doesn't link
-    // the design system; recolour it from here once we're parented.
-    QTimer::singleShot(0, this, [this, bgColor]() {
+    // the design system; recolour it (and us) from here, now and on every
+    // live theme switch.
+    auto applyBackground = [this]() {
+        const QColor bg = Logos::themeColor(QStringLiteral("background"), QColor("#171717"));
+        QPalette own = palette();
+        own.setColor(QPalette::Window, bg);
+        setPalette(own);
+        if (m_sidebarWidget)
+            m_sidebarWidget->setClearColor(bg);
+        if (m_contentWidget)
+            m_contentWidget->setClearColor(bg);
         QWidget* top = window();
-        if (!top || top == this)
-            return;
-        QPalette tp = top->palette();
-        tp.setColor(QPalette::Window, bgColor);
-        top->setPalette(tp);
-    });
+        if (top && top != this) {
+            QPalette tp = top->palette();
+            tp.setColor(QPalette::Window, bg);
+            top->setPalette(tp);
+        }
+    };
+    QTimer::singleShot(0, this, applyBackground);
+    connect(Logos::ThemeNotifier::instance(), &Logos::ThemeNotifier::currentChanged,
+            this, applyBackground);
 
     // Create main horizontal layout
     m_mainLayout = new QHBoxLayout(this);

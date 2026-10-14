@@ -48,6 +48,14 @@ QColor withAlpha(QColor c, qreal alpha)
     c.setAlphaF(alpha);
     return c;
 }
+
+QString closeButtonStyleSheet()
+{
+    return QString(R"(
+            QToolButton { background: transparent; border: none; }
+            QToolButton:hover { background: %1; border-radius: 6px; }
+        )").arg(cssColor(withAlpha(Logos::themeColor(QStringLiteral("text"), QColor("#FFFFFF")), 0.1)));
+}
 } // namespace
 
 namespace {
@@ -79,6 +87,10 @@ public:
         setAttribute(Qt::WA_TransparentForMouseEvents);
         setAttribute(Qt::WA_TranslucentBackground);
         setAutoFillBackground(false);
+        connect(Logos::ThemeNotifier::instance(), &Logos::ThemeNotifier::currentChanged, this, [this]() {
+            m_cutColor = Logos::themeColor(QStringLiteral("background"), QColor("#171717"));
+            update();
+        });
     }
 
 protected:
@@ -254,6 +266,8 @@ WorkspaceArea::WorkspaceArea(QObject* backend, QWidget* parent)
         pal.setColor(QPalette::Window, Logos::themeColor(QStringLiteral("background"), QColor("#171717")));
         setPalette(pal);
     }
+    connect(Logos::ThemeNotifier::instance(), &Logos::ThemeNotifier::currentChanged,
+            this, &WorkspaceArea::applyThemeColors);
     setContentsMargins(0, 0, 0, 0);
 
     if (backend) {
@@ -600,26 +614,8 @@ void WorkspaceArea::activatePluginDock(QWidget* pluginWidget)
 // insetTabBarGeometry).
 // ---------------------------------------------------------------------------
 
-void WorkspaceArea::customizeTabBarStyle(QTabBar* tabBar)
+void WorkspaceArea::applyTabBarStyleSheet(QTabBar* tabBar)
 {
-    if (!tabBar) return;
-
-    tabBar->setDocumentMode(true);
-    tabBar->setDrawBase(false);
-    tabBar->setAutoHide(false);
-    tabBar->setAutoFillBackground(false);
-    tabBar->setElideMode(Qt::ElideRight);
-    tabBar->setUsesScrollButtons(false);
-    tabBar->setExpanding(false);
-    tabBar->setIconSize(QSize(15, 15));
-    tabBar->setMovable(true);
-    QScroller::grabGesture(tabBar, QScroller::TouchGesture);
-    QScrollerProperties props = QScroller::scroller(tabBar)->scrollerProperties();
-    props.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy, QScrollerProperties::OvershootAlwaysOff);
-    props.setScrollMetric(QScrollerProperties::VerticalOvershootPolicy, QScrollerProperties::OvershootAlwaysOff);
-    props.setScrollMetric(QScrollerProperties::ScrollingCurve, QEasingCurve::OutCubic);
-    QScroller::scroller(tabBar)->setScrollerProperties(props);
-
     tabBar->setStyleSheet(QString(R"(
         QTabBar {
             background: %1;
@@ -668,6 +664,29 @@ void WorkspaceArea::customizeTabBarStyle(QTabBar* tabBar)
              cssColor(Logos::themeColor(QStringLiteral("textSecondary"), QColor("#A4A4A4"))),
              cssColor(withAlpha(Logos::themeColor(QStringLiteral("backgroundSecondary"), QColor("#262626")), 0.6)),
              cssColor(Logos::themeColor(QStringLiteral("textMuted"), QColor("#626262")))));
+}
+
+void WorkspaceArea::customizeTabBarStyle(QTabBar* tabBar)
+{
+    if (!tabBar) return;
+
+    tabBar->setDocumentMode(true);
+    tabBar->setDrawBase(false);
+    tabBar->setAutoHide(false);
+    tabBar->setAutoFillBackground(false);
+    tabBar->setElideMode(Qt::ElideRight);
+    tabBar->setUsesScrollButtons(false);
+    tabBar->setExpanding(false);
+    tabBar->setIconSize(QSize(15, 15));
+    tabBar->setMovable(true);
+    QScroller::grabGesture(tabBar, QScroller::TouchGesture);
+    QScrollerProperties props = QScroller::scroller(tabBar)->scrollerProperties();
+    props.setScrollMetric(QScrollerProperties::HorizontalOvershootPolicy, QScrollerProperties::OvershootAlwaysOff);
+    props.setScrollMetric(QScrollerProperties::VerticalOvershootPolicy, QScrollerProperties::OvershootAlwaysOff);
+    props.setScrollMetric(QScrollerProperties::ScrollingCurve, QEasingCurve::OutCubic);
+    QScroller::scroller(tabBar)->setScrollerProperties(props);
+
+    applyTabBarStyleSheet(tabBar);
 
     connect(tabBar, &QTabBar::tabMoved, this, [this, tabBar](int from, int to) {
         Q_UNUSED(from)
@@ -724,10 +743,7 @@ void WorkspaceArea::installTabBarCloseButtons(QTabBar* tabBar)
         btn->setIconSize(QSize(12, 12));
         btn->setFixedSize(12, 12);
         btn->setCursor(Qt::PointingHandCursor);
-        btn->setStyleSheet(QString(R"(
-            QToolButton { background: transparent; border: none; }
-            QToolButton:hover { background: %1; border-radius: 6px; }
-        )").arg(cssColor(withAlpha(Logos::themeColor(QStringLiteral("text"), QColor("#FFFFFF")), 0.1))));
+        btn->setStyleSheet(closeButtonStyleSheet());
         connect(btn, &QToolButton::clicked, this, [tabBar, btn, closeSide]() {
             for (int j = 0; j < tabBar->count(); ++j) {
                 if (tabBar->tabButton(j, closeSide) == btn) {
@@ -764,6 +780,25 @@ void WorkspaceArea::insetTabBarGeometry(QTabBar* tabBar, int insetPx)
     QRect g = tabBar->geometry();
     tabBar->setGeometry(insetPx, g.y(),
                         p->width() - insetPx - kTabBarInsetPx, g.height());
+}
+
+// Re-apply every colour this widget paints outside QML (theme switched live).
+void WorkspaceArea::applyThemeColors()
+{
+    const QColor bg = Logos::themeColor(QStringLiteral("background"), QColor("#171717"));
+    QPalette pal = palette();
+    pal.setColor(QPalette::Window, bg);
+    setPalette(pal);
+    if (m_welcomeWidget)
+        m_welcomeWidget->setClearColor(bg);
+    for (auto* tabBar : findChildren<QTabBar*>()) {
+        if (!tabBar->property("logosStyled").toBool())
+            continue;
+        applyTabBarStyleSheet(tabBar);
+        for (auto* btn : tabBar->findChildren<QToolButton*>())
+            btn->setStyleSheet(closeButtonStyleSheet());
+    }
+    update();
 }
 
 void WorkspaceArea::styleAllTabBars()
