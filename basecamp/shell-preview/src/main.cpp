@@ -24,6 +24,7 @@
 #include <QJsonObject>
 #include <QMainWindow>
 #include <QPluginLoader>
+#include <QTimer>
 
 int main(int argc, char* argv[])
 {
@@ -36,8 +37,13 @@ int main(int argc, char* argv[])
     parser.addHelpOption();
     QCommandLineOption shellOpt({"s", "shell"}, "Path to main_ui plugin", "path");
     QCommandLineOption fixtureOpt({"f", "fixture"}, "Path to shell fixture JSON", "path");
+    QCommandLineOption screenshotOpt("screenshot",
+        "Save a PNG of the window to <path> after --delay ms, then quit", "path");
+    QCommandLineOption delayOpt("delay", "Milliseconds before --screenshot (default 2500)", "ms", "2500");
     parser.addOption(shellOpt);
     parser.addOption(fixtureOpt);
+    parser.addOption(screenshotOpt);
+    parser.addOption(delayOpt);
     parser.process(app);
 
     QString shellPath = parser.value(shellOpt);
@@ -88,6 +94,15 @@ int main(int argc, char* argv[])
     window.setCentralWidget(shell->createShell(&host));
     window.resize(1280, 860);
     window.show();
+
+    const QString screenshotPath = parser.value(screenshotOpt);
+    if (!screenshotPath.isEmpty()) {
+        QTimer::singleShot(parser.value(delayOpt).toInt(), &app, [&]() {
+            if (!window.grab().save(screenshotPath))
+                qWarning("Could not save screenshot to %s", qUtf8Printable(screenshotPath));
+            app.quit();
+        });
+    }
 
     const int rc = app.exec();
     shell->destroyShell(window.centralWidget());

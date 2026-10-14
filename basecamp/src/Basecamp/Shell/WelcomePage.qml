@@ -12,6 +12,14 @@ import Basecamp.Icons
 Item {
     id: root
 
+    // Paint our own background so the page follows the active theme rather
+    // than the host widget's hardcoded clear colour.
+    Rectangle {
+        anchors.fill: parent
+        z: -1
+        color: Theme.palette.background
+    }
+
     signal discoverApplicationsClicked()
     signal managePackagesClicked()
     signal reopenAppRequested(string moduleName)
