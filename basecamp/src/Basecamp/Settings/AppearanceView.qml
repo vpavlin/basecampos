@@ -121,6 +121,23 @@ Item {
                     currentIndex: d.indexOf(Theme.currentTheme)
                     onActivated: index => Theme.setTheme(d.themes[index].id)
                 }
+
+                // Font the active theme asks for, and whether it is installed.
+                LogosText {
+                    objectName: "appearance.fontLine"
+                    Layout.fillWidth: true
+                    readonly property string wanted: Theme.typography.familyOverride
+                    text: wanted.length === 0
+                          ? qsTr("Font: %1 (default)").arg(Theme.typography.family)
+                          : Theme.typography.familyAvailable
+                            ? qsTr("Font: %1").arg(wanted)
+                            : qsTr("Font: “%1” isn't installed on this computer, so %2 is used instead.")
+                                  .arg(wanted).arg(Theme.typography.family)
+                    textFormat: Text.PlainText
+                    font.pixelSize: Theme.typography.secondaryText
+                    color: Theme.typography.familyAvailable ? Theme.palette.textTertiary : Theme.palette.warning
+                    wrapMode: Text.WordWrap
+                }
             }
 
             LogosNotice {

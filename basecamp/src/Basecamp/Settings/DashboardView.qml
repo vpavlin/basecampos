@@ -90,7 +90,7 @@ Item {
                         LogosSelectableText {
                             text: modelData.commit
                             color: "#d0d0d0"
-                            font.family: "monospace"
+                            font.family: Theme.typography.mono
                             font.pixelSize: 13
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignTop
