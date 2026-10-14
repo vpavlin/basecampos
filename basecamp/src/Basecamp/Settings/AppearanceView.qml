@@ -52,7 +52,7 @@ Item {
                 d.resultTitle = qsTr("Installed “%1”").arg(r.name)
                 d.resultMessage = r.warnings.length
                     ? qsTr("Applied with warnings: %1").arg(r.warnings.join("; "))
-                    : qsTr("It is now selected. Restart Basecamp to apply it everywhere.")
+                    : qsTr("It is now active. Apps pick it up the next time you start Basecamp.")
             } else {
                 d.resultSeverity = LogosNotice.Error
                 d.resultTitle = qsTr("That file isn't a valid theme")
@@ -116,8 +116,8 @@ Item {
                 objectName: "appearance.restartNotice"
                 Layout.fillWidth: true
                 severity: LogosNotice.Info
-                title: qsTr("Restart to apply everywhere")
-                message: qsTr("This page switches right away. The rest of Basecamp, and apps that support themes, switch after you restart Basecamp.")
+                title: qsTr("Apps switch after a restart")
+                message: qsTr("Basecamp switches right away. Apps that support themes run in their own process and switch the next time you start Basecamp.")
             }
 
             RowLayout {
