@@ -214,4 +214,39 @@ TestCase {
         compare(Theme.palette.background.toString(), "#fafafa")
         Theme.setTheme("dark")
     }
+
+    // ----- font families -----
+
+    function test_family_names_validate() {
+        var r = ThemeRegistry.parse(minimalDoc({ typography: { family: "Noto Serif", monoFamily: "JetBrains Mono" } }))
+        verify(r.ok)
+        compare(r.theme.typography.family, "Noto Serif")
+        compare(r.theme.typography.monoFamily, "JetBrains Mono")
+        var bad = ThemeRegistry.parse(minimalDoc({ typography: { family: "<img src=x>", monoFamily: 12 } }))
+        verify(bad.ok)
+        compare(bad.theme.typography.family, undefined)
+        compare(bad.theme.typography.monoFamily, undefined)
+        verify(bad.warnings.join(" ").indexOf("font family") >= 0)
+    }
+
+    function test_missing_family_falls_back() {
+        var bundled = Theme.typography.publicSans
+        Theme.setTheme("test.fonts")
+        compare(Theme.typography.familyOverride, "No Such Font Family")
+        verify(!Theme.typography.familyAvailable)
+        compare(Theme.typography.publicSans, bundled)
+        compare(Theme.typography.mono, "monospace")
+        Theme.setTheme("dark")
+    }
+
+    function test_installed_family_applies() {
+        // The bundled face is always installed, so a theme naming it must
+        // take effect (and the override must follow the active theme).
+        Theme.setTheme("test.fonts-ok")
+        compare(Theme.typography.familyOverride, "Public Sans")
+        verify(Theme.typography.familyAvailable)
+        compare(Theme.typography.family, "Public Sans")
+        Theme.setTheme("dark")
+        compare(Theme.typography.familyOverride, "")
+    }
 }

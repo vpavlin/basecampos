@@ -360,9 +360,23 @@ QVariantMap ThemeRegistry::parseDocument(const QByteArray& data)
     const QJsonValue tv = doc.value("typography");
     if (tv.isObject()) {
         const QJsonObject tobj = tv.toObject();
+        static const QSet<QString> known = { "sizes", "weights", "family", "monoFamily" };
         for (const QString& key : tobj.keys())
-            if (key != QLatin1String("sizes") && key != QLatin1String("weights"))
+            if (!known.contains(key))
                 warnings << QStringLiteral("unknown key 'typography.%1' ignored").arg(key);
+        // Font families are *names* of fonts installed on the system; a theme
+        // never ships font files (the shell would parse untrusted binaries).
+        for (const char* k : { "family", "monoFamily" }) {
+            const QJsonValue fv = tobj.value(QLatin1String(k));
+            if (fv.isUndefined())
+                continue;
+            const QString fam = fv.toString().trimmed();
+            static const QRegularExpression ok(QStringLiteral("^[\\p{L}\\p{N} ._'-]{1,64}$"));
+            if (!fv.isString() || !ok.match(fam).hasMatch())
+                warnings << QStringLiteral("'typography.%1' must be a font family name; ignored").arg(QLatin1String(k));
+            else
+                typography.insert(QLatin1String(k), fam);
+        }
         typography.insert("sizes", parseIntGroup(tobj, "sizes", sizeRanges(), warnings));
         typography.insert("weights", parseIntGroup(tobj, "weights", weightRanges(), warnings));
     } else if (!tv.isUndefined()) {

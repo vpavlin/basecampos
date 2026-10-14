@@ -1,0 +1,10 @@
+{
+  "formatVersion": 1,
+  "id": "test.fonts-ok",
+  "name": "Fonts OK",
+  "author": "tests",
+  "mode": "dark",
+  "typography": {
+    "family": "Public Sans"
+  }
+}

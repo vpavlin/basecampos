@@ -17,7 +17,19 @@ QtObject {
     
     // ===== DESIGN TOKENS =====
     readonly property Spacing spacing: Spacing {}
-    readonly property Typography typography: Typography {}
+    readonly property Typography typography: Typography {
+        familyOverride: theme._activeTypography.family || ""
+        monoOverride: theme._activeTypography.monoFamily || ""
+    }
+
+    // typography block of the active installed theme ({} for built-in dark).
+    readonly property var _activeTypography: {
+        var installed = ThemeRegistry.themes
+        for (var i = 0; i < installed.length; ++i)
+            if (installed[i].id === currentTheme)
+                return installed[i].typography || {}
+        return {}
+    }
     
     // ===== THEME INSTANCES =====
     // Currently available themes - created first
@@ -45,7 +57,9 @@ QtObject {
         var installed = ThemeRegistry.themes
         for (var i = 0; i < installed.length; ++i) {
             var t = installed[i]
-            info[t.id] = { id: t.id, name: t.name, author: t.author, mode: t.mode, builtin: false }
+            info[t.id] = { id: t.id, name: t.name, author: t.author, mode: t.mode, builtin: false,
+                           family: (t.typography && t.typography.family) || "",
+                           monoFamily: (t.typography && t.typography.monoFamily) || "" }
         }
         return info
     }
