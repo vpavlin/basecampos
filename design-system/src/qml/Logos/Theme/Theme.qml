@@ -108,6 +108,16 @@ QtObject {
     readonly property var themeNames: Object.keys(availableThemes)
     
     // ===== METHODS =====
+
+    // Migration helper for hardcoded colours: returns `literal` under the
+    // built-in dark theme (the default look stays pixel-identical) and the
+    // palette `token` under an installed theme. QML twin of the C++
+    // Logos::themeColor(token, fallback). Prefer plain Theme.palette.<token>
+    // in new code.
+    function tokenOr(token, literal) {
+        return currentTheme === "dark" ? literal : palette[token]
+    }
+
     function switchTheme() {
         // Cycle through available themes
         var themes = Object.keys(availableThemes)

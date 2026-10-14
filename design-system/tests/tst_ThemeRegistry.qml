@@ -294,4 +294,12 @@ TestCase {
         compare(Theme.typography.familyRequested, "No Such Font, Public Sans")
         Theme.setTheme("dark")
     }
+
+    function test_token_or_keeps_dark_literal() {
+        Theme.setTheme("dark")
+        compare(Theme.tokenOr("textSecondary", "#a0a0a0"), "#a0a0a0")
+        Theme.setTheme("logos.light")
+        compare(Theme.tokenOr("textSecondary", "#a0a0a0"), Theme.palette.textSecondary)
+        Theme.setTheme("dark")
+    }
 }
