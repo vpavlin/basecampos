@@ -49,6 +49,14 @@ int main(int argc, char* argv[])
         binDir + "/../share/logos-design-system-tests",
     });
 
+    // tst_ThemeRegistry discovers themes from the fixtures plus the repo's
+    // own themes/ directory.
+    if (!sourceDir.isEmpty() && !qEnvironmentVariableIsSet("LOGOS_THEME_PATH")) {
+        qputenv("LOGOS_THEME_PATH", QDir::toNativeSeparators(
+            sourceDir + "/fixtures/themes" + QDir::listSeparator()
+            + sourceDir + "/../themes").toUtf8());
+    }
+
     const QByteArray sourceDirBytes = sourceDir.toUtf8();
     const char* sourceDirPtr = sourceDirBytes.isEmpty()
         ? nullptr : sourceDirBytes.constData();

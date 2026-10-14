@@ -18,6 +18,9 @@ qt_add_qml_module(logos_theme_qml
     STATIC
     RESOURCE_PREFIX /qt/qml
     OUTPUT_TARGETS logos_theme_extra_targets
+    SOURCES
+        ThemeRegistry.h
+        ThemeRegistry.cpp
     QML_FILES
         Theme.qml
         ColorPalette.qml
@@ -29,6 +32,10 @@ qt_add_qml_module(logos_theme_qml
         fonts/PublicSans-Medium.ttf
         fonts/PublicSans-Regular.ttf
 )
+
+# ThemeRegistry parses theme.json with QJsonDocument and hands QColor values
+# to QML.
+target_link_libraries(logos_theme_qml PRIVATE Qt6::Core Qt6::Gui Qt6::Qml)
 
 # Bubble Qt-generated helper targets (resources_N, plugin_init) up to
 # src/qml/CMakeLists.txt so install(EXPORT ...) can include them.
