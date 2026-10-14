@@ -1,5 +1,6 @@
 #include "ThemeRegistry.h"
 #include "ThemeColors.h"
+#include "ThemeInstall.h"
 
 #include <QColor>
 #include <QDir>
@@ -399,5 +400,50 @@ QColor Logos::themeColor(const QString& token, const QColor& fallback)
     }();
     const QVariant v = active.value(token);
     return v.isValid() ? v.value<QColor>() : fallback;
+}
+
+QVariantMap Logos::installThemeFile(const QString& path)
+{
+    QVariantMap out{ { "ok", false } };
+    auto fail = [&](const QString& why) {
+        out.insert("errors", QStringList{ why });
+        return out;
+    };
+
+    const QFileInfo src(path);
+    if (!src.isFile())
+        return fail(QStringLiteral("not a file: %1").arg(path));
+    if (src.size() > kMaxDocumentBytes)
+        return fail(QStringLiteral("larger than 64 KiB"));
+    QFile in(src.absoluteFilePath());
+    if (!in.open(QIODevice::ReadOnly))
+        return fail(QStringLiteral("can't read %1").arg(path));
+    const QByteArray data = in.read(kMaxDocumentBytes + 1);
+
+    const QVariantMap parsed = ThemeRegistry::parseDocument(data);
+    out.insert("warnings", parsed.value("warnings"));
+    if (!parsed.value("ok").toBool()) {
+        out.insert("errors", parsed.value("errors"));
+        return out;
+    }
+    const QVariantMap theme = parsed.value("theme").toMap();
+    const QString id = theme.value("id").toString();   // validated: [a-z0-9_.-] only
+
+    const QString root = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (root.isEmpty())
+        return fail(QStringLiteral("no writable app data location"));
+    const QString dir = QDir::cleanPath(root + QStringLiteral("/themes/") + id);
+    if (!QDir().mkpath(dir))
+        return fail(QStringLiteral("can't create %1").arg(dir));
+    QFile outFile(dir + QStringLiteral("/theme.json"));
+    if (!outFile.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        || outFile.write(data) != data.size())
+        return fail(QStringLiteral("can't write %1").arg(outFile.fileName()));
+
+    out.insert("ok", true);
+    out.insert("id", id);
+    out.insert("name", theme.value("name"));
+    out.insert("errors", QStringList{});
+    return out;
 }
 

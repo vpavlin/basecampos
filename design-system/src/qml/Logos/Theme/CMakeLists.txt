@@ -22,6 +22,7 @@ qt_add_qml_module(logos_theme_qml
         ThemeRegistry.h
         ThemeRegistry.cpp
         ThemeColors.h
+        ThemeInstall.h
     QML_FILES
         Theme.qml
         ColorPalette.qml
@@ -44,7 +45,7 @@ include(GNUInstallDirs)
 target_include_directories(logos_theme_qml PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/LogosDesignSystem>)
-install(FILES ThemeColors.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/LogosDesignSystem)
+install(FILES ThemeColors.h ThemeInstall.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/LogosDesignSystem)
 
 # Bubble Qt-generated helper targets (resources_N, plugin_init) up to
 # src/qml/CMakeLists.txt so install(EXPORT ...) can include them.
