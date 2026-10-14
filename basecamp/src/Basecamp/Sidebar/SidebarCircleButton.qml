@@ -31,14 +31,15 @@ AbstractButton {
             width: 24
             height: 24
             source: root.icon.source
-            // Idle: textTertiary (dark's value is the icons' own #969696, so the
-            // default look is unchanged); on the accent: accentForeground.
-            color: root.hovered || root.checked ? Theme.palette.accentForeground
-                                                : Theme.palette.textTertiary
-            // The icons are grey (#969696) SVGs, and MultiEffect colorization
-            // multiplies by their luminance: white x grey stays grey. Lift them
-            // to white first so the tint lands exactly.
-            brightness: 1.0
+            // On the accent: accentForeground. Idle: the untinted grey asset under
+            // built-in dark (as before), textTertiary under an installed theme.
+            // The SVGs are grey (#969696); MultiEffect colorization doesn't simply
+            // multiply (a lifted icon stays light), so brightness 1.0 is only used
+            // where a tint must land, never for dark's idle state.
+            readonly property bool onAccent: root.hovered || root.checked
+            color: onAccent ? Theme.palette.accentForeground
+                            : Theme.tokenOr("textTertiary", "transparent")
+            brightness: onAccent || Theme.currentTheme !== "dark" ? 1.0 : 0
             visible: !!root.icon.source &&
                      !(appIcon.status === Image.Null ||
                        appIcon.status === Image.Error)
