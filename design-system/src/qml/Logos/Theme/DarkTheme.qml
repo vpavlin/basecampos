@@ -62,6 +62,8 @@ QtObject {
     readonly property color notification: colors.red500
     // Single-colour brand mark (the Basecamp logo).
     readonly property color brandMark: colors.white
+    // Content (glyphs, labels) drawn on top of an accentOrange fill.
+    readonly property color accentForeground: colors.black
     readonly property color accentOrange: colors.orange300
     readonly property color accentOrangeMid: colors.orange350
     readonly property color accentOrangeDeep: colors.orange450

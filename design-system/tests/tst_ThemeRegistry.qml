@@ -37,7 +37,7 @@ TestCase {
 
     function test_palette_tokens_match_dark_theme() {
         var tokens = ThemeRegistry.paletteTokens
-        compare(tokens.length, 64)
+        compare(tokens.length, 65)
         for (var i = 0; i < tokens.length; ++i)
             verify(Theme.darkTheme[tokens[i]] !== undefined, "DarkTheme lacks " + tokens[i])
     }
@@ -131,7 +131,7 @@ TestCase {
 
     function test_logos_light_is_complete_and_readable() {
         var light = findTheme("logos.light")
-        compare(Object.keys(light.palette).length, 64)
+        compare(Object.keys(light.palette).length, 65)
         verify(!light.lowContrast)
         verify(light.contrast.textOnBackground >= 4.5)
         verify(light.contrast.primaryOnBackground >= 3.0)
@@ -196,5 +196,7 @@ TestCase {
         // primaryForeground and brandMark equal the old `text` value in the default theme.
         compare(Theme.darkTheme.primaryForeground, Theme.darkTheme.text)
         compare(Theme.darkTheme.brandMark, Theme.darkTheme.text)
+        // accentForeground keeps the black glyph dark already draws on accentOrange.
+        compare(Theme.darkTheme.accentForeground, Theme.darkTheme.backgroundBlack)
     }
 }

@@ -1,4 +1,5 @@
 #include "ThemeRegistry.h"
+#include "ThemeColors.h"
 
 #include <QColor>
 #include <QDir>
@@ -9,6 +10,7 @@
 #include <QJsonParseError>
 #include <QRegularExpression>
 #include <QSet>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QtMath>
 
@@ -40,7 +42,7 @@ const QStringList& paletteTokenList()
         "error", "errorHover", "errorPressed", "errorBorder",
         "warning", "warningHover", "warningBorder",
         "info", "primaryBorder",
-        "notification", "brandMark", "accentOrange", "accentOrangeMid", "accentOrangeDeep",
+        "notification", "brandMark", "accentForeground", "accentOrange", "accentOrangeMid", "accentOrangeDeep",
         "accentBurntOrange", "accentYellowSoft",
         "hover", "pressed", "disabled", "focus",
         "glassOverlay", "glassStrong", "overlayDark", "overlayLight", "overlayOrange", "scrim",
@@ -379,3 +381,23 @@ QVariantMap ThemeRegistry::parseDocument(const QByteArray& data)
     };
     return result(true);
 }
+
+QColor Logos::themeColor(const QString& token, const QColor& fallback)
+{
+    // Same key Theme.qml's Settings block persists to.
+    static const QVariantMap active = [] {
+        const QString id = QSettings().value(QStringLiteral("LogosDesignSystem/theme")).toString();
+        if (id.isEmpty() || id == QLatin1String("dark"))
+            return QVariantMap{};
+        ThemeRegistry registry;
+        for (const QVariant& t : registry.themes()) {
+            const QVariantMap theme = t.toMap();
+            if (theme.value("id").toString() == id)
+                return theme.value("palette").toMap();
+        }
+        return QVariantMap{};
+    }();
+    const QVariant v = active.value(token);
+    return v.isValid() ? v.value<QColor>() : fallback;
+}
+
