@@ -57,12 +57,12 @@ Control {
     contentItem: ColumnLayout {
         spacing: Theme.spacing.large
 
-        Image {
+        BasecampLogo {
             // As per design
             Layout.preferredWidth: 46
             Layout.preferredHeight: 25
             Layout.alignment: Qt.AlignHCenter
-            source: BasecampIcons.logo
+            fillMode: Image.Stretch
         }
 
         SeparatorLine {}

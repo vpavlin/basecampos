@@ -134,11 +134,9 @@ Item {
                     ColumnLayout {
                         spacing: d.brandGap
 
-                        Image {
+                        BasecampLogo {
                             Layout.alignment: Qt.AlignLeft
-                            source: BasecampIcons.logo
                             sourceSize.height: 34
-                            fillMode: Image.PreserveAspectFit
                         }
 
                         RowLayout {
