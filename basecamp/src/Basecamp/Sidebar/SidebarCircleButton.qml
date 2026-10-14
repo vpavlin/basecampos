@@ -31,11 +31,14 @@ AbstractButton {
             width: 24
             height: 24
             source: root.icon.source
-            color: root.hovered || root.checked ? Theme.palette.accentForeground : "transparent"
+            // Idle: textTertiary (dark's value is the icons' own #969696, so the
+            // default look is unchanged); on the accent: accentForeground.
+            color: root.hovered || root.checked ? Theme.palette.accentForeground
+                                                : Theme.palette.textTertiary
             // The icons are grey (#969696) SVGs, and MultiEffect colorization
             // multiplies by their luminance: white x grey stays grey. Lift them
-            // to white first so the tint lands exactly (black stays black).
-            brightness: root.hovered || root.checked ? 1.0 : 0
+            // to white first so the tint lands exactly.
+            brightness: 1.0
             visible: !!root.icon.source &&
                      !(appIcon.status === Image.Null ||
                        appIcon.status === Image.Error)

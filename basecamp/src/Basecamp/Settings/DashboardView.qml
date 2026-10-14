@@ -20,7 +20,7 @@ Item {
                 text: "Dashboard"
                 font.pixelSize: 24
                 font.weight: Font.Bold
-                color: "#ffffff"
+                color: Theme.tokenOr("text", "#ffffff")
             }
 
             // Build summary: version (release only) + build type.
@@ -38,14 +38,14 @@ Item {
                     LogosText {
                         text: "Version"
                         font.pixelSize: 18
-                        color: "#ffffff"
+                        color: Theme.tokenOr("text", "#ffffff")
                     }
 
                     LogosSelectableText {
                         Layout.fillWidth: true
                         text: backend.buildVersion
                         font.pixelSize: 18
-                        color: "#ffffff"
+                        color: Theme.tokenOr("text", "#ffffff")
                         wrapMode: TextEdit.WrapAnywhere
                     }
                 }
@@ -53,7 +53,7 @@ Item {
                 LogosText {
                     text: backend.isPortableBuild ? "Portable build" : "Dev build"
                     font.pixelSize: 14
-                    color: "#a0a0a0"
+                    color: Theme.tokenOr("textSecondary", "#a0a0a0")
                 }
             }
 
@@ -67,7 +67,7 @@ Item {
                     text: "Commits"
                     font.pixelSize: 16
                     font.weight: Font.Bold
-                    color: "#ffffff"
+                    color: Theme.tokenOr("text", "#ffffff")
                 }
 
                 Repeater {
@@ -81,7 +81,7 @@ Item {
                         // be selected in full.
                         LogosSelectableText {
                             text: modelData.name
-                            color: "#a0a0a0"
+                            color: Theme.tokenOr("textSecondary", "#a0a0a0")
                             font.pixelSize: 13
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignTop
@@ -89,7 +89,7 @@ Item {
                         }
                         LogosSelectableText {
                             text: modelData.commit
-                            color: "#d0d0d0"
+                            color: Theme.tokenOr("textSubtle", "#d0d0d0")
                             font.family: Theme.typography.mono
                             font.pixelSize: 13
                             Layout.fillWidth: true
