@@ -1,0 +1,402 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://logos.co/schemas/basecamp-theme/1.json",
+  "title": "Logos theme file (Basecamp), format v1",
+  "description": "A Basecamp theme is data only. Unknown keys are ignored with a warning; every token you leave out falls back to Logos Dark.",
+  "type": "object",
+  "required": [
+    "formatVersion",
+    "id",
+    "name",
+    "author",
+    "mode"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "formatVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1 for this spec. A higher number still loads (known keys only)."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]+(\\.[a-z0-9_-]+)+$",
+      "maxLength": 64,
+      "not": {
+        "const": "dark"
+      },
+      "description": "<author>.<name>, unique. Installed as themes/<id>/theme.json."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+    },
+    "mode": {
+      "enum": [
+        "dark",
+        "light"
+      ],
+      "description": "Exposed as Theme.isDark so apps can pick matching assets."
+    },
+    "palette": {
+      "type": "object",
+      "description": "Semantic colour tokens. #RRGGBB or #RRGGBBAA (CSS order).",
+      "properties": {
+        "background": {
+          "$ref": "#/$defs/color"
+        },
+        "backgroundSecondary": {
+          "$ref": "#/$defs/color"
+        },
+        "backgroundTertiary": {
+          "$ref": "#/$defs/color"
+        },
+        "backgroundElevated": {
+          "$ref": "#/$defs/color"
+        },
+        "backgroundMuted": {
+          "$ref": "#/$defs/color"
+        },
+        "backgroundBlack": {
+          "$ref": "#/$defs/color"
+        },
+        "backgroundInset": {
+          "$ref": "#/$defs/color"
+        },
+        "backgroundButton": {
+          "$ref": "#/$defs/color"
+        },
+        "surface": {
+          "$ref": "#/$defs/color"
+        },
+        "surfaceRaised": {
+          "$ref": "#/$defs/color"
+        },
+        "surfaceInteractiveHover": {
+          "$ref": "#/$defs/color"
+        },
+        "surfaceRecessed": {
+          "$ref": "#/$defs/color"
+        },
+        "surfaceContrast": {
+          "$ref": "#/$defs/color"
+        },
+        "text": {
+          "$ref": "#/$defs/color"
+        },
+        "textSecondary": {
+          "$ref": "#/$defs/color"
+        },
+        "textSubtle": {
+          "$ref": "#/$defs/color"
+        },
+        "textTertiary": {
+          "$ref": "#/$defs/color"
+        },
+        "textPlaceholder": {
+          "$ref": "#/$defs/color"
+        },
+        "textMuted": {
+          "$ref": "#/$defs/color"
+        },
+        "border": {
+          "$ref": "#/$defs/color"
+        },
+        "borderSecondary": {
+          "$ref": "#/$defs/color"
+        },
+        "borderTertiary": {
+          "$ref": "#/$defs/color"
+        },
+        "borderTertiaryMuted": {
+          "$ref": "#/$defs/color"
+        },
+        "borderSubtle": {
+          "$ref": "#/$defs/color"
+        },
+        "borderHairline": {
+          "$ref": "#/$defs/color"
+        },
+        "borderGlyph": {
+          "$ref": "#/$defs/color"
+        },
+        "borderInteractive": {
+          "$ref": "#/$defs/color"
+        },
+        "borderDark": {
+          "$ref": "#/$defs/color"
+        },
+        "borderStrong": {
+          "$ref": "#/$defs/color"
+        },
+        "primary": {
+          "$ref": "#/$defs/color"
+        },
+        "primaryHover": {
+          "$ref": "#/$defs/color"
+        },
+        "primaryPressed": {
+          "$ref": "#/$defs/color"
+        },
+        "primarySoft": {
+          "$ref": "#/$defs/color"
+        },
+        "primaryForeground": {
+          "$ref": "#/$defs/color"
+        },
+        "success": {
+          "$ref": "#/$defs/color"
+        },
+        "successHover": {
+          "$ref": "#/$defs/color"
+        },
+        "successPressed": {
+          "$ref": "#/$defs/color"
+        },
+        "successBorder": {
+          "$ref": "#/$defs/color"
+        },
+        "error": {
+          "$ref": "#/$defs/color"
+        },
+        "errorHover": {
+          "$ref": "#/$defs/color"
+        },
+        "errorPressed": {
+          "$ref": "#/$defs/color"
+        },
+        "errorBorder": {
+          "$ref": "#/$defs/color"
+        },
+        "warning": {
+          "$ref": "#/$defs/color"
+        },
+        "warningHover": {
+          "$ref": "#/$defs/color"
+        },
+        "warningBorder": {
+          "$ref": "#/$defs/color"
+        },
+        "info": {
+          "$ref": "#/$defs/color"
+        },
+        "primaryBorder": {
+          "$ref": "#/$defs/color"
+        },
+        "notification": {
+          "$ref": "#/$defs/color"
+        },
+        "brandMark": {
+          "$ref": "#/$defs/color"
+        },
+        "accentForeground": {
+          "$ref": "#/$defs/color"
+        },
+        "accentOrange": {
+          "$ref": "#/$defs/color"
+        },
+        "accentOrangeMid": {
+          "$ref": "#/$defs/color"
+        },
+        "accentOrangeDeep": {
+          "$ref": "#/$defs/color"
+        },
+        "accentBurntOrange": {
+          "$ref": "#/$defs/color"
+        },
+        "accentYellowSoft": {
+          "$ref": "#/$defs/color"
+        },
+        "hover": {
+          "$ref": "#/$defs/color"
+        },
+        "pressed": {
+          "$ref": "#/$defs/color"
+        },
+        "disabled": {
+          "$ref": "#/$defs/color"
+        },
+        "focus": {
+          "$ref": "#/$defs/color"
+        },
+        "glassOverlay": {
+          "$ref": "#/$defs/color"
+        },
+        "glassStrong": {
+          "$ref": "#/$defs/color"
+        },
+        "overlayDark": {
+          "$ref": "#/$defs/color"
+        },
+        "overlayLight": {
+          "$ref": "#/$defs/color"
+        },
+        "overlayOrange": {
+          "$ref": "#/$defs/color"
+        },
+        "scrim": {
+          "$ref": "#/$defs/color"
+        }
+      },
+      "additionalProperties": true
+    },
+    "spacing": {
+      "type": "object",
+      "description": "Parsed and validated; not applied yet (v1 slice 2).",
+      "properties": {
+        "tiny": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "small": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "medium": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "large": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "xlarge": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "xxlarge": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        }
+      }
+    },
+    "radius": {
+      "type": "object",
+      "description": "Parsed and validated; not applied yet.",
+      "properties": {
+        "tiny": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        },
+        "small": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        },
+        "medium": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        },
+        "large": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        },
+        "xlarge": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        },
+        "pill": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        }
+      }
+    },
+    "typography": {
+      "type": "object",
+      "description": "Parsed and validated; not applied yet.",
+      "properties": {
+        "sizes": {
+          "type": "object",
+          "properties": {
+            "mainTitleText": {
+              "type": "integer",
+              "minimum": 6,
+              "maximum": 256
+            },
+            "pageTitleText": {
+              "type": "integer",
+              "minimum": 6,
+              "maximum": 256
+            },
+            "titleText": {
+              "type": "integer",
+              "minimum": 6,
+              "maximum": 256
+            },
+            "panelTitleText": {
+              "type": "integer",
+              "minimum": 6,
+              "maximum": 256
+            },
+            "subtitleText": {
+              "type": "integer",
+              "minimum": 6,
+              "maximum": 256
+            },
+            "primaryText": {
+              "type": "integer",
+              "minimum": 6,
+              "maximum": 256
+            },
+            "secondaryText": {
+              "type": "integer",
+              "minimum": 6,
+              "maximum": 256
+            },
+            "badgeText": {
+              "type": "integer",
+              "minimum": 6,
+              "maximum": 256
+            }
+          }
+        },
+        "weights": {
+          "type": "object",
+          "properties": {
+            "regular": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 900
+            },
+            "medium": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 900
+            },
+            "bold": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 900
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+    }
+  }
+}
