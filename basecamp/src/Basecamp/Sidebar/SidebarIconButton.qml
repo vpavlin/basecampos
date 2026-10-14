@@ -44,7 +44,7 @@ AbstractButton {
             visible: root.checked
             width: 4
             height: 4
-            radius: width / 2
+            radius: width / 2 * Theme.spacing.roundness
             color: Theme.palette.accentOrange
             anchors.horizontalCenter: glyph.horizontalCenter
             anchors.top: glyph.bottom

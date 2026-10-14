@@ -344,7 +344,7 @@ Dialog {
                 size: 28
                 iconSize: 14
                 background: Rectangle {
-                    radius: width / 2
+                    radius: width / 2 * Theme.spacing.roundness
                     color: Theme.palette.surfaceRaised
                 }
                 onClicked: root.close()

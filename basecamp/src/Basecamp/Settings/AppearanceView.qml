@@ -126,11 +126,11 @@ Item {
                 LogosText {
                     objectName: "appearance.fontLine"
                     Layout.fillWidth: true
-                    readonly property string wanted: Theme.typography.familyOverride
+                    readonly property string wanted: Theme.typography.familyRequested
                     text: wanted.length === 0
                           ? qsTr("Font: %1 (default)").arg(Theme.typography.family)
                           : Theme.typography.familyAvailable
-                            ? qsTr("Font: %1").arg(wanted)
+                            ? qsTr("Font: %1").arg(Theme.typography.family)
                             : qsTr("Font: “%1” isn't installed on this computer, so %2 is used instead.")
                                   .arg(wanted).arg(Theme.typography.family)
                     textFormat: Text.PlainText

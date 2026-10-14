@@ -53,8 +53,9 @@ QString closeButtonStyleSheet()
 {
     return QString(R"(
             QToolButton { background: transparent; border: none; }
-            QToolButton:hover { background: %1; border-radius: 6px; }
-        )").arg(cssColor(withAlpha(Logos::themeColor(QStringLiteral("text"), QColor("#FFFFFF")), 0.1)));
+            QToolButton:hover { background: %1; border-radius: %2px; }
+        )").arg(cssColor(withAlpha(Logos::themeColor(QStringLiteral("text"), QColor("#FFFFFF")), 0.1)))
+           .arg(qRound(6 * Logos::themeRadiusScale()));
 }
 } // namespace
 
@@ -82,13 +83,15 @@ public:
     explicit CornerCutOverlay(QWidget* parent = nullptr,
                               QColor cutColor = Logos::themeColor(QStringLiteral("background"), QColor("#171717")),
                               qreal radius = 16.0)
-        : QWidget(parent), m_cutColor(cutColor), m_radius(radius)
+        : QWidget(parent), m_cutColor(cutColor), m_radius(radius), m_baseRadius(radius)
     {
         setAttribute(Qt::WA_TransparentForMouseEvents);
         setAttribute(Qt::WA_TranslucentBackground);
         setAutoFillBackground(false);
+        m_radius = m_baseRadius * Logos::themeRadiusScale();
         connect(Logos::ThemeNotifier::instance(), &Logos::ThemeNotifier::currentChanged, this, [this]() {
             m_cutColor = Logos::themeColor(QStringLiteral("background"), QColor("#171717"));
+            m_radius = m_baseRadius * Logos::themeRadiusScale();
             update();
         });
     }
@@ -110,6 +113,7 @@ protected:
 private:
     QColor m_cutColor;
     qreal  m_radius;
+    qreal  m_baseRadius;
 };
 
 // Transparent wrapper around the plugin widget inside a dock. Gives us:
@@ -630,8 +634,8 @@ void WorkspaceArea::applyTabBarStyleSheet(QTabBar* tabBar)
             padding: 0px 8px 0px 4px;
             margin-right: 10px;
 
-            border-top-left-radius: 10px;
-            border-top-right-radius: 10px;
+            border-top-left-radius: %6px;
+            border-top-right-radius: %6px;
             height: 20px;
             min-width: 120px;
         }
@@ -663,7 +667,8 @@ void WorkspaceArea::applyTabBarStyleSheet(QTabBar* tabBar)
              cssColor(Logos::themeColor(QStringLiteral("backgroundSecondary"), QColor("#262626"))),
              cssColor(Logos::themeColor(QStringLiteral("textSecondary"), QColor("#A4A4A4"))),
              cssColor(withAlpha(Logos::themeColor(QStringLiteral("backgroundSecondary"), QColor("#262626")), 0.6)),
-             cssColor(Logos::themeColor(QStringLiteral("textMuted"), QColor("#626262")))));
+             cssColor(Logos::themeColor(QStringLiteral("textMuted"), QColor("#626262"))))
+        .arg(qRound(10 * Logos::themeRadiusScale())));
 }
 
 void WorkspaceArea::customizeTabBarStyle(QTabBar* tabBar)

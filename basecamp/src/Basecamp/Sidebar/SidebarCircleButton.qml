@@ -20,7 +20,7 @@ AbstractButton {
 
     // Dark gray pill background extending to left edge when active/highlighted
     background: Rectangle {
-        radius: width / 2
+        radius: width / 2 * Theme.spacing.roundness
         color: root.hovered || root.checked ? Theme.palette.accentOrange: Theme.palette.surface
     }
 
