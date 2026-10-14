@@ -15,14 +15,25 @@ Item {
     QtObject {
         id: d
 
-        // [{ id, label }] in Theme.themeNames order.
+        // Theme names and authors come from third-party files: escape them so
+        // the styled-text label can't carry markup (e.g. an <img src> URL).
+        function escapeHtml(s) {
+            return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        }
+
+        // [{ id, label }] in Theme.themeNames order. The label is the theme's
+        // name with a quieter "by <author>" after it.
         readonly property var themes: {
             const out = []
             const names = Theme.themeNames
+            const byColor = Theme.palette.textTertiary
             for (let i = 0; i < names.length; ++i) {
                 const info = Theme.themeInfo[names[i]] || { name: names[i], author: "" }
-                out.push({ id: names[i],
-                           label: info.author ? info.name + " · " + info.author : info.name })
+                let label = escapeHtml(info.name)
+                if (info.author)
+                    label += "&nbsp;&nbsp;<font color=\"" + byColor + "\">"
+                             + qsTr("by %1").arg(escapeHtml(info.author)) + "</font>"
+                out.push({ id: names[i], label: label })
             }
             return out
         }
