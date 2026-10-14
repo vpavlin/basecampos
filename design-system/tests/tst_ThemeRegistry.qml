@@ -13,6 +13,10 @@ TestCase {
     LogosCheckbox { id: cb; checked: true }
     LogosButton { id: primaryBtn; text: "Go"; variant: LogosButton.Variant.Primary }
     LogosButton { id: plainBtn; text: "Go" }
+    LogosTabButton { id: tabBtn; text: "Tab" }
+    LogosItemDelegate { id: itemDel; text: "Item" }
+    LogosCheckbox { id: cbLabel; text: "Check" }
+    LogosTextField { id: field; text: "typed" }
 
     function cleanupTestCase() {
         Theme.setTheme("dark")
@@ -248,5 +252,16 @@ TestCase {
         compare(Theme.typography.family, "Public Sans")
         Theme.setTheme("dark")
         compare(Theme.typography.familyOverride, "")
+    }
+
+    function test_controls_render_in_theme_family() {
+        // Controls that pass `font: root.font` into LogosText used to replace
+        // the themed family with the Control's default font.
+        const fam = Theme.typography.family
+        compare(tabBtn.labelItem.font.family, fam, "LogosTabButton")
+        compare(itemDel.labelItem.font.family, fam, "LogosItemDelegate")
+        compare(cbLabel.labelItem.font.family, fam, "LogosCheckbox")
+        compare(field.textInput.font.family, fam, "LogosTextField")
+        compare(primaryBtn.labelItem.font.family, fam, "LogosButton")
     }
 }
