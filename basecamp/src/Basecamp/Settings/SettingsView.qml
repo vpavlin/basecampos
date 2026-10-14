@@ -48,12 +48,14 @@ Rectangle {
         readonly property int sectionAppsInspector:   1
         readonly property int sectionModuleInspector: 2
         readonly property int sectionRepositories:    3
+        readonly property int sectionAppearance:      4
 
         readonly property var sections: [
             { label: qsTr("Dashboard") },
             { label: qsTr("Apps Inspector") },
             { label: qsTr("Module Inspector") },
-            { label: qsTr("Package Repositories") }
+            { label: qsTr("Package Repositories") },
+            { label: qsTr("Appearance") }
         ]
 
         property int selectedIndex: 0
@@ -233,6 +235,9 @@ Rectangle {
                         onVisibleChanged:      if (visible)
                                                    root.repositoriesBecameVisible()
                     }
+
+                    // 4 — Appearance (themes).
+                    AppearanceView {}
                 }
             }
         }

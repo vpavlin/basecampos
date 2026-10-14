@@ -81,7 +81,15 @@ qt_add_qml_module(basecamp_backend_qml
         AppsFilterProxy.cpp
         ModulesFilterProxy.h
         ModulesFilterProxy.cpp
+        ThemeInstaller.h
+        ThemeInstaller.cpp
 )
+
+# ThemeInstaller includes <ThemeInstall.h>. Headers only: main_ui links the
+# design system itself, and linking it here too would duplicate its static
+# QML module registration.
+target_include_directories(basecamp_backend_qml PRIVATE
+    $<TARGET_PROPERTY:Logos::logos_theme_qml,INTERFACE_INCLUDE_DIRECTORIES>)
 
 qt_add_qml_module(basecamp_common_qml
     URI Basecamp.Common
@@ -143,6 +151,7 @@ qt_add_qml_module(basecamp_settings_qml
         Basecamp/Settings/ModuleRowActions.qml
         Basecamp/Settings/PluginInterfaceView.qml
         Basecamp/Settings/RepositoriesView.qml
+        Basecamp/Settings/AppearanceView.qml
 )
 
 qt_add_qml_module(basecamp_shell_qml
