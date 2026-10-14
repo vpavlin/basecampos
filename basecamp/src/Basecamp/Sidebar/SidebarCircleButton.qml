@@ -32,6 +32,10 @@ AbstractButton {
             height: 24
             source: root.icon.source
             color: root.hovered || root.checked ? Theme.palette.accentForeground : "transparent"
+            // The icons are grey (#969696) SVGs, and MultiEffect colorization
+            // multiplies by their luminance: white x grey stays grey. Lift them
+            // to white first so the tint lands exactly (black stays black).
+            brightness: root.hovered || root.checked ? 1.0 : 0
             visible: !!root.icon.source &&
                      !(appIcon.status === Image.Null ||
                        appIcon.status === Image.Error)

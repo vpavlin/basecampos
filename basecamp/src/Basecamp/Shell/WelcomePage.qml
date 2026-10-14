@@ -411,6 +411,8 @@ Item {
                 source: chip.iconSource
                 color: chip.active ? Theme.palette.accentForeground
                                    : Theme.palette.textTertiary
+                // Grey SVG: lift to white so accentForeground lands exactly.
+                brightness: chip.active ? 1.0 : 0
             }
         }
     }
