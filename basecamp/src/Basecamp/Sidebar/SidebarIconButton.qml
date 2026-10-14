@@ -19,12 +19,14 @@ AbstractButton {
         }
     }
 
-    background: Image {
+    // workspace.svg's hexagon, filled with backgroundInset (its #141414 in dark).
+    background: TintedSvg {
         width: 56
         height: 46
         anchors.centerIn: parent
-        source: BasecampIcons.workspace
+        color: Theme.palette.backgroundInset
         fillMode: Image.PreserveAspectFit
+        markup: '<svg width="58" height="50" viewBox="0 0 58 50" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21.4484 0C21.3155 0.0181203 0 36.9232 0 36.9232C0 36.9232 7.36289 49.6436 7.56825 49.9336L50.2235 50L57.7615 36.9775L36.3916 0.048322L21.4545 0H21.4484Z" fill="%COLOR%"/></svg>'
     }
 
     contentItem: Item {

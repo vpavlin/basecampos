@@ -33,6 +33,23 @@
 #include <QUrl>
 #include <QWheelEvent>
 
+#include <ThemeColors.h>
+
+namespace {
+// Stylesheet form of a colour, alpha included.
+QString cssColor(const QColor& c)
+{
+    return QStringLiteral("rgba(%1, %2, %3, %4)")
+        .arg(c.red()).arg(c.green()).arg(c.blue()).arg(c.alphaF());
+}
+
+QColor withAlpha(QColor c, qreal alpha)
+{
+    c.setAlphaF(alpha);
+    return c;
+}
+} // namespace
+
 namespace {
 class ZeroTitleWidget : public QWidget {
 public:
@@ -55,7 +72,7 @@ public:
 class CornerCutOverlay : public QWidget {
 public:
     explicit CornerCutOverlay(QWidget* parent = nullptr,
-                              QColor cutColor = QColor("#171717"),
+                              QColor cutColor = Logos::themeColor(QStringLiteral("background"), QColor("#171717")),
                               qreal radius = 16.0)
         : QWidget(parent), m_cutColor(cutColor), m_radius(radius)
     {
@@ -234,7 +251,7 @@ WorkspaceArea::WorkspaceArea(QObject* backend, QWidget* parent)
     setAutoFillBackground(true);
     {
         QPalette pal = palette();
-        pal.setColor(QPalette::Window, QColor("#171717"));
+        pal.setColor(QPalette::Window, Logos::themeColor(QStringLiteral("background"), QColor("#171717")));
         setPalette(pal);
     }
     setContentsMargins(0, 0, 0, 0);
@@ -242,7 +259,7 @@ WorkspaceArea::WorkspaceArea(QObject* backend, QWidget* parent)
     if (backend) {
         m_welcomeWidget = new QQuickWidget(this);
         m_welcomeWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
-        m_welcomeWidget->setClearColor(QColor("#171717"));
+        m_welcomeWidget->setClearColor(Logos::themeColor(QStringLiteral("background"), QColor("#171717")));
         m_welcomeWidget->setMinimumSize(300, 200);
         applyDevQmlImportPath(m_welcomeWidget->engine());
         m_welcomeWidget->rootContext()->setContextProperty("backend", backend);
@@ -603,16 +620,16 @@ void WorkspaceArea::customizeTabBarStyle(QTabBar* tabBar)
     props.setScrollMetric(QScrollerProperties::ScrollingCurve, QEasingCurve::OutCubic);
     QScroller::scroller(tabBar)->setScrollerProperties(props);
 
-    tabBar->setStyleSheet(QStringLiteral(R"(
+    tabBar->setStyleSheet(QString(R"(
         QTabBar {
-            background: #171717;
+            background: %1;
             border: none;
             qproperty-drawBase: false;
         }
 
         QTabBar::tab {
-            background: #262626;
-            color: #A4A4A4;
+            background: %2;
+            color: %3;
 
             padding: 0px 8px 0px 4px;
             margin-right: 10px;
@@ -638,14 +655,19 @@ void WorkspaceArea::customizeTabBarStyle(QTabBar* tabBar)
         }
 
         QTabBar::tab:!selected {
-            background: rgba(38, 38, 38, 0.6);
-            color: #626262;
+            background: %4;
+            color: %5;
         }
 
         QTabBar::tab:hover {
-            background: #262626;
+            background: %2;
         }
-    )"));
+    )")
+        .arg(cssColor(Logos::themeColor(QStringLiteral("background"), QColor("#171717"))),
+             cssColor(Logos::themeColor(QStringLiteral("backgroundSecondary"), QColor("#262626"))),
+             cssColor(Logos::themeColor(QStringLiteral("textSecondary"), QColor("#A4A4A4"))),
+             cssColor(withAlpha(Logos::themeColor(QStringLiteral("backgroundSecondary"), QColor("#262626")), 0.6)),
+             cssColor(Logos::themeColor(QStringLiteral("textMuted"), QColor("#626262")))));
 
     connect(tabBar, &QTabBar::tabMoved, this, [this, tabBar](int from, int to) {
         Q_UNUSED(from)
@@ -702,10 +724,10 @@ void WorkspaceArea::installTabBarCloseButtons(QTabBar* tabBar)
         btn->setIconSize(QSize(12, 12));
         btn->setFixedSize(12, 12);
         btn->setCursor(Qt::PointingHandCursor);
-        btn->setStyleSheet(QStringLiteral(R"(
+        btn->setStyleSheet(QString(R"(
             QToolButton { background: transparent; border: none; }
-            QToolButton:hover { background: rgba(255,255,255,0.1); border-radius: 6px; }
-        )"));
+            QToolButton:hover { background: %1; border-radius: 6px; }
+        )").arg(cssColor(withAlpha(Logos::themeColor(QStringLiteral("text"), QColor("#FFFFFF")), 0.1))));
         connect(btn, &QToolButton::clicked, this, [tabBar, btn, closeSide]() {
             for (int j = 0; j < tabBar->count(); ++j) {
                 if (tabBar->tabButton(j, closeSide) == btn) {

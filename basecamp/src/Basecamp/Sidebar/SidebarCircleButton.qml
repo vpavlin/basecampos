@@ -31,7 +31,7 @@ AbstractButton {
             width: 24
             height: 24
             source: root.icon.source
-            color: root.hovered || root.checked ? Theme.palette.backgroundBlack: "transparent"
+            color: root.hovered || root.checked ? Theme.palette.accentForeground : "transparent"
             visible: !!root.icon.source &&
                      !(appIcon.status === Image.Null ||
                        appIcon.status === Image.Error)

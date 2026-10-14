@@ -21,6 +21,9 @@
 #include <QColor>
 #include <QPalette>
 #include <QEvent>
+#include <QTimer>
+
+#include <ThemeColors.h>
 
 namespace {
 constexpr int kAppsStackIndex     = 0;  // WorkspaceArea (QDockWidget-based)
@@ -252,13 +255,23 @@ void MainContainer::detachFromHost()
 
 void MainContainer::setupUi()
 {
-    // We would likely move this to qml and use Logos.Theme instead
-    QColor bgColor("#171717");
+    const QColor bgColor = Logos::themeColor(QStringLiteral("background"), QColor("#171717"));
     // set background color
     setAutoFillBackground(true);
     QPalette p = palette();
     p.setColor(QPalette::Window, bgColor);
     setPalette(p);
+
+    // The host window (app/window.cpp) fills #171717 around us and doesn't link
+    // the design system; recolour it from here once we're parented.
+    QTimer::singleShot(0, this, [this, bgColor]() {
+        QWidget* top = window();
+        if (!top || top == this)
+            return;
+        QPalette tp = top->palette();
+        tp.setColor(QPalette::Window, bgColor);
+        top->setPalette(tp);
+    });
 
     // Create main horizontal layout
     m_mainLayout = new QHBoxLayout(this);
