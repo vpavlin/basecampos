@@ -9,7 +9,8 @@ Switch {
 
     property color trackColorOn: Theme.palette.primary
     property color trackColorOff: Theme.palette.surface
-    property color handleColor: Theme.palette.text
+    // The handle sits on the primary track when checked.
+    property color handleColor: checked ? Theme.palette.primaryForeground : Theme.palette.text
 
     // Exposed for inspection (e.g., from tests). Read-only.
     readonly property alias indicatorItem: track

@@ -156,7 +156,9 @@ LogosAbstractButton {
         LogosText {
             id: label
             Layout.fillWidth: true
-            color: root.enabled ? Theme.palette.text : Theme.palette.textMuted
+            color: !root.enabled ? Theme.palette.textMuted
+                 : root.variant === LogosButton.Variant.Primary ? Theme.palette.primaryForeground
+                 : Theme.palette.text
             font: root.font
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter

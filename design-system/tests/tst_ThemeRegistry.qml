@@ -2,11 +2,17 @@ import QtQuick
 import QtTest
 
 import Logos.Theme
+import Logos.Controls
 
 // Themes come from tests/fixtures/themes and the repo's themes/ directory;
 // tests/main.cpp points LOGOS_THEME_PATH at both.
 TestCase {
     name: "ThemeRegistry"
+
+    LogosSwitch { id: sw; checked: true }
+    LogosCheckbox { id: cb; checked: true }
+    LogosButton { id: primaryBtn; text: "Go"; variant: LogosButton.Variant.Primary }
+    LogosButton { id: plainBtn; text: "Go" }
 
     function cleanupTestCase() {
         Theme.setTheme("dark")
@@ -31,7 +37,7 @@ TestCase {
 
     function test_palette_tokens_match_dark_theme() {
         var tokens = ThemeRegistry.paletteTokens
-        compare(tokens.length, 62)
+        compare(tokens.length, 64)
         for (var i = 0; i < tokens.length; ++i)
             verify(Theme.darkTheme[tokens[i]] !== undefined, "DarkTheme lacks " + tokens[i])
     }
@@ -125,7 +131,7 @@ TestCase {
 
     function test_logos_light_is_complete_and_readable() {
         var light = findTheme("logos.light")
-        compare(Object.keys(light.palette).length, 62)
+        compare(Object.keys(light.palette).length, 64)
         verify(!light.lowContrast)
         verify(light.contrast.textOnBackground >= 4.5)
         verify(light.contrast.primaryOnBackground >= 3.0)
@@ -167,5 +173,28 @@ TestCase {
         }
         compare(Object.keys(seen).length, Theme.themeNames.length)
         compare(Theme.currentTheme, "dark")
+    }
+
+    // ----- content on primary -----
+
+    function test_content_on_primary_uses_primary_foreground() {
+        var themes = ["dark", "logos.light"]
+        for (var i = 0; i < themes.length; ++i) {
+            Theme.setTheme(themes[i])
+            compare(sw.handleColor, Theme.palette.primaryForeground, themes[i] + " switch handle")
+            compare(cb.checkmarkColor, Theme.palette.primaryForeground, themes[i] + " checkmark")
+            compare(primaryBtn.labelItem.color, Theme.palette.primaryForeground, themes[i] + " primary label")
+            compare(plainBtn.labelItem.color, Theme.palette.text, themes[i] + " plain label")
+        }
+        sw.checked = false
+        compare(sw.handleColor, Theme.palette.text)
+        sw.checked = true
+        Theme.setTheme("dark")
+    }
+
+    function test_new_tokens_keep_dark_unchanged() {
+        // primaryForeground and brandMark equal the old `text` value in the default theme.
+        compare(Theme.darkTheme.primaryForeground, Theme.darkTheme.text)
+        compare(Theme.darkTheme.brandMark, Theme.darkTheme.text)
     }
 }

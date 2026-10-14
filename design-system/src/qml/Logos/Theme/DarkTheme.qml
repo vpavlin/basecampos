@@ -39,6 +39,8 @@ QtObject {
     readonly property color primaryHover: colors.orange500
     readonly property color primaryPressed: colors.orange800
     readonly property color primarySoft: colors.peach100
+    // Content (text, glyphs, handles) drawn on top of a `primary` fill.
+    readonly property color primaryForeground: colors.white
 
     readonly property color success: colors.green500
     readonly property color successHover: colors.green400
@@ -58,6 +60,8 @@ QtObject {
     readonly property color primaryBorder: Qt.rgba(primary.r, primary.g, primary.b, 0.4)
 
     readonly property color notification: colors.red500
+    // Single-colour brand mark (the Basecamp logo).
+    readonly property color brandMark: colors.white
     readonly property color accentOrange: colors.orange300
     readonly property color accentOrangeMid: colors.orange350
     readonly property color accentOrangeDeep: colors.orange450
