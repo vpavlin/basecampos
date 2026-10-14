@@ -322,7 +322,7 @@
     },
     "typography": {
       "type": "object",
-      "description": "Parsed and validated; not applied yet.",
+      "description": "family/monoFamily are applied (names of installed fonts; missing falls back). sizes/weights are validated, not applied yet.",
       "properties": {
         "sizes": {
           "type": "object",
@@ -388,6 +388,16 @@
               "maximum": 900
             }
           }
+        },
+        "family": {
+          "type": "string",
+          "pattern": "^[\\p{L}\\p{N} ._'-]{1,64}$",
+          "description": "Name of a font installed on the system."
+        },
+        "monoFamily": {
+          "type": "string",
+          "pattern": "^[\\p{L}\\p{N} ._'-]{1,64}$",
+          "description": "Monospace font for code/hashes; name of an installed font."
         }
       }
     }

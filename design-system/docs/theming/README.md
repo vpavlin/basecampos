@@ -2,7 +2,8 @@
 
 _For theme authors. Draft format v1, 2026-10-14. Validated by `ThemeRegistry` (`src/qml/Logos/Theme/`)._
 
-A Basecamp theme is **one JSON file of colour values**. No code, no QML, no fonts. Basecamp reads
+A Basecamp theme is **one JSON file of colour values** (plus, optionally, the *name* of a font).
+No code, no QML, no font files. Basecamp reads
 it as data, checks every value, and ignores anything it doesn't recognise, so a theme can't break
 the app or run anything.
 
@@ -39,7 +40,9 @@ Anything you leave out comes from Logos Dark, **token by token**, so a three-col
 | `author` | yes | Shown next to the name (`Sunset · yourname`). Plain text, ≤ 40 chars. |
 | `mode` | yes | `"dark"` or `"light"`. Apps read it (`Theme.isDark`) to choose matching assets. |
 | `palette` | no | Colour tokens (below). |
-| `spacing`, `radius`, `typography` | no | Accepted and validated, **not applied yet**. Leave them out for now. |
+| `typography.family` | no | Body font, **by name**, of a font installed on the user's system (e.g. `"Noto Serif"`). Applied to all text, live. Missing → bundled Public Sans, and Settings says so. |
+| `typography.monoFamily` | no | Font for code, hashes and addresses. Missing → platform monospace. |
+| `spacing`, `radius`, `typography.sizes/weights` | no | Accepted and validated, **not applied yet**. Leave them out for now. |
 | `$schema` | no | Point it at the schema for editor autocompletion. |
 
 **Colours:** `#RRGGBB` or `#RRGGBBAA`, with alpha **last, as in CSS and Figma**. (Qt's own string
