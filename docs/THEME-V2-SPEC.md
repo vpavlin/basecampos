@@ -1,6 +1,6 @@
-# Logos Theme File: v2 proposal (gradients, backgrounds, icon packs)
+# Logos Theme File: v2 proposal (gradients, backgrounds, icon packs, component styles)
 
-**Status:** Proposal · 2026-10-15 · builds on [Theme file spec v1](../design-system/docs/theming/README.md) · not implemented
+**Status:** Proposal · 2026-10-15 · builds on [Theme file spec v1](../design-system/docs/theming/README.md) · prototype implemented (2026-10-15)
 **Audience:** Basecamp and design-system developers, theme authors, reviewers
 
 ---
@@ -15,6 +15,9 @@
   3. **Icon packs**: replacement SVGs for named icons. Needs an SVG sanitiser. Highest risk.
 - **Graceful in both directions:** a v2 theme loads in a v1 Basecamp (colours, corners and fonts
   apply, the rest is ignored). A v1 theme is a valid v2 theme.
+- **Component styles (§11):** each control's sizes and colours (background, hover, pressed, text,
+  border, gradient) are theme values; the control's logic stays in the design system. A `density`
+  setting scales them for touch.
 - **Decisions needed:** §8.
 
 ## 1. Principles
@@ -235,3 +238,57 @@ the network.
 slots, with one example theme (e.g. a "Sunset" variant of Paper Serif or a gradient Hacker) to prove
 it. It needs no new file handling, keeps Dark pixel-identical, and shows the community the visual
 range of v2 before we commit to the package work.
+
+## 11. Component styles (sizes, colours, density)
+
+Added after the first review: styling should cover each control, separated from its logic. A theme
+restyles a control through the `components` block. It sets **values** only; the control's QML,
+states and behaviour stay in the design system.
+
+```json
+"components": {
+  "button": {
+    "radius": 999, "height": 44,
+    "primary":   { "gradient": "accent", "text": "#1A0B2E" },
+    "secondary": { "background": "#2A2148", "backgroundHover": "#33285A", "border": "surfaceRaised" }
+  },
+  "search": { "radius": 999, "background": "#15102A", "borderFocus": "#FF5E8A" },
+  "tab":    { "textSelected": "#FF8A66" },
+  "card":   { "radius": 28, "shadowColor": "#05030C", "shadowOpacity": 0.6, "shadowBlur": 28 }
+},
+"density": "comfortable"
+```
+
+### 11.1 Keys per control
+
+| Control | Sizes | Colours |
+|---|---|---|
+| `button` (`primary`, `secondary`) | height, compactHeight, paddingX, radius, borderWidth | background, backgroundHover, backgroundPressed, text, border, gradient |
+| `field` | height, paddingX, radius, borderWidth | background, text, placeholder, border, borderFocus, gradient |
+| `search` | height, radius, borderWidth | background, text, border, borderFocus, gradient |
+| `combo` | height, radius, borderWidth | background, backgroundPressed, text, border, borderFocus |
+| `listItem` | height, paddingX | backgroundHover, backgroundPressed, backgroundSelected, text |
+| `menuItem` | height, paddingX | backgroundHover, text |
+| `tab` | height, paddingX | text, textSelected |
+| `toolButton` | size | backgroundHover, backgroundPressed, text |
+| `iconButton` | size | background, backgroundHover, backgroundPressed, text, border, gradient |
+| `card` | radius, borderWidth, shadowBlur, shadowOffsetY (+ shadowColor, shadowOpacity) | background, backgroundHover, border, gradient |
+
+### 11.2 Rules
+
+- **A colour is `#RRGGBB[AA]` or a palette token's name** (`"surfaceRaised"`), so a style can follow
+  the theme's own palette.
+- **`gradient` names a gradient slot the theme defines** (§2). Hover and pressed become a light or
+  dark wash over it.
+- **Defaults are today's values.** Every key a theme leaves out keeps the built-in size or palette
+  token, so Dark and Light stay pixel-identical (tested).
+- **Validation:** unknown controls and keys are ignored with a warning; sizes are clamped to a range
+  per key; text below 4.5:1 on its control's background is warned at install.
+- **Not themeable:** layout, which parts a control has, state logic, focus order, behaviour.
+
+### 11.3 Density
+
+`density` is `compact`, `comfortable` (default) or `touch`. It scales control heights and paddings
+(0.85, 1.0, 1.2) and in `touch` keeps every control at least 44 px. The user's choice in
+Settings → Appearance wins over the theme's. This is the same token layer the mobile port needs, so
+one mechanism serves themes and touch.
