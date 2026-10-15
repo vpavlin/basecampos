@@ -23,5 +23,5 @@ Requires Nix with flakes enabled.
 
 ## Try a theme
 
-Example theme files are in `design-system/examples/themes/`. Upload one in
+Ready-to-upload theme files are in `themes/` (Paper Serif, Hacker, Catppuccin Mocha). Upload one in
 **Settings → Appearance**.
