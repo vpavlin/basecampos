@@ -1,0 +1,186 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+
+import Logos.Theme
+import Logos.Controls
+import Logos.Icons
+
+Rectangle {
+    property string figmaUrl: ""
+
+    color: Theme.palette.background
+
+    ScrollView {
+        anchors.fill: parent
+        contentWidth: availableWidth
+        clip: true
+
+        ColumnLayout {
+            width: parent.width
+            spacing: Theme.spacing.xxlarge
+
+            Item { Layout.preferredHeight: Theme.spacing.large }
+
+            ColumnLayout {
+                Layout.leftMargin: Theme.spacing.xxlarge
+                Layout.rightMargin: Theme.spacing.xxlarge
+                spacing: Theme.spacing.tiny
+
+                LogosText {
+                    text: "Icons"
+                    font.pixelSize: Theme.typography.titleText
+                    font.weight: Theme.typography.weightBold
+                    color: Theme.palette.text
+                }
+                LogosText {
+                    text: "Curated icon set shipped with Logos.Icons. Use as LogosIcons.<name>."
+                    font.pixelSize: Theme.typography.secondaryText
+                    color: Theme.palette.textSecondary
+                }
+            }
+
+            Section {
+                title: "Arrows"
+                items: [
+                    { name: "arrowLeft",        value: LogosIcons.arrowLeft },
+                    { name: "arrowLeftDouble",  value: LogosIcons.arrowLeftDouble },
+                    { name: "arrowRight",       value: LogosIcons.arrowRight },
+                    { name: "arrowRightDouble", value: LogosIcons.arrowRightDouble },
+                    { name: "triangleUp",       value: LogosIcons.triangleUp },
+                    { name: "triangleDown",     value: LogosIcons.triangleDown }
+                ]
+            }
+
+            Section {
+                title: "Actions"
+                items: [
+                    { name: "refresh", value: LogosIcons.refresh },
+                    { name: "install", value: LogosIcons.install },
+                    { name: "trash",   value: LogosIcons.trash },
+                    { name: "more",    value: LogosIcons.more },
+                    { name: "search",  value: LogosIcons.search },
+                    { name: "close",   value: LogosIcons.close },
+                    { name: "copy",    value: LogosIcons.copy },
+                    { name: "check",   value: LogosIcons.check }
+                ]
+            }
+
+            Section {
+                title: "View Modes"
+                items: [
+                    { name: "grid",  value: LogosIcons.grid },
+                    { name: "list",  value: LogosIcons.list },
+                    { name: "pages", value: LogosIcons.pages }
+                ]
+            }
+
+            Section {
+                title: "Status"
+                items: [
+                    { name: "warning", value: LogosIcons.warning }
+                ]
+            }
+
+            // Not a glyph, and deliberately shown apart from the grid above —
+            // the grid tints every entry to a single colour, which is exactly
+            // what must not happen to a photograph.
+            ColumnLayout {
+                Layout.leftMargin: Theme.spacing.xxlarge
+                Layout.rightMargin: Theme.spacing.xxlarge
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+
+                LogosText {
+                    text: "Artwork"
+                    font.pixelSize: Theme.typography.panelTitleText
+                    font.weight: Theme.typography.weightMedium
+                    color: Theme.palette.text
+                }
+
+                LogosText {
+                    Layout.fillWidth: true
+                    text: "LogosIcons.onboardingBackdrop — the shared onboarding scene. "
+                        + "1920x1280 JPEG. Place it with a plain Image and "
+                        + "PreserveAspectCrop; do not put it through LogosIcon, which "
+                        + "colorizes its source to a single colour."
+                    font.pixelSize: Theme.typography.secondaryText
+                    color: Theme.palette.textSecondary
+                    wrapMode: Text.WordWrap
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 300
+                    color: Theme.palette.background
+                    border.color: Theme.palette.border
+                    border.width: 1
+                    clip: true
+
+                    Image {
+                        anchors.fill: parent
+                        source: LogosIcons.onboardingBackdrop
+                        fillMode: Image.PreserveAspectCrop
+                        mipmap: true
+                    }
+                }
+            }
+
+            Item { Layout.preferredHeight: Theme.spacing.xxlarge }
+        }
+    }
+
+    component Section: ColumnLayout {
+        property string title
+        property var items: []
+
+        Layout.fillWidth: true
+        Layout.leftMargin: Theme.spacing.xxlarge
+        Layout.rightMargin: Theme.spacing.xxlarge
+        spacing: Theme.spacing.medium
+
+        LogosText {
+            text: title
+            font.pixelSize: Theme.typography.primaryText
+            font.weight: Theme.typography.weightBold
+            color: Theme.palette.text
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: Theme.palette.borderHairline
+        }
+
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 5
+            columnSpacing: Theme.spacing.medium
+            rowSpacing: Theme.spacing.medium
+
+            Repeater {
+                model: items
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+
+                    LogosIconButton {
+                        Layout.alignment: Qt.AlignHCenter
+                        iconSource: modelData.value
+                        flat: true
+                    }
+
+                    LogosText {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "LogosIcons." + modelData.name
+                        font.pixelSize: Theme.typography.secondaryText
+                        font.weight: Theme.typography.weightMedium
+                        color: Theme.palette.text
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+        }
+    }
+}

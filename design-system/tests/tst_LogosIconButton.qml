@@ -1,0 +1,135 @@
+import QtQuick
+import QtTest
+
+import Logos.Theme
+import Logos.Controls
+
+TestCase {
+    id: root
+    name: "LogosIconButton"
+    width: 400
+    height: 200
+    when: windowShown
+
+    LogosIconButton {
+        id: btn
+        iconSource: "qrc:/test-icon.png"
+        anchors.centerIn: parent
+    }
+
+    SignalSpy {
+        id: clickedSpy
+        target: btn
+        signalName: "clicked"
+    }
+
+    function init() {
+        clickedSpy.clear()
+        btn.enabled = true
+        btn.iconSource = "qrc:/test-icon.png"
+        btn.size = 40
+        btn.iconSize = 20
+        btn.flat = false
+        btn.focus = false
+    }
+
+    function test_flat_hides_pill_background() {
+        compare(btn.flat, false)
+        // Item.visible reads *effective* visibility, which is false for the
+        // whole TestCase subtree in the offscreen harness — so only the
+        // flat → hidden direction is assertable here.
+        btn.flat = true
+        compare(btn.backgroundItem.visible, false)
+    }
+
+    function test_iconSource_round_trips() {
+        btn.iconSource = "qrc:/test-icon.png"
+        compare(btn.iconSource.toString(), "qrc:/test-icon.png")
+    }
+
+    function test_iconSource_can_be_cleared() {
+        btn.iconSource = ""
+        compare(btn.iconSource.toString(), "")
+    }
+
+    function test_size_drives_implicit_dimensions() {
+        btn.size = 32
+        compare(btn.implicitWidth, 32)
+        compare(btn.implicitHeight, 32)
+    }
+
+    function test_iconSize_drives_image_dimensions() {
+        btn.iconSize = 24
+        compare(btn.iconImage.width, 24)
+        compare(btn.iconImage.height, 24)
+    }
+
+    function test_emits_clicked_when_enabled() {
+        btn.mouseAreaItem.clicked(null)
+        compare(clickedSpy.count, 1)
+    }
+
+    function test_disabled_propagates_to_mousearea() {
+        btn.enabled = false
+        compare(btn.mouseAreaItem.enabled, false)
+        btn.enabled = true
+        compare(btn.mouseAreaItem.enabled, true)
+    }
+
+    function test_inspection_aliases_resolve() {
+        verify(btn.iconImage, "iconImage must resolve")
+        verify(btn.backgroundItem, "backgroundItem must resolve")
+        verify(btn.mouseAreaItem, "mouseAreaItem must resolve")
+    }
+
+    function test_resting_colors() {
+        compare(btn.isActive, false)
+        tryCompare(btn.backgroundItem, "color", Theme.palette.backgroundButton)
+        tryCompare(btn.backgroundItem.border, "color", Theme.palette.borderStrong)
+    }
+
+    function test_hover_or_focus_uses_muted_fill() {
+        compare(btn._backgroundColor(true, false, false, false), Theme.palette.backgroundButton)
+        compare(btn._backgroundColor(true, false, true, false), Theme.palette.backgroundMuted)
+        compare(btn._backgroundColor(true, false, false, true), Theme.palette.backgroundMuted)
+
+        btn.forceActiveFocus()
+        tryCompare(btn.backgroundItem, "color", Theme.palette.backgroundMuted)
+        tryCompare(btn.backgroundItem.border, "color", Theme.palette.overlayOrange)
+    }
+
+    function test_pressed_uses_stronger_fill_than_hover() {
+        // Pressed wins over hover/focus, matching LogosButton secondary.
+        compare(btn._backgroundColor(true, true, true, false), Theme.palette.background)
+        compare(btn._backgroundColor(true, true, false, false), Theme.palette.background)
+        compare(btn._backgroundColor(true, false, true, false), Theme.palette.backgroundMuted)
+    }
+
+    function test_disabled_is_never_active() {
+        btn.enabled = false
+        btn.forceActiveFocus()
+        verify(!btn.isActive)
+        tryCompare(btn.backgroundItem, "color", Theme.palette.backgroundButton)
+        tryCompare(btn.backgroundItem.border, "color", Theme.palette.borderStrong)
+        compare(btn._backgroundColor(false, true, true, true), Theme.palette.backgroundButton)
+    }
+
+    function test_joins_tab_focus_chain() {
+        compare(btn.activeFocusOnTab, true)
+        compare(btn.focusPolicy, Qt.StrongFocus)
+    }
+
+    function test_space_emits_clicked_when_focused() {
+        btn.forceActiveFocus()
+        tryCompare(btn, "activeFocus", true)
+        keyClick(Qt.Key_Space)
+        compare(clickedSpy.count, 1)
+    }
+
+    function test_disabled_ignores_keyboard_activate() {
+        btn.enabled = false
+        btn.forceActiveFocus()
+        keyClick(Qt.Key_Space)
+        compare(clickedSpy.count, 0)
+    }
+}

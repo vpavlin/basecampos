@@ -1,0 +1,178 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+
+import Logos.Theme
+import Logos.Controls
+// LogosButton — a themed push button with optional icons.
+//
+// A Control that pairs a centered text label with an optional LogosIcon on
+// either side of it. The implicit size follows the content, so a button left
+// at its natural size fits its own label; a label constrained by an explicit
+// width is elided rather than overflowing the button. Colors and border react
+// to hover, press, focus, and enabled state (pressed takes priority over
+// hover/focus). Cursor reflects enabled state. Joins the Tab focus chain;
+// Space/Enter show pressed while held and emit clicked() on release.
+//
+// Public API:
+//     text         button label. Drives the implicit width. Elided with "…"
+//                  when the button is narrower than the label.
+//     font         label typography. Defaults to the 12px medium step; set
+//                  font.pixelSize for a button that carries another step.
+//     leadingIcon  IconSpec for the icon before the label (see below).
+//     trailingIcon IconSpec for the icon after the label. Both may be set.
+//     variant      LogosButton.Variant.Primary or .Secondary (default).
+//                  Drives the background and border palette.
+//     compact      drops the 44px touch-target floor to 32px and tightens the
+//                  padding, for dense chrome (headers, toolbars) where a
+//                  full-size button crowds the row. Colors and behaviour are
+//                  unchanged. A bool rather than a size enum, so it does not
+//                  collide with LogosIconButton's pixel-valued `size`.
+//     radius       background corner radius. Default = Theme.spacing.radiusXlarge.
+//     pressed      read-only; true while the mouse is held, or while Space/
+//                  Enter is held with keyboard focus (pressed chrome).
+//     clicked      signal emitted on mouse click, or on Space/Enter release
+//                  while focused.
+//
+// IconSpec fields:
+//     source     URL of the icon asset. Empty renders nothing.
+//     size       icon footprint in px. Default 20.
+//     color      tint applied to the icon. Default = Theme.palette.text.
+//                Falls back to textMuted when the button is disabled.
+//     brightness MultiEffect brightness before tinting. Default 0.
+//
+// Read-only inspection aliases (for tests):
+//     mouseAreaItem     the MouseArea handling clicks/hover
+//     backgroundItem    the background Rectangle
+//     labelItem         the text label
+//     leadingIconItem   the LogosIcon before the label
+//     trailingIconItem  the LogosIcon after the label
+//     _backgroundColor  d.backgroundColor; not for app use
+//
+// Example:
+//     LogosButton {
+//         text: "Refresh"
+//         variant: LogosButton.Variant.Primary
+//         leadingIcon.source: LogosIcons.refresh
+//         onClicked: model.refresh()
+//     }
+LogosAbstractButton {
+    id: root
+
+    enum Variant { Primary, Secondary }
+
+    component IconSpec: QtObject {
+        property url source: ""
+        property int size: 20
+        property real brightness: 0
+        property color color: Theme.palette.text
+
+        readonly property bool isVisible: source.toString().length > 0
+    }
+
+    property alias text: label.text
+    readonly property IconSpec leadingIcon: IconSpec {}
+    readonly property IconSpec trailingIcon: IconSpec {}
+    property real radius: Theme.spacing.radiusXlarge
+    property int variant: LogosButton.Variant.Secondary
+    property bool compact: false
+
+    // Exposed for inspection (e.g., from tests). Read-only.
+    readonly property alias backgroundItem: bg
+    readonly property alias labelItem: label
+    readonly property alias leadingIconItem: iconLeft
+    readonly property alias trailingIconItem: iconRight
+    readonly property var _backgroundColor: d.backgroundColor
+
+    QtObject {
+        id: d
+
+        // focused is treated like hovered (pressed still wins).
+        function backgroundColor(enabled, variant, pressed, hovered, focused) {
+            if (!enabled)
+                return Theme.palette.backgroundMuted
+            if (variant === LogosButton.Variant.Primary) {
+                if (pressed)
+                    return Theme.palette.primaryPressed
+                if (hovered || focused)
+                    return Theme.palette.primaryHover
+                return Theme.palette.primary
+            }
+            if (pressed)
+                return Theme.palette.background
+            if (hovered || focused)
+                return Theme.palette.backgroundMuted
+            return Theme.palette.backgroundSecondary
+        }
+    }
+
+    // Floors keep short labels ("OK") on a balanced pill, and hold the height
+    // steady whether or not the button carries a default-sized (20px) icon;
+    // beyond them the content decides. Compact lowers both floors — it is for
+    // chrome, where the 44px touch target is the wrong unit.
+    implicitWidth: Math.max(compact ? 72 : 100,
+                            implicitContentWidth + leftPadding + rightPadding)
+    implicitHeight: Math.max(compact ? 32 : 44,
+                             implicitContentHeight + topPadding + bottomPadding)
+    leftPadding: compact ? Theme.spacing.medium : Theme.spacing.large
+    rightPadding: compact ? Theme.spacing.medium : Theme.spacing.large
+    topPadding: compact ? Theme.spacing.small : Theme.spacing.medium
+    bottomPadding: compact ? Theme.spacing.small : Theme.spacing.medium
+    font.family: Theme.typography.publicSans
+    font.pixelSize: Theme.typography.secondaryText
+    font.weight: Theme.typography.weightMedium
+
+    Accessible.name: root.text
+
+    background: Rectangle {
+        id: bg
+        color: d.backgroundColor(root.enabled, root.variant, root.pressed,
+                                 root.hovered, root.activeFocus)
+        radius: root.radius
+        border.width: 1
+        border.color: {
+            if (!root.enabled)
+                return Theme.palette.border
+            if (root.variant === LogosButton.Variant.Primary)
+                return root.isActive ? Theme.palette.overlayOrange : Theme.palette.primary
+            return root.isActive ? Theme.palette.overlayOrange : Theme.palette.border
+        }
+    }
+
+    contentItem: RowLayout {
+        spacing: Theme.spacing.small
+
+        LogosIcon {
+            id: iconLeft
+            source: root.leadingIcon.source
+            color: root.enabled ? root.leadingIcon.color : Theme.palette.textMuted
+            visible: root.leadingIcon.isVisible
+            Layout.preferredWidth: root.leadingIcon.size
+            Layout.preferredHeight: root.leadingIcon.size
+            Layout.alignment: Qt.AlignVCenter
+            brightness: root.leadingIcon.brightness
+        }
+
+        LogosText {
+            id: label
+            Layout.fillWidth: true
+            color: root.enabled ? Theme.palette.text : Theme.palette.textMuted
+            font: root.font
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            Layout.alignment: Qt.AlignVCenter
+            elide: Text.ElideRight
+        }
+
+        LogosIcon {
+            id: iconRight
+            source: root.trailingIcon.source
+            color: root.enabled ? root.trailingIcon.color : Theme.palette.textMuted
+            visible: root.trailingIcon.isVisible
+            Layout.preferredWidth: root.trailingIcon.size
+            Layout.preferredHeight: root.trailingIcon.size
+            Layout.alignment: Qt.AlignVCenter
+            brightness: root.trailingIcon.brightness
+        }
+    }
+}

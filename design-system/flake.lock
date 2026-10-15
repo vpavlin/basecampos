@@ -1,0 +1,144 @@
+{
+  "nodes": {
+    "logos-nix": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "nixpkgs-windows": "nixpkgs-windows"
+      },
+      "locked": {
+        "lastModified": 1786399295,
+        "narHash": "sha256-Bl1A0UgsIXioZw5uEW8Jl5u7FfZcFMnpYlpsdezFwK0=",
+        "owner": "logos-co",
+        "repo": "logos-nix",
+        "rev": "6e0f4a7120fced10829b0b3a698ff619a11d4605",
+        "type": "github"
+      },
+      "original": {
+        "owner": "logos-co",
+        "repo": "logos-nix",
+        "type": "github"
+      }
+    },
+    "nix-bundle-appimage": {
+      "inputs": {
+        "logos-nix": [
+          "logos-nix"
+        ],
+        "nix-bundle-dir": [
+          "nix-bundle-dir"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1776974156,
+        "narHash": "sha256-VzzOBZEIuPWaqDf8YgmVW/VbA3POFwLU5qAruMFw/JA=",
+        "owner": "logos-co",
+        "repo": "nix-bundle-appimage",
+        "rev": "8fcc56b5afcc313ca917cf3487be082ae2f0184c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "logos-co",
+        "repo": "nix-bundle-appimage",
+        "type": "github"
+      }
+    },
+    "nix-bundle-dir": {
+      "inputs": {
+        "logos-nix": [
+          "logos-nix"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1786415152,
+        "narHash": "sha256-0JUD+57+VTO25IfJjy92av5T88pmMSod8wMygW9OK3s=",
+        "owner": "logos-co",
+        "repo": "nix-bundle-dir",
+        "rev": "f843b8ec76974881ccf8619157ae63bfa2017a5e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "logos-co",
+        "repo": "nix-bundle-dir",
+        "type": "github"
+      }
+    },
+    "nix-bundle-macos-app": {
+      "inputs": {
+        "logos-nix": [
+          "logos-nix"
+        ],
+        "nix-bundle-dir": [
+          "nix-bundle-dir"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1781728271,
+        "narHash": "sha256-LHdzXrQPJCEVLC9cntURu8O9qSPPrePoVBzZd0UFGN0=",
+        "owner": "logos-co",
+        "repo": "nix-bundle-macos-app",
+        "rev": "d6b0cc518e599ab7a52258bf3e1f8123c8a01d31",
+        "type": "github"
+      },
+      "original": {
+        "owner": "logos-co",
+        "repo": "nix-bundle-macos-app",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1759036355,
+        "narHash": "sha256-0m27AKv6ka+q270dw48KflE0LwQYrO7Fm4/2//KCVWg=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "e9f00bd893984bc8ce46c895c3bf7cac95331127",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs-windows": {
+      "locked": {
+        "lastModified": 1782723713,
+        "narHash": "sha256-oPXCU/SSUokcGaJREHibG1CBX3+s/W7orDWQOZDsEeQ=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "b5aa0fbd538984f6e3d201be0005b4463d8b09f8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "b5aa0fbd538984f6e3d201be0005b4463d8b09f8",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "logos-nix": "logos-nix",
+        "nix-bundle-appimage": "nix-bundle-appimage",
+        "nix-bundle-dir": "nix-bundle-dir",
+        "nix-bundle-macos-app": "nix-bundle-macos-app",
+        "nixpkgs": [
+          "logos-nix",
+          "nixpkgs"
+        ]
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
