@@ -1,0 +1,208 @@
+{
+  "$schema": "https://logos.co/schemas/basecamp-theme/1.json",
+  "formatVersion": 1,
+  "id": "alisher.aurora-night",
+  "name": "Aurora Night",
+  "author": "Alisher",
+  "mode": "dark",
+  "palette": {
+    "background": "#0E0B1A",
+    "backgroundSecondary": "#15102A",
+    "backgroundTertiary": "#1B1533",
+    "backgroundElevated": "#1E1738",
+    "backgroundMuted": "#2A2148",
+    "backgroundInset": "#1B1533",
+    "backgroundButton": "#221A3D",
+    "backgroundBlack": "#0B0916",
+    "surface": "#221A3D",
+    "surfaceRaised": "#2A2148",
+    "surfaceInteractiveHover": "#33285A",
+    "surfaceRecessed": "#171230",
+    "text": "#F2EEFF",
+    "textSecondary": "#C9C0E8",
+    "textSubtle": "#B3A9D6",
+    "textTertiary": "#9C92C4",
+    "textMuted": "#7A7099",
+    "textPlaceholder": "#6E6590",
+    "border": "#2E2550",
+    "borderSecondary": "#3A2F66",
+    "borderSubtle": "#2A2148",
+    "borderTertiary": "#3A2F66",
+    "borderHairline": "#241C42",
+    "primary": "#FF6B8F",
+    "primaryHover": "#FF85A3",
+    "primaryPressed": "#E0527A",
+    "primaryForeground": "#1A0B2E",
+    "accentOrange": "#FF8A66",
+    "accentOrangeMid": "#FFA27A",
+    "accentOrangeDeep": "#E8664A",
+    "accentForeground": "#1A0B2E",
+    "brandMark": "#F2EEFF"
+  },
+  "gradients": {
+    "accent": {
+      "type": "linear",
+      "angle": 135,
+      "stops": [
+        [
+          0,
+          "#FFB36B"
+        ],
+        [
+          1,
+          "#FF5E8A"
+        ]
+      ]
+    },
+    "primary": {
+      "type": "linear",
+      "angle": 135,
+      "stops": [
+        [
+          0,
+          "#FFB36B"
+        ],
+        [
+          1,
+          "#FF5E8A"
+        ]
+      ]
+    },
+    "sidebar": {
+      "type": "linear",
+      "angle": 90,
+      "stops": [
+        [
+          0,
+          "#1D1640"
+        ],
+        [
+          1,
+          "#110D24"
+        ]
+      ]
+    },
+    "card": {
+      "type": "linear",
+      "angle": 135,
+      "stops": [
+        [
+          0,
+          "#2A1F4E"
+        ],
+        [
+          0.6,
+          "#1C1536"
+        ],
+        [
+          1,
+          "#171230"
+        ]
+      ]
+    }
+  },
+  "radius": {
+    "scale": 1
+  },
+  "icons": {
+    "style": "tinted",
+    "set": {
+      "arrowLeft": "assets/icons/chevron-left.svg",
+      "arrowLeftDouble": "assets/icons/chevrons-left.svg",
+      "arrowRight": "assets/icons/chevron-right.svg",
+      "arrowRightDouble": "assets/icons/chevrons-right.svg",
+      "triangleUp": "assets/icons/chevron-up.svg",
+      "triangleDown": "assets/icons/chevron-down.svg",
+      "refresh": "assets/icons/refresh-cw.svg",
+      "install": "assets/icons/download.svg",
+      "trash": "assets/icons/trash-2.svg",
+      "more": "assets/icons/ellipsis.svg",
+      "search": "assets/icons/search.svg",
+      "close": "assets/icons/x.svg",
+      "copy": "assets/icons/copy.svg",
+      "check": "assets/icons/check.svg",
+      "grid": "assets/icons/layout-grid.svg",
+      "list": "assets/icons/list.svg",
+      "pages": "assets/icons/files.svg",
+      "warning": "assets/icons/triangle-alert.svg",
+      "info": "assets/icons/info.svg",
+      "dashboard": "assets/icons/layout-grid.svg",
+      "filter": "assets/icons/filter.svg",
+      "modules": "assets/icons/package.svg",
+      "settings": "assets/icons/settings.svg"
+    }
+  },
+  "backgrounds": {
+    "workspace": {
+      "image": "assets/bg/aurora-night.jpg",
+      "fit": "cover",
+      "opacity": 1.0,
+      "tint": "#0E0B1A",
+      "tintStrength": 0.25,
+      "motion": {
+        "strength": 0.6,
+        "period": 40
+      }
+    }
+  },
+  "effects": {
+    "hoverGlow": {
+      "color": "#FF5E8A",
+      "blur": 18,
+      "spread": 0,
+      "opacity": 0.45
+    }
+  },
+  "components": {
+    "search": {
+      "radius": 999,
+      "height": 52,
+      "background": "#15102A",
+      "border": "#2E2550",
+      "borderFocus": "#FF5E8A"
+    },
+    "button": {
+      "radius": 999,
+      "secondary": {
+        "background": "#2A2148",
+        "backgroundHover": "#33285A",
+        "backgroundPressed": "#171230",
+        "border": "#3A2F66"
+      }
+    },
+    "field": {
+      "radius": 999,
+      "background": "#1B1533",
+      "border": "#2E2550",
+      "borderFocus": "#FF5E8A"
+    },
+    "card": {
+      "radius": 28,
+      "shadowColor": "#05030C",
+      "shadowOpacity": 0.6,
+      "shadowBlur": 28,
+      "shadowOffsetY": 10
+    },
+    "combo": {
+      "background": "#221A3D",
+      "border": "#3A2F66",
+      "borderFocus": "#FF5E8A"
+    },
+    "listItem": {
+      "backgroundHover": "#2A2148",
+      "backgroundSelected": "#FF5E8A33"
+    },
+    "menuItem": {
+      "backgroundHover": "#33285A"
+    },
+    "tab": {
+      "text": "#9C92C4",
+      "textSelected": "#FF8A66"
+    },
+    "iconButton": {
+      "background": "#221A3D",
+      "backgroundHover": "#33285A",
+      "border": "#3A2F66"
+    }
+  }
+}

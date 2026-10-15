@@ -1,0 +1,219 @@
+{
+  "$schema": "https://logos.co/schemas/basecamp-theme/1.json",
+  "formatVersion": 1,
+  "id": "alisher.aurora-lucide",
+  "name": "Aurora Lucide",
+  "author": "Alisher",
+  "mode": "dark",
+  "palette": {
+    "background": "#0E0B1A",
+    "backgroundSecondary": "#15102A",
+    "backgroundTertiary": "#1B1533",
+    "backgroundElevated": "#1E1738",
+    "backgroundMuted": "#2A2148",
+    "backgroundInset": "#1B1533",
+    "backgroundButton": "#221A3D",
+    "backgroundBlack": "#0B0916",
+    "surface": "#221A3D",
+    "surfaceRaised": "#2A2148",
+    "surfaceInteractiveHover": "#33285A",
+    "surfaceRecessed": "#171230",
+    "text": "#F2EEFF",
+    "textSecondary": "#C9C0E8",
+    "textSubtle": "#B3A9D6",
+    "textTertiary": "#9C92C4",
+    "textMuted": "#7A7099",
+    "textPlaceholder": "#6E6590",
+    "border": "#2E2550",
+    "borderSecondary": "#3A2F66",
+    "borderSubtle": "#2A2148",
+    "borderTertiary": "#3A2F66",
+    "borderHairline": "#241C42",
+    "primary": "#FF6B8F",
+    "primaryHover": "#FF85A3",
+    "primaryPressed": "#E0527A",
+    "primaryForeground": "#1A0B2E",
+    "accentOrange": "#FF8A66",
+    "accentOrangeMid": "#FFA27A",
+    "accentOrangeDeep": "#E8664A",
+    "accentForeground": "#1A0B2E",
+    "brandMark": "#F2EEFF"
+  },
+  "gradients": {
+    "sidebar": {
+      "type": "linear",
+      "angle": 90,
+      "stops": [
+        [
+          0,
+          "#1D1640"
+        ],
+        [
+          1,
+          "#110D24"
+        ]
+      ]
+    },
+    "accent": {
+      "type": "linear",
+      "angle": 135,
+      "stops": [
+        [
+          0,
+          "#FFB36B"
+        ],
+        [
+          1,
+          "#FF5E8A"
+        ]
+      ]
+    },
+    "primary": {
+      "type": "linear",
+      "angle": 135,
+      "stops": [
+        [
+          0,
+          "#FFB36B"
+        ],
+        [
+          1,
+          "#FF5E8A"
+        ]
+      ]
+    },
+    "card": {
+      "type": "linear",
+      "angle": 135,
+      "stops": [
+        [
+          0,
+          "#2A1F4E"
+        ],
+        [
+          0.6,
+          "#1C1536"
+        ],
+        [
+          1,
+          "#171230"
+        ]
+      ]
+    }
+  },
+  "radius": {
+    "scale": 1
+  },
+  "icons": {
+    "style": "tinted",
+    "set": {
+      "arrowLeft": "assets/icons/chevron-left.svg",
+      "arrowLeftDouble": "assets/icons/chevrons-left.svg",
+      "arrowRight": "assets/icons/chevron-right.svg",
+      "arrowRightDouble": "assets/icons/chevrons-right.svg",
+      "triangleUp": "assets/icons/chevron-up.svg",
+      "triangleDown": "assets/icons/chevron-down.svg",
+      "refresh": "assets/icons/refresh-cw.svg",
+      "install": "assets/icons/download.svg",
+      "trash": "assets/icons/trash-2.svg",
+      "more": "assets/icons/ellipsis.svg",
+      "search": "assets/icons/search.svg",
+      "close": "assets/icons/x.svg",
+      "copy": "assets/icons/copy.svg",
+      "check": "assets/icons/check.svg",
+      "grid": "assets/icons/layout-grid.svg",
+      "list": "assets/icons/list.svg",
+      "pages": "assets/icons/files.svg",
+      "warning": "assets/icons/triangle-alert.svg",
+      "info": "assets/icons/info.svg",
+      "dashboard": "assets/icons/layout-grid.svg",
+      "filter": "assets/icons/filter.svg",
+      "modules": "assets/icons/package.svg",
+      "settings": "assets/icons/settings.svg"
+    }
+  },
+  "effects": {
+    "hoverGlow": {
+      "color": "#FF5E8A",
+      "blur": 18,
+      "spread": 0,
+      "opacity": 0.45
+    }
+  },
+  "components": {
+    "search": {
+      "radius": 999,
+      "height": 52,
+      "background": "#15102A",
+      "border": "#2E2550",
+      "borderFocus": "#FF5E8A"
+    },
+    "button": {
+      "radius": 999,
+      "secondary": {
+        "background": "#2A2148",
+        "backgroundHover": "#33285A",
+        "backgroundPressed": "#171230",
+        "border": "#3A2F66"
+      }
+    },
+    "field": {
+      "radius": 999,
+      "background": "#1B1533",
+      "border": "#2E2550",
+      "borderFocus": "#FF5E8A"
+    },
+    "card": {
+      "radius": 28,
+      "shadowColor": "#05030C",
+      "shadowOpacity": 0.6,
+      "shadowBlur": 28,
+      "shadowOffsetY": 10
+    },
+    "combo": {
+      "background": "#221A3D",
+      "border": "#3A2F66",
+      "borderFocus": "#FF5E8A"
+    },
+    "listItem": {
+      "backgroundHover": "#2A2148",
+      "backgroundSelected": "#FF5E8A33"
+    },
+    "menuItem": {
+      "backgroundHover": "#33285A"
+    },
+    "tab": {
+      "text": "#9C92C4",
+      "textSelected": "#FF8A66"
+    },
+    "iconButton": {
+      "background": "#221A3D",
+      "backgroundHover": "#33285A",
+      "border": "#3A2F66"
+    }
+  },
+  "assets": {
+    "assets/icons/check.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-check\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M20 6 9 17l-5-5\" />\n</svg>\n",
+    "assets/icons/chevron-down.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-chevron-down\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m6 9 6 6 6-6\" />\n</svg>\n",
+    "assets/icons/chevron-left.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-chevron-left\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m15 18-6-6 6-6\" />\n</svg>\n",
+    "assets/icons/chevron-right.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-chevron-right\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m9 18 6-6-6-6\" />\n</svg>\n",
+    "assets/icons/chevron-up.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-chevron-up\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m18 15-6-6-6 6\" />\n</svg>\n",
+    "assets/icons/chevrons-left.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-chevrons-left\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m11 17-5-5 5-5\" />\n  <path d=\"m18 17-5-5 5-5\" />\n</svg>\n",
+    "assets/icons/chevrons-right.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-chevrons-right\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m6 17 5-5-5-5\" />\n  <path d=\"m13 17 5-5-5-5\" />\n</svg>\n",
+    "assets/icons/copy.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-copy\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\" />\n  <path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\" />\n</svg>\n",
+    "assets/icons/download.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-download\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\" />\n  <polyline points=\"7 10 12 15 17 10\" />\n  <line x1=\"12\" x2=\"12\" y1=\"15\" y2=\"3\" />\n</svg>\n",
+    "assets/icons/ellipsis.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-ellipsis\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <circle cx=\"12\" cy=\"12\" r=\"1\" />\n  <circle cx=\"19\" cy=\"12\" r=\"1\" />\n  <circle cx=\"5\" cy=\"12\" r=\"1\" />\n</svg>\n",
+    "assets/icons/files.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-files\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M20 7h-3a2 2 0 0 1-2-2V2\" />\n  <path d=\"M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l4 4v10a2 2 0 0 1-2 2Z\" />\n  <path d=\"M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8\" />\n</svg>\n",
+    "assets/icons/filter.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-filter\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <polygon points=\"22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3\" />\n</svg>\n",
+    "assets/icons/info.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-info\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <circle cx=\"12\" cy=\"12\" r=\"10\" />\n  <path d=\"M12 16v-4\" />\n  <path d=\"M12 8h.01\" />\n</svg>\n",
+    "assets/icons/layout-grid.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-layout-grid\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <rect width=\"7\" height=\"7\" x=\"3\" y=\"3\" rx=\"1\" />\n  <rect width=\"7\" height=\"7\" x=\"14\" y=\"3\" rx=\"1\" />\n  <rect width=\"7\" height=\"7\" x=\"14\" y=\"14\" rx=\"1\" />\n  <rect width=\"7\" height=\"7\" x=\"3\" y=\"14\" rx=\"1\" />\n</svg>\n",
+    "assets/icons/list.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-list\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M3 12h.01\" />\n  <path d=\"M3 18h.01\" />\n  <path d=\"M3 6h.01\" />\n  <path d=\"M8 12h13\" />\n  <path d=\"M8 18h13\" />\n  <path d=\"M8 6h13\" />\n</svg>\n",
+    "assets/icons/package.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-package\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z\" />\n  <path d=\"M12 22V12\" />\n  <path d=\"m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7\" />\n  <path d=\"m7.5 4.27 9 5.15\" />\n</svg>\n",
+    "assets/icons/refresh-cw.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-refresh-cw\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\" />\n  <path d=\"M21 3v5h-5\" />\n  <path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\" />\n  <path d=\"M8 16H3v5\" />\n</svg>\n",
+    "assets/icons/search.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-search\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <circle cx=\"11\" cy=\"11\" r=\"8\" />\n  <path d=\"m21 21-4.3-4.3\" />\n</svg>\n",
+    "assets/icons/settings.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-settings\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z\" />\n  <circle cx=\"12\" cy=\"12\" r=\"3\" />\n</svg>\n",
+    "assets/icons/trash-2.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-trash-2\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M3 6h18\" />\n  <path d=\"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6\" />\n  <path d=\"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2\" />\n  <line x1=\"10\" x2=\"10\" y1=\"11\" y2=\"17\" />\n  <line x1=\"14\" x2=\"14\" y1=\"11\" y2=\"17\" />\n</svg>\n",
+    "assets/icons/triangle-alert.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-triangle-alert\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\" />\n  <path d=\"M12 9v4\" />\n  <path d=\"M12 17h.01\" />\n</svg>\n",
+    "assets/icons/x.svg": "<!-- @license lucide-static v0.460.0 - ISC -->\n<svg\n  class=\"lucide lucide-x\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M18 6 6 18\" />\n  <path d=\"m6 6 12 12\" />\n</svg>\n"
+  }
+}

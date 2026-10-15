@@ -46,6 +46,8 @@ set(SOURCES
     WorkspaceArea.cpp
     ShortcutBridge.h
     ShortcutBridge.cpp
+    ShellDevQml.h
+    ShellDevQml.cpp
     ${BASECAMP_INTERFACES}/IShellHost.h
     ${BASECAMP_INTERFACES}/IShellView.h
     ${BASECAMP_INTERFACES}/BasecampModelRoles.h
@@ -182,7 +184,7 @@ qt_add_qml_module(basecamp_icons_qml
         Basecamp/Icons/BasecampLogo.qml
         Basecamp/Icons/TintedSvg.qml
     RESOURCES
-        Basecamp/Icons/basecamp.svg
+        Basecamp/Icons/logos-lambda.svg
         Basecamp/Icons/dashboard.svg
         Basecamp/Icons/filter.svg
         Basecamp/Icons/module.svg

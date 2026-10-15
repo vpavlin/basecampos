@@ -11,6 +11,8 @@ qt_add_qml_module(logos_icons_qml
     STATIC
     RESOURCE_PREFIX /qt/qml
     OUTPUT_TARGETS logos_icons_extra_targets
+    # LogosIcons asks Theme for a theme's replacement icon (icon packs).
+    IMPORTS Logos.Theme
     QML_FILES
         LogosIcons.qml
     RESOURCES
@@ -37,3 +39,5 @@ qt_add_qml_module(logos_icons_qml
 )
 
 set(logos_icons_extra_targets ${logos_icons_extra_targets} PARENT_SCOPE)
+
+target_link_libraries(logos_icons_qml PRIVATE logos_theme_qml)

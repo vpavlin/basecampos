@@ -31,12 +31,15 @@ Control {
             { name: "Workspace", icon: BasecampIcons.tents }
         ]
 
-        // 0=Apps, 1=Applications, 2=Package Manager, 3=Settings.
+        // `section` is the shell section index (0 is the Workspace above).
+        // Only those the host offers; a backend without the list offers all.
         readonly property var viewSections: [
-            { name: "Applications",    icon: BasecampIcons.dashboard },
-            { name: "Package Manager", icon: BasecampIcons.modules },
-            { name: "Settings",        icon: BasecampIcons.settings }
-        ]
+            { name: "Applications",    icon: BasecampIcons.dashboard, section: 1 },
+            { name: "Package Manager", icon: BasecampIcons.modules,   section: 2 },
+            { name: "Settings",        icon: BasecampIcons.settings,  section: 3 }
+        ].filter(function(item) {
+            return !backend.availableSections || backend.availableSections.indexOf(item.section) >= 0
+        })
 
         readonly property var loadedApps: (root.launcherApps || []).filter(function(item) {
             return item && item.isLoaded === true
@@ -49,7 +52,8 @@ Control {
         readonly property int systemTitleBarPadding: Qt.platform.os === "osx" ? 30: 0
     }
 
-    background: Rectangle {
+    background: LogosSurface {
+        slot: "sidebar"
         radius: Theme.spacing.radiusXlarge
         color: Theme.palette.backgroundSecondary
     }
@@ -58,11 +62,11 @@ Control {
         spacing: Theme.spacing.large
 
         BasecampLogo {
-            // As per design
-            Layout.preferredWidth: 46
+            // The Logos λ, as on logos.co (20 × 26 viewBox), in brandMark.
+            Layout.preferredWidth: 19
             Layout.preferredHeight: 25
             Layout.alignment: Qt.AlignHCenter
-            fillMode: Image.Stretch
+            sourceSize: Qt.size(38, 50)   // 2× the drawn size, sharp on HiDPI
         }
 
         SeparatorLine {}
@@ -178,10 +182,11 @@ Control {
             Repeater {
                 model: _d.viewSections
                 delegate: SidebarCircleButton {
-                    checked: backend.currentActiveSectionIndex -1 === index
+                    objectName: "sidebar.section." + modelData.section
+                    checked: backend.currentActiveSectionIndex === modelData.section
                     text: modelData.name
                     icon.source: modelData.icon
-                    onClicked: root.updateLauncherIndex(_d.workspaceSections.length + index)
+                    onClicked: root.updateLauncherIndex(modelData.section)
                     onTooltipRequested: (text, y) => root.tooltipRequested(text, y)
                 }
             }
@@ -198,6 +203,7 @@ Control {
             text: {
                 const base = (backend.buildVersion.length > 0 ? backend.buildVersion + " · " : "")
                     + (backend.isPortableBuild ? qsTr("Portable") : qsTr("Dev"))
+                    + (backend.devHost ? " · " + qsTr("Standalone") : "")
                 return backend.isMockBackend
                     ? base + " " + qsTr("(Mocked)")
                     : base

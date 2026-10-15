@@ -55,6 +55,13 @@ public:
 
     static QVariantMap parseDocument(const QByteArray& data);
 
+    // Icon packs: returns the SVG reduced to a whitelist of shape elements and
+    // attributes (no scripts, external references, styles or entities),
+    // re-serialised; with `tinted`, every paint is white so a tint lands on the
+    // exact colour. Empty on rejection, with the reason in `error`.
+    static QByteArray sanitizeSvg(const QByteArray& svg, bool tinted, QString* error = nullptr);
+    Q_INVOKABLE QString sanitizedSvg(const QString& svg, bool tinted = true) const;
+
 signals:
     void themesChanged();
     void currentChanged();

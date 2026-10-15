@@ -24,6 +24,20 @@ TestCase {
     property url defaultIconSource
     Component.onCompleted: defaultIconSource = bar.iconSource
 
+    // The TestCase's own items aren't shown, so effective visibility is only
+    // testable inside a window of its own.
+    Window {
+        id: shownWindow
+        width: 400
+        height: 120
+        visible: true
+
+        Column {
+            LogosSearchBar { id: shownBar; width: 400; shortcutHint: "Ctrl+K" }
+            TextInput { id: elsewhere; width: 100; height: 20 }
+        }
+    }
+
     function init() {
         submittedSpy.clear()
         bar.text = ""
@@ -124,5 +138,14 @@ TestCase {
     function test_focus_forwards_to_text_input() {
         bar.forceActiveFocus()
         tryCompare(bar.textInput, "activeFocus", true)
+    }
+
+    function test_shortcut_hint_hides_while_focused() {
+        shownWindow.requestActivate()
+        tryVerify(() => shownWindow.active, 2000, "test window becomes active")
+        elsewhere.forceActiveFocus()
+        verify(shownBar.shortcutItem.visible, "hint shows while the field is unfocused")
+        shownBar.textInput.forceActiveFocus()
+        tryVerify(() => !shownBar.shortcutItem.visible, 2000, "hint hides once the field has focus")
     }
 }

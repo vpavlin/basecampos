@@ -39,7 +39,7 @@ ComboBox {
     id: root
 
     property string placeholderText: ""
-    property color textColor: Theme.palette.text
+    property color textColor: Theme.components.combo.text
     property color indicatorColor: textColor
     // How far the dropdown may outgrow the control to fit its entries.
     property real maxPopupWidthFactor: 3
@@ -105,7 +105,7 @@ ComboBox {
         function onDataChanged() { d.entryRevision += 1 }
     }
 
-    implicitHeight: 32
+    implicitHeight: Theme.components.combo.height
 
     focusPolicy: Qt.StrongFocus
     activeFocusOnTab: true
@@ -157,12 +157,12 @@ ComboBox {
         id: bg
 
         color: root.enabled
-               ? (root.pressed ? Theme.palette.pressed : Theme.palette.backgroundButton)
+               ? (root.pressed ? Theme.components.combo.backgroundPressed : Theme.components.combo.background)
                : Theme.palette.backgroundSecondary
-        radius: Theme.spacing.radiusSmall
-        border.color: root.visualFocus ? Theme.palette.overlayOrange
-                     : (root.enabled ? Theme.palette.border : Theme.palette.borderSubtle)
-        border.width: 1
+        radius: Theme.components.combo.radius
+        border.color: root.visualFocus ? Theme.components.combo.borderFocus
+                     : (root.enabled ? Theme.components.combo.border : Theme.palette.borderSubtle)
+        border.width: Theme.components.combo.borderWidth
     }
 
     popup: Popup {

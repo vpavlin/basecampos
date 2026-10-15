@@ -1,0 +1,18 @@
+{
+  "formatVersion": 1,
+  "id": "test.styled",
+  "name": "Test Styled",
+  "author": "tests",
+  "mode": "dark",
+  "palette": { "primary": "#3366CC", "surfaceRaised": "#2A2A2A" },
+  "gradients": {
+    "accent": { "type": "linear", "angle": 0, "stops": [[0, "#FFB36B"], [1, "#FF5E8A"]] }
+  },
+  "components": {
+    "button": {
+      "secondary": { "background": "#204060", "backgroundHover": "surfaceRaised", "text": "#FFFFFF", "gradient": "accent" }
+    },
+    "field": { "background": "#101820", "borderFocus": "primary" },
+    "tab": { "textSelected": "#FF8800" }
+  }
+}

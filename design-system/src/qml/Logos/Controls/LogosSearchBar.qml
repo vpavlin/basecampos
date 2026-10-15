@@ -76,7 +76,7 @@ Control {
     signal submitted(string text)
 
     implicitWidth: 400
-    implicitHeight: 54
+    implicitHeight: Theme.components.search.height
 
     // Match the figma spec (8/8/8/10) using existing tokens.
     leftPadding: Theme.spacing.small + 2
@@ -90,12 +90,21 @@ Control {
         field.textInput.forceActiveFocus()
 
     background: Rectangle {
-        color: Theme.palette.background
-        radius: Theme.spacing.radiusLarge
-        border.width: 1
+        id: searchBg
+        color: Theme.components.search.background
+        radius: Theme.components.search.radius
+        border.width: Theme.components.search.borderWidth
         border.color: field.textInput.activeFocus
-                      ? Theme.palette.primary
-                      : Theme.palette.borderSubtle
+                      ? Theme.components.search.borderFocus
+                      : Theme.components.search.border
+
+        LogosSurface {
+            anchors.fill: parent
+            anchors.margins: searchBg.border.width
+            radius: Math.max(0, searchBg.radius - searchBg.border.width)
+            slot: Theme.components.search.gradient
+            visible: hasGradient
+        }
     }
 
     contentItem: RowLayout {
@@ -135,18 +144,17 @@ Control {
             placeholderText: "Search..."
             activeFocusOnTab: false
             textInput.activeFocusOnTab: false
+            textInput.color: Theme.components.search.text
         }
 
-        LogosIconButton {
+        // Round ✕ that turns accent on hover, like the sidebar's circle buttons.
+        LogosAbstractButton {
             id: clearButton
 
             Layout.alignment: Qt.AlignVCenter
             visible: d.clearVisible
-            flat: true
-            size: 20
-            iconSize: 14
-            iconSource: LogosIcons.close
-            iconColor: Theme.palette.textSecondary
+            implicitWidth: 24
+            implicitHeight: 24
             focusPolicy: Qt.NoFocus
             activeFocusOnTab: false
             Accessible.name: qsTr("Clear search")
@@ -154,13 +162,32 @@ Control {
                 field.text = ""
                 field.textInput.forceActiveFocus()
             }
+
+            background: Rectangle {
+                radius: width / 2
+                color: clearButton.isActive ? Theme.palette.accentOrange
+                                            : Theme.palette.surface
+            }
+
+            contentItem: Item {
+                LogosIcon {
+                    anchors.centerIn: parent
+                    width: 12
+                    height: 12
+                    source: LogosIcons.close
+                    color: clearButton.isActive ? Theme.palette.accentForeground
+                                                : Theme.palette.textSecondary
+                    brightness: clearButton.isActive ? 1.0 : 0
+                }
+            }
         }
 
         Rectangle {
             id: shortcutChip
 
             Layout.alignment: Qt.AlignVCenter
-            visible: root.shortcutHint.length > 0
+            // Only a hint for getting here: hidden once the field has focus.
+            visible: root.shortcutHint.length > 0 && !field.textInput.activeFocus
             implicitWidth: shortcutLabel.implicitWidth + Theme.spacing.medium
             implicitHeight: 20
 

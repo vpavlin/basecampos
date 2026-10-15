@@ -69,6 +69,12 @@ AbstractButton {
     }
 
     contentItem: Item {
+        LogosGlow {
+            anchors.fill: tile
+            radius: tile.radius
+            active: root.hovered && tile.visible
+        }
+
         LogosTile {
             id: tile
             anchors.centerIn: parent

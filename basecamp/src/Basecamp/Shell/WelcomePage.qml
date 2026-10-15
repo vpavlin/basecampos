@@ -1,10 +1,12 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 
 import Logos.Theme
 import Logos.Controls
 
 import Basecamp.AppManager
+import Basecamp.Common
 import Basecamp.Backend 1.0
 
 import Basecamp.Icons
@@ -14,9 +16,10 @@ Item {
 
     // Paint our own background so the page follows the active theme rather
     // than the host widget's hardcoded clear colour.
-    Rectangle {
+    LogosSurface {
         anchors.fill: parent
         z: -1
+        slot: "workspace"
         color: Theme.palette.background
     }
 
@@ -44,10 +47,6 @@ Item {
 
     QtObject {
         id: d
-        readonly property bool hasApps:
-            typeof backend !== "undefined" && backend !== null &&
-            (backend.launcherApps || []).length > 0
-
         readonly property int maxRecent: 5
         readonly property var recentApps:
             typeof backend !== "undefined" && backend !== null
@@ -55,11 +54,12 @@ Item {
                 : []
 
         readonly property int columnWidth: 992
-        readonly property int sectionSpacing: 64
-        readonly property int headerGap: 150
+        readonly property int sectionSpacing: 48
         readonly property int cardGap: 24
         readonly property int greetingSize: 40
-        readonly property int brandGap: 64
+        // Depends only on the window, so typing never moves the page.
+        readonly property int topMargin:
+            Math.round(Math.max(Theme.spacing.xxlarge, scroller.availableHeight * 0.12))
         readonly property int sectionGap: 42
 
         readonly property int tileSize: 120
@@ -92,139 +92,93 @@ Item {
             + (typeFilter !== "ui_qml" ? packagesProxy.visibleCount : 0) === 0
 
         readonly property int greetingToSearch: 40
-        readonly property int searchFieldHeight: 54
         readonly property int filterButtonSize: 50
         readonly property int filterIconSize: 28
-        readonly property int searchRowGap: 21
         readonly property real cardScale: 1.0
 
-        // Below this the brand and the two cards stop fitting side by side.
-        readonly property bool narrow: root.width < 900
+        // Below this the two cards stop fitting side by side.
+        readonly property bool narrow: column.width < 2 * 300 + cardGap
     }
 
     implicitWidth: 1000
+
+    // Without the catalogue there is nothing to search or discover; this tab
+    // then only shows when every app tab is closed.
+    readonly property bool catalogAvailable:
+        typeof backend === "undefined" || backend === null || backend.packageCatalog !== false
+
+    EmptyView {
+        anchors.fill: parent
+        visible: !root.catalogAvailable
+        title: qsTr("No app open")
+        subtitle: qsTr("Open one from the sidebar.")
+    }
 
     LogosScrollView {
         id: scroller
 
         anchors.fill: parent
+        visible: root.catalogAvailable
 
         Item {
             width: scroller.availableWidth
             height: Math.max(scroller.availableHeight,
-                             column.implicitHeight + 2 * Theme.spacing.xxlarge)
+                             column.implicitHeight + d.topMargin + Theme.spacing.xxlarge)
 
+            // Anchored to the top, not centred: the results below the search
+            // change height while typing, and centring made the page jump.
             ColumnLayout {
                 id: column
 
-                anchors.centerIn: parent
-                width: Math.min(headerRow.implicitWidth,
-                                d.columnWidth,
+                anchors.top: parent.top
+                anchors.topMargin: d.topMargin
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.min(d.columnWidth,
                                 scroller.availableWidth - 2 * Theme.spacing.xxlarge)
                 spacing: d.sectionSpacing
-
-                GridLayout {
-                    id: headerRow
-
-                    Layout.fillWidth: true
-                    columns: d.narrow ? 1 : 2
-                    columnSpacing: d.headerGap
-                    rowSpacing: d.headerGap
-
-                    ColumnLayout {
-                        spacing: d.brandGap
-
-                        BasecampLogo {
-                            Layout.alignment: Qt.AlignLeft
-                            sourceSize.height: 34
-                        }
-
-                        RowLayout {
-                            Layout.alignment: Qt.AlignLeft
-                            spacing: Theme.spacing.small
-
-                            ColumnLayout {
-                                spacing: 0
-
-                                LogosText {
-                                    text: qsTr("Logos")
-                                    font.pixelSize: Theme.typography.secondaryText
-                                    color: Theme.palette.textTertiary
-                                }
-
-                                LogosText {
-                                    objectName: "welcomePage.wordmark"
-                                    text: qsTr("Basecamp.")
-                                    font.pixelSize: Theme.typography.panelTitleText
-                                    font.weight: Theme.typography.weightBold
-                                    color: Theme.palette.text
-                                }
-                            }
-
-                            LogosBadge {
-                                id: alphaBadge
-                                Layout.alignment: Qt.AlignBottom
-                                Layout.bottomMargin: Theme.spacing.tiny
-                                text: qsTr("ALPHA")
-                                color: Theme.palette.accentOrange
-                                backgroundColor: "transparent"
-                                radius: Theme.spacing.radiusPill
-                                horizontalPadding: 6
-                                verticalPadding: 2
-
-                                Binding {
-                                    target: alphaBadge.labelItem
-                                    property: "font.pixelSize"
-                                    value: Theme.typography.badgeText
-                                }
-                            }
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.alignment: Qt.AlignRight
-                        spacing: d.cardGap
-
-                        ActionCard {
-                            objectName: "welcomePage.discoverApplications"
-                            scaleFactor: d.cardScale
-                            verb: qsTr("Discover")
-                            noun: qsTr("Applications")
-                            iconSource: BasecampIcons.dashboard
-                            onClicked: root.discoverApplicationsClicked()
-                        }
-
-                        ActionCard {
-                            objectName: "welcomePage.managePackages"
-                            scaleFactor: d.cardScale
-                            verb: qsTr("Manage")
-                            noun: qsTr("Packages")
-                            iconSource: BasecampIcons.modules
-                            onClicked: root.managePackagesClicked()
-                        }
-                    }
-                }
-
-                Divider {}
 
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: d.greetingToSearch
 
-                    LogosText {
-                        objectName: "welcomePage.greeting"
+                    RowLayout {
                         Layout.fillWidth: true
-                        font.pixelSize: d.greetingSize
-                        color: Theme.palette.textSecondary
-                        elide: Text.ElideRight
-                        text: d.hasApps ? qsTr("Welcome Back,")
-                                        : qsTr("Welcome to Basecamp!")
+                        spacing: Theme.spacing.medium
+
+                        LogosText {
+                            objectName: "welcomePage.greeting"
+                            Layout.maximumWidth: column.width - alphaBadge.width
+                                                 - Theme.spacing.medium
+                            font.pixelSize: d.greetingSize
+                            color: Theme.palette.textSecondary
+                            elide: Text.ElideRight
+                            text: qsTr("Welcome to Basecamp")
+                        }
+
+                        LogosBadge {
+                            id: alphaBadge
+                            Layout.alignment: Qt.AlignVCenter
+                            text: qsTr("ALPHA")
+                            color: Theme.palette.accentOrange
+                            backgroundColor: "transparent"
+                            radius: Theme.spacing.radiusPill
+                            horizontalPadding: 6
+                            verticalPadding: 2
+
+                            Binding {
+                                target: alphaBadge.labelItem
+                                property: "font.pixelSize"
+                                value: Theme.typography.badgeText
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
                     }
 
                     RowLayout {
                         objectName: "welcomePage.searchRow"
                         Layout.fillWidth: true
-                        spacing: d.searchRowGap
+                        spacing: Theme.spacing.xlarge
 
                         LogosSearchBar {
                             id: searchField
@@ -232,14 +186,17 @@ Item {
                             objectName: "welcomePage.search"
                             focus: true
                             Layout.fillWidth: true
-                            Layout.preferredHeight: d.searchFieldHeight
-                            Layout.maximumHeight: d.searchFieldHeight
+                            Layout.preferredHeight: Theme.components.search.height
+                            Layout.maximumHeight: Theme.components.search.height
                             placeholderText: qsTr("Search...")
                             shortcutHint: searchShortcut.nativeText
                         }
 
+                        // Filters narrow the results, so they only show while
+                        // there is input; idle, the cards below cover both.
                         FilterChip {
                             objectName: "welcomePage.filterApps"
+                            visible: d.searching
                             iconSource: BasecampIcons.dashboard
                             filterValue: "ui_qml"
                             Accessible.name: qsTr("Filter to applications")
@@ -247,6 +204,7 @@ Item {
 
                         FilterChip {
                             objectName: "welcomePage.filterPackages"
+                            visible: d.searching
                             iconSource: BasecampIcons.modules
                             filterValue: "core"
                             Accessible.name: qsTr("Filter to packages")
@@ -254,8 +212,34 @@ Item {
                     }
                 }
 
-                Divider {}
+                GridLayout {
+                    objectName: "welcomePage.actions"
+                    Layout.fillWidth: true
+                    visible: !d.searching
+                    columns: d.narrow ? 1 : 2
+                    columnSpacing: d.cardGap
+                    rowSpacing: d.cardGap
 
+                    ActionCard {
+                        objectName: "welcomePage.discoverApplications"
+                        Layout.fillWidth: true
+                        scaleFactor: d.cardScale
+                        verb: qsTr("Discover")
+                        noun: qsTr("Applications")
+                        iconSource: BasecampIcons.dashboard
+                        onClicked: root.discoverApplicationsClicked()
+                    }
+
+                    ActionCard {
+                        objectName: "welcomePage.managePackages"
+                        Layout.fillWidth: true
+                        scaleFactor: d.cardScale
+                        verb: qsTr("Manage")
+                        noun: qsTr("Packages")
+                        iconSource: BasecampIcons.modules
+                        onClicked: root.managePackagesClicked()
+                    }
+                }
                 ColumnLayout {
                     objectName: "welcomePage.recentlyClosed"
                     Layout.fillWidth: true
@@ -396,7 +380,8 @@ Item {
 
         onClicked: d.typeFilter = chip.active ? "" : chip.filterValue
 
-        background: Rectangle {
+        background: LogosSurface {
+            slot: chip.active ? "accent" : ""
             radius: width / 2 * Theme.spacing.roundness
             color: chip.active     ? Theme.palette.accentOrange
                  : chip.isActive   ? Theme.palette.surfaceInteractiveHover
@@ -415,12 +400,6 @@ Item {
                 brightness: chip.active ? 1.0 : 0
             }
         }
-    }
-
-    component Divider: Rectangle {
-        Layout.fillWidth: true
-        Layout.preferredHeight: 1
-        color: Theme.palette.borderTertiaryMuted
     }
 
     component ResultRow: RowLayout {
@@ -537,28 +516,67 @@ Item {
         topPadding: Math.round(23 * card.scaleFactor)
         bottomPadding: card.topPadding
 
-        background: Rectangle {
-            radius: Math.round(24 * card.scaleFactor * Theme.spacing.roundness)
-            color: card.isActive ? Theme.palette.surfaceInteractiveHover
-                                 : Theme.palette.backgroundSecondary
+        background: Item {
+            LogosGlow {
+                anchors.fill: parent
+                radius: cardBg.radius
+                active: card.hovered
+            }
+
+            // Theme card shadow (components.card), drawn under the card.
+            RectangularShadow {
+                anchors.fill: cardBg
+                radius: cardBg.radius
+                visible: Theme.components.card.shadowOpacity > 0
+                color: Theme.components.card.shadowColor
+                opacity: Theme.components.card.shadowOpacity
+                blur: Theme.components.card.shadowBlur
+                offset: Qt.vector2d(0, Theme.components.card.shadowOffsetY)
+            }
+
+            LogosSurface {
+                id: cardBg
+                anchors.fill: parent
+                slot: "card"
+                borderWidth: Theme.components.card.borderWidth
+                borderColor: Theme.palette.borderSubtle
+                radius: Theme.components.card.radius >= 0
+                        ? Theme.components.card.radius
+                        : Math.round(24 * card.scaleFactor * Theme.spacing.roundness)
+                color: card.isActive ? Theme.palette.surfaceInteractiveHover
+                                     : Theme.palette.backgroundSecondary
+
+                // With a card gradient, hover is a light wash over it.
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    visible: cardBg.hasGradient
+                    color: Qt.rgba(1, 1, 1, card.isActive ? 0.06 : 0)
+                }
+            }
         }
 
         contentItem: RowLayout {
             spacing: card.contentGap
 
-            Rectangle {
+            LogosSurface {
                 Layout.preferredWidth: card.chipSize
                 Layout.preferredHeight: card.chipSize
                 Layout.alignment: Qt.AlignVCenter
+                slot: card.isActive ? "accent" : ""
                 radius: width / 2 * Theme.spacing.roundness
-                color: Theme.palette.surface
+                // Hover matches the sidebar's circle buttons: accent fill, dark glyph.
+                color: card.isActive ? Theme.palette.accentOrange : Theme.palette.surface
 
                 LogosIcon {
                     anchors.centerIn: parent
                     width: card.iconSize
                     height: card.iconSize
                     source: card.iconSource
-                    color: Theme.palette.textTertiary
+                    color: card.isActive ? Theme.palette.accentForeground
+                                         : Theme.palette.textTertiary
+                    // Grey SVG: lift to white so accentForeground lands exactly.
+                    brightness: card.isActive ? 1.0 : 0
                 }
             }
 

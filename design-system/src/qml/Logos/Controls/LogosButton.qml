@@ -73,7 +73,7 @@ LogosAbstractButton {
     property alias text: label.text
     readonly property IconSpec leadingIcon: IconSpec {}
     readonly property IconSpec trailingIcon: IconSpec {}
-    property real radius: Theme.spacing.radiusXlarge
+    property real radius: Theme.components.button.radius
     property int variant: LogosButton.Variant.Secondary
     property bool compact: false
 
@@ -88,21 +88,21 @@ LogosAbstractButton {
         id: d
 
         // focused is treated like hovered (pressed still wins).
+        // The variant's colours from the theme (defaults = the palette).
+        readonly property var style: root.variant === LogosButton.Variant.Primary
+                                     ? Theme.components.button.primary
+                                     : Theme.components.button.secondary
+
         function backgroundColor(enabled, variant, pressed, hovered, focused) {
             if (!enabled)
                 return Theme.palette.backgroundMuted
-            if (variant === LogosButton.Variant.Primary) {
-                if (pressed)
-                    return Theme.palette.primaryPressed
-                if (hovered || focused)
-                    return Theme.palette.primaryHover
-                return Theme.palette.primary
-            }
+            const s = variant === LogosButton.Variant.Primary
+                      ? Theme.components.button.primary : Theme.components.button.secondary
             if (pressed)
-                return Theme.palette.background
+                return s.backgroundPressed
             if (hovered || focused)
-                return Theme.palette.backgroundMuted
-            return Theme.palette.backgroundSecondary
+                return s.backgroundHover
+            return s.background
         }
     }
 
@@ -112,10 +112,11 @@ LogosAbstractButton {
     // chrome, where the 44px touch target is the wrong unit.
     implicitWidth: Math.max(compact ? 72 : 100,
                             implicitContentWidth + leftPadding + rightPadding)
-    implicitHeight: Math.max(compact ? 32 : 44,
+    implicitHeight: Math.max(compact ? Theme.components.button.compactHeight
+                                     : Theme.components.button.height,
                              implicitContentHeight + topPadding + bottomPadding)
-    leftPadding: compact ? Theme.spacing.medium : Theme.spacing.large
-    rightPadding: compact ? Theme.spacing.medium : Theme.spacing.large
+    leftPadding: compact ? Theme.components.button.compactPaddingX : Theme.components.button.paddingX
+    rightPadding: leftPadding
     topPadding: compact ? Theme.spacing.small : Theme.spacing.medium
     bottomPadding: compact ? Theme.spacing.small : Theme.spacing.medium
     font.family: Theme.typography.publicSans
@@ -129,13 +130,31 @@ LogosAbstractButton {
         color: d.backgroundColor(root.enabled, root.variant, root.pressed,
                                  root.hovered, root.activeFocus)
         radius: root.radius
-        border.width: 1
+        border.width: Theme.components.button.borderWidth
         border.color: {
             if (!root.enabled)
                 return Theme.palette.border
-            if (root.variant === LogosButton.Variant.Primary)
-                return root.isActive ? Theme.palette.overlayOrange : Theme.palette.primary
-            return root.isActive ? Theme.palette.overlayOrange : Theme.palette.border
+            return root.isActive ? Theme.palette.overlayOrange : d.style.border
+        }
+
+        // A theme gradient (default: `gradients.primary` for the primary
+        // variant) replaces the solid fill; hover and pressed become a light /
+        // dark wash over it.
+        LogosSurface {
+            id: primaryGradient
+            anchors.fill: parent
+            anchors.margins: bg.border.width
+            slot: root.enabled ? d.style.gradient : ""
+            radius: Math.max(0, root.radius - bg.border.width)
+            visible: hasGradient
+
+            Rectangle {
+                anchors.fill: parent
+                radius: parent.radius
+                color: root.pressed ? Qt.rgba(0, 0, 0, 0.18)
+                     : root.hovered || root.activeFocus ? Qt.rgba(1, 1, 1, 0.12)
+                     : "transparent"
+            }
         }
     }
 
@@ -157,8 +176,7 @@ LogosAbstractButton {
             id: label
             Layout.fillWidth: true
             color: !root.enabled ? Theme.palette.textMuted
-                 : root.variant === LogosButton.Variant.Primary ? Theme.palette.primaryForeground
-                 : Theme.palette.text
+                 : d.style.text
             font: root.font
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter

@@ -19,9 +19,20 @@ AbstractButton {
     }
 
     // Dark gray pill background extending to left edge when active/highlighted
-    background: Rectangle {
-        radius: width / 2 * Theme.spacing.roundness
-        color: root.hovered || root.checked ? Theme.palette.accentOrange: Theme.palette.surface
+    background: Item {
+        LogosGlow {
+            anchors.fill: parent
+            radius: circle.radius
+            active: root.hovered
+        }
+
+        LogosSurface {
+            id: circle
+            anchors.fill: parent
+            slot: root.hovered || root.checked ? "accent" : ""
+            radius: width / 2 * Theme.spacing.roundness
+            color: root.hovered || root.checked ? Theme.palette.accentOrange: Theme.palette.surface
+        }
     }
 
     contentItem: Item {

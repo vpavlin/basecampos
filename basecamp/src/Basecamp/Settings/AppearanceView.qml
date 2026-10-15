@@ -60,7 +60,9 @@ Item {
                 ThemeRegistry.reload()
                 Theme.setTheme(r.id)
                 d.resultSeverity = LogosNotice.Success
-                d.resultTitle = qsTr("Installed “%1”").arg(r.name)
+                d.resultTitle = r.assets
+                    ? qsTr("Installed “%1” with %2 files").arg(r.name).arg(r.assets)
+                    : qsTr("Installed “%1”").arg(r.name)
                 d.resultMessage = r.warnings.length
                     ? qsTr("Applied with warnings: %1").arg(r.warnings.join("; "))
                     : qsTr("It is now active. Apps pick it up the next time you start Basecamp.")
@@ -140,6 +142,37 @@ Item {
                 }
             }
 
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+
+                LogosText {
+                    text: qsTr("Density")
+                    font.pixelSize: Theme.typography.primaryText
+                    font.weight: Theme.typography.weightMedium
+                    color: Theme.palette.text
+                }
+
+                // "" follows the theme; the others are the user's own choice.
+                LogosComboBox {
+                    id: densityCombo
+                    objectName: "appearance.densityCombo"
+                    Layout.preferredWidth: 360
+                    readonly property var values: ["", "compact", "comfortable", "touch"]
+                    model: [qsTr("Theme default"), qsTr("Compact"), qsTr("Comfortable"),
+                            qsTr("Touch (larger targets)")]
+                    currentIndex: Math.max(0, values.indexOf(Theme.settings.density))
+                    onActivated: index => Theme.setDensity(values[index])
+                }
+
+                LogosText {
+                    Layout.fillWidth: true
+                    text: qsTr("Using: %1").arg(Theme.density)
+                    font.pixelSize: Theme.typography.secondaryText
+                    color: Theme.palette.textTertiary
+                }
+            }
+
             LogosNotice {
                 objectName: "appearance.restartNotice"
                 Layout.fillWidth: true
@@ -161,7 +194,7 @@ Item {
 
                 LogosText {
                     Layout.fillWidth: true
-                    text: qsTr("A Logos theme file (theme.json). Installed to %1").arg(ThemeInstaller.themesDir)
+                    text: qsTr("A Logos theme file (.json), or a bundle with its icons inside. Installed to %1").arg(ThemeInstaller.themesDir)
                     font.pixelSize: Theme.typography.secondaryText
                     color: Theme.palette.textTertiary
                     wrapMode: Text.WrapAnywhere

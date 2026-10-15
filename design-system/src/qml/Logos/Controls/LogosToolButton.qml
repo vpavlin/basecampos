@@ -7,8 +7,8 @@ import Logos.Controls
 ToolButton {
     id: root
 
-    property color hoverColor: Theme.palette.surface
-    property color pressedColor: Theme.palette.pressed
+    property color hoverColor: Theme.components.toolButton.backgroundHover
+    property color pressedColor: Theme.components.toolButton.backgroundPressed
 
     // Exposed for inspection (e.g., from tests). Read-only.
     readonly property alias labelItem: label
@@ -22,13 +22,13 @@ ToolButton {
         text: root.text
         verticalAlignment: Text.AlignVCenter
         horizontalAlignment: Text.AlignHCenter
-        color: root.enabled ? Theme.palette.text : Theme.palette.textMuted
+        color: root.enabled ? Theme.components.toolButton.text : Theme.palette.textMuted
     }
 
     background: Rectangle {
         id: bg
-        implicitWidth: 36
-        implicitHeight: 36
+        implicitWidth: Theme.components.toolButton.size
+        implicitHeight: Theme.components.toolButton.size
         radius: Theme.spacing.radiusSmall
         color: root.pressed
                ? root.pressedColor

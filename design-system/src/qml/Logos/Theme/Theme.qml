@@ -9,6 +9,8 @@ QtObject {
     property Settings settings: Settings {
         category: "LogosDesignSystem"
         property string theme: "dark"
+        // User's density choice; "" follows the theme (else comfortable).
+        property string density: ""
     }
     
     // ===== RAW COLOR PALETTE (Design Tokens) =====
@@ -51,6 +53,205 @@ QtObject {
         return {}
     }
     
+    // gradients block of the active installed theme: slot -> spec, {} for
+    // built-in dark. Draw them with LogosSurface { slot: "..." }.
+    readonly property var gradients: {
+        var installed = ThemeRegistry.themes
+        for (var i = 0; i < installed.length; ++i)
+            if (installed[i].id === currentTheme)
+                return installed[i].gradients || {}
+        return {}
+    }
+
+    // backgrounds of the active installed theme: slot -> { url, fit, opacity,
+    // tint, tintStrength } (tint already raised for readable text).
+    readonly property var backgrounds: {
+        var installed = ThemeRegistry.themes
+        for (var i = 0; i < installed.length; ++i)
+            if (installed[i].id === currentTheme)
+                return installed[i].backgroundSpecs || {}
+        return {}
+    }
+
+    // Hover glow of the active installed theme ({ color, blur, spread,
+    // opacity }), or null: built-in dark has none. Draw it with LogosGlow.
+    readonly property var hoverGlow: {
+        var installed = ThemeRegistry.themes
+        for (var i = 0; i < installed.length; ++i)
+            if (installed[i].id === currentTheme)
+                return (installed[i].effects && installed[i].effects.hoverGlow) || null
+        return null
+    }
+
+    // ===== COMPONENT TOKENS & DENSITY =====
+    // Per-control sizes and styles. Defaults are today's literals, so the
+    // built-in look is unchanged; a theme's `components` block overrides them
+    // and `density` scales heights and paddings (touch keeps 44 px targets).
+    readonly property var _activeEntry: {
+        var installed = ThemeRegistry.themes
+        for (var i = 0; i < installed.length; ++i)
+            if (installed[i].id === currentTheme)
+                return installed[i]
+        return null
+    }
+    readonly property string density:
+        settings.density !== "" ? settings.density
+        : (_activeEntry && _activeEntry.density) ? _activeEntry.density : "comfortable"
+    readonly property real densityScale:
+        density === "compact" ? 0.85 : density === "touch" ? 1.2 : 1.0
+
+    function setDensity(value) { settings.density = value }
+
+    function _size(px) {
+        var v = Math.round(px * densityScale)
+        return density === "touch" ? Math.max(44, v) : v
+    }
+    function _pad(px) { return Math.round(px * densityScale) }
+
+    readonly property var components: {
+        var o = (_activeEntry && _activeEntry.components) || {}
+        function pick(group, key, fallback) {
+            return o[group] && o[group][key] !== undefined ? o[group][key] : fallback
+        }
+        var r = spacing.roundness
+        var p = palette
+        // A colour from the theme (#hex, or a palette token's name), else the default.
+        function col(group, key, fallback, variant) {
+            var g = o[group]
+            if (g && variant) g = g[variant]
+            var v = g ? g[key] : undefined
+            if (v === undefined) return fallback
+            if (typeof v === "string") return p[v] !== undefined ? p[v] : fallback
+            return v
+        }
+        function grad(group, fallback, variant) {
+            var g = o[group]
+            if (g && variant) g = g[variant]
+            return g && g.gradient !== undefined ? g.gradient : fallback
+        }
+        return {
+            button: {
+                height: _size(pick("button", "height", 44)),
+                compactHeight: _size(pick("button", "compactHeight", 32)),
+                paddingX: _pad(pick("button", "paddingX", spacing.large)),
+                compactPaddingX: _pad(spacing.medium),
+                radius: o.button && o.button.radius !== undefined ? o.button.radius * r : spacing.radiusXlarge,
+                borderWidth: pick("button", "borderWidth", 1),
+                primary: {
+                    background: col("button", "background", p.primary, "primary"),
+                    backgroundHover: col("button", "backgroundHover", p.primaryHover, "primary"),
+                    backgroundPressed: col("button", "backgroundPressed", p.primaryPressed, "primary"),
+                    text: col("button", "text", p.primaryForeground, "primary"),
+                    border: col("button", "border", p.primary, "primary"),
+                    gradient: grad("button", "primary", "primary")
+                },
+                secondary: {
+                    background: col("button", "background", p.backgroundSecondary, "secondary"),
+                    backgroundHover: col("button", "backgroundHover", p.backgroundMuted, "secondary"),
+                    backgroundPressed: col("button", "backgroundPressed", p.background, "secondary"),
+                    text: col("button", "text", p.text, "secondary"),
+                    border: col("button", "border", p.border, "secondary"),
+                    gradient: grad("button", "", "secondary")
+                }
+            },
+            field: {
+                height: _size(pick("field", "height", 40)),
+                paddingX: _pad(pick("field", "paddingX", 12)),
+                radius: o.field && o.field.radius !== undefined ? o.field.radius * r : spacing.radiusSmall,
+                borderWidth: pick("field", "borderWidth", 1),
+                background: col("field", "background", p.backgroundSecondary),
+                text: col("field", "text", p.text),
+                placeholder: col("field", "placeholder", p.textTertiary),
+                border: col("field", "border", p.backgroundElevated),
+                borderFocus: col("field", "borderFocus", p.overlayOrange),
+                gradient: grad("field", "")
+            },
+            search: {
+                height: _size(pick("search", "height", 54)),
+                radius: o.search && o.search.radius !== undefined ? o.search.radius * r : spacing.radiusLarge,
+                borderWidth: pick("search", "borderWidth", 1),
+                background: col("search", "background", p.background),
+                text: col("search", "text", p.text),
+                border: col("search", "border", p.borderSubtle),
+                borderFocus: col("search", "borderFocus", p.primary),
+                gradient: grad("search", "")
+            },
+            combo: {
+                height: _size(pick("combo", "height", 32)),
+                radius: o.combo && o.combo.radius !== undefined ? o.combo.radius * r : spacing.radiusSmall,
+                borderWidth: pick("combo", "borderWidth", 1),
+                background: col("combo", "background", p.backgroundButton),
+                backgroundPressed: col("combo", "backgroundPressed", p.pressed),
+                text: col("combo", "text", p.text),
+                border: col("combo", "border", p.border),
+                borderFocus: col("combo", "borderFocus", p.overlayOrange)
+            },
+            listItem: {
+                height: _size(pick("listItem", "height", 36)),
+                paddingX: _pad(pick("listItem", "paddingX", spacing.medium)),
+                backgroundHover: col("listItem", "backgroundHover", p.hover),
+                backgroundPressed: col("listItem", "backgroundPressed", p.pressed),
+                backgroundSelected: col("listItem", "backgroundSelected", colors.getColor(p.primary, 0.18)),
+                text: col("listItem", "text", p.text)
+            },
+            menuItem: {
+                height: _size(pick("menuItem", "height", 32)),
+                paddingX: _pad(pick("menuItem", "paddingX", spacing.medium)),
+                backgroundHover: col("menuItem", "backgroundHover", p.surface),
+                text: col("menuItem", "text", p.text)
+            },
+            tab: {
+                height: _size(pick("tab", "height", 40)),
+                paddingX: _pad(pick("tab", "paddingX", 8)),
+                text: col("tab", "text", p.textTertiary),
+                textSelected: col("tab", "textSelected", p.primary)
+            },
+            toolButton: {
+                size: _size(pick("toolButton", "size", 36)),
+                backgroundHover: col("toolButton", "backgroundHover", p.surface),
+                backgroundPressed: col("toolButton", "backgroundPressed", p.pressed),
+                text: col("toolButton", "text", p.text)
+            },
+            iconButton: {
+                size: _size(pick("iconButton", "size", 40)),
+                background: col("iconButton", "background", p.backgroundButton),
+                backgroundHover: col("iconButton", "backgroundHover", p.backgroundMuted),
+                backgroundPressed: col("iconButton", "backgroundPressed", p.background),
+                text: col("iconButton", "text", p.textTertiary),
+                border: col("iconButton", "border", p.borderStrong),
+                gradient: grad("iconButton", "")
+            },
+            card: {
+                radius: o.card && o.card.radius !== undefined ? o.card.radius * r : -1,   // -1: the card's own default
+                borderWidth: pick("card", "borderWidth", 0),
+                shadowColor: pick("card", "shadowColor", "transparent"),
+                shadowBlur: pick("card", "shadowBlur", 0),
+                shadowOffsetY: pick("card", "shadowOffsetY", 0),
+                shadowOpacity: pick("card", "shadowOpacity", 0),
+                // "transparent": the card keeps its own colour.
+                background: col("card", "background", "transparent"),
+                backgroundHover: col("card", "backgroundHover", "transparent"),
+                border: col("card", "border", "transparent"),
+                gradient: grad("card", "card")
+            }
+        }
+    }
+
+    // icon pack of the active installed theme: name -> sanitised data: URL.
+    readonly property var icons: {
+        var installed = ThemeRegistry.themes
+        for (var i = 0; i < installed.length; ++i)
+            if (installed[i].id === currentTheme)
+                return installed[i].iconUrls || {}
+        return {}
+    }
+
+    // The theme's replacement for icon `name`, else `fallback` (the bundled one).
+    function iconOr(name, fallback) {
+        var url = icons[name]
+        return url ? url : fallback
+    }
+
     // ===== THEME INSTANCES =====
     // Currently available themes - created first
     property var darkTheme: DarkTheme { colors: theme.colors }

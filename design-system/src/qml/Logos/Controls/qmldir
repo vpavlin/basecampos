@@ -38,6 +38,8 @@ LogosStatCard 1.0 LogosStatCard.qml
 LogosInfoButton 1.0 LogosInfoButton.qml
 LogosStage 1.0 LogosStage.qml
 LogosStageLane 1.0 LogosStageLane.qml
+LogosSurface 1.0 LogosSurface.qml
+LogosGlow 1.0 LogosGlow.qml
 LogosToast 1.0 LogosToast.qml
 LogosGroupBox 1.0 LogosGroupBox.qml
 LogosSpinBox 1.0 LogosSpinBox.qml

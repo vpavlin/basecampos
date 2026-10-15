@@ -7,24 +7,24 @@ import Logos.Controls
 MenuItem {
     id: root
 
-    property color highlightColor: Theme.palette.surface
+    property color highlightColor: Theme.components.menuItem.backgroundHover
 
     // Exposed for inspection (e.g., from tests). Read-only.
     readonly property alias labelItem: label
     readonly property alias backgroundItem: bg
 
-    implicitHeight: 32
+    implicitHeight: Theme.components.menuItem.height
 
     focusPolicy: Qt.StrongFocus
     activeFocusOnTab: true
 
     contentItem: LogosText {
         id: label
-        leftPadding: Theme.spacing.medium
-        rightPadding: Theme.spacing.medium
+        leftPadding: Theme.components.menuItem.paddingX
+        rightPadding: Theme.components.menuItem.paddingX
         verticalAlignment: Text.AlignVCenter
         text: root.text
-        color: root.enabled ? Theme.palette.text : Theme.palette.textMuted
+        color: root.enabled ? Theme.components.menuItem.text : Theme.palette.textMuted
     }
 
     background: Rectangle {

@@ -71,6 +71,7 @@ protected:
     void showEvent(QShowEvent* event) override;
 
 private:
+    void wireWelcomePage(QObject* root);
     void customizeTabBarStyle(QTabBar* tabBar);
     void applyTabBarStyleSheet(QTabBar* tabBar);
     void applyThemeColors();

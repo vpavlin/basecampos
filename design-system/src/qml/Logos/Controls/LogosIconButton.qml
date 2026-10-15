@@ -37,8 +37,8 @@ Control {
     id: root
 
     property url   iconSource: ""
-    property color iconColor: Theme.palette.textTertiary
-    property int   size: 40
+    property color iconColor: Theme.components.iconButton.text
+    property int   size: Theme.components.iconButton.size
     property int   iconSize: 20
     property bool  flat: false
 
@@ -56,13 +56,14 @@ Control {
         property bool keyboardPressed: false
 
         function backgroundColor(enabled, pressed, hovered, focused) {
+            const s = Theme.components.iconButton
             if (!enabled)
-                return Theme.palette.backgroundButton
+                return s.background
             if (pressed)
-                return Theme.palette.background
+                return s.backgroundPressed
             if (hovered || focused)
-                return Theme.palette.backgroundMuted
-            return Theme.palette.backgroundButton
+                return s.backgroundHover
+            return s.background
         }
 
         function isActivateKey(key) {
@@ -113,9 +114,25 @@ Control {
         visible: !root.flat
         color: d.backgroundColor(root.enabled, root.pressed, root.hovered, root.activeFocus)
         radius: Theme.spacing.radiusPill
-        border.color: root.isActive ? Theme.palette.overlayOrange : Theme.palette.borderStrong
+        border.color: root.isActive ? Theme.palette.overlayOrange : Theme.components.iconButton.border
         border.width: 1
         antialiasing: true
+
+        LogosSurface {
+            anchors.fill: parent
+            anchors.margins: bg.border.width
+            radius: Math.max(0, bg.radius - bg.border.width)
+            slot: root.enabled ? Theme.components.iconButton.gradient : ""
+            visible: hasGradient
+
+            Rectangle {
+                anchors.fill: parent
+                radius: parent.radius
+                color: root.pressed ? Qt.rgba(0, 0, 0, 0.18)
+                     : root.hovered || root.activeFocus ? Qt.rgba(1, 1, 1, 0.12)
+                     : "transparent"
+            }
+        }
     }
 
     contentItem: Item {
