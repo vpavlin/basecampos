@@ -25,3 +25,9 @@ Requires Nix with flakes enabled.
 
 Ready-to-upload theme files are in `themes/` (Paper Serif, Hacker, Catppuccin Mocha). Upload one in
 **Settings → Appearance**.
+
+## Docs
+
+- [Theme file spec v1](design-system/docs/theming/README.md): what this build implements
+- [Theme v2 proposal](docs/THEME-V2-SPEC.md): gradients, backgrounds, icon packs
+- [Design system mobile-readiness audit](docs/DS-MOBILE-AUDIT.md): touch targets, hover, adaptive layout
