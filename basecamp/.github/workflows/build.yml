@@ -1,0 +1,364 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - master
+      - 'release/**'
+  pull_request:
+    branches: [master]
+
+# Nix and the Logos cache come from logos-co/setup-nix-cache-action, which owns
+# the installer, the substituters, the trusted keys, which cache is written
+# (public on master/main, ci elsewhere) and the push itself. This file used to
+# own all of that four times over.
+#
+# The ATTIC_CACHE / ATTIC_ENDPOINT env pair that lived here is gone: the first is
+# the shared action's decision, and the second existed only to feed `if:` guards
+# that skipped the push on fork PRs. The shared action needs no guard -- with no
+# token it configures the substituters anyway and skips the push, which is the
+# behaviour those guards were approximating. The repo's ATTIC_ENDPOINT secret is
+# consequently unused here; the action's default endpoint is the same host this
+# file already pointed at.
+
+jobs:
+  build-appimage:
+    environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64-linux
+            runner: ubuntu-latest
+          - arch: aarch64-linux
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: logos-co/setup-nix-cache-action@v1
+        with:
+          attic-token-ci: ${{ secrets.ATTIC_TOKEN_CI }}
+          attic-token-public: ${{ secrets.ATTIC_TOKEN_PUBLIC }}
+
+      - name: Build bin-appimage
+        run: nix build .#bin-appimage
+
+      # A library staged twice must be the same build: macOS binds to lib/,
+      # Linux to the sibling. Reached #361 as a package_manager crash with
+      # every Linux job green. Here because this job already built the bundle.
+      - name: Duplicate-library link gate
+        run: |
+          nix build .#link-gate --no-link -L
+          nix build .#link-gate-negative --no-link -L
+
+      - name: Smoke test
+        run: |
+          nix build .#smoke-test --out-link result-smoke -L
+          cat result-smoke/smoke-test.log
+
+      - name: Rename AppImage with architecture
+        run: |
+          arch="${{ matrix.arch }}"
+          arch_short="${arch%%-*}"
+          src=$(find result/ -name '*.AppImage' -print -quit)
+          cp "$src" "logos-basecamp-${arch_short}.AppImage"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage-${{ matrix.arch }}
+          path: logos-basecamp-*.AppImage
+
+  # ────────────────────────────────────────────────────────────────────────
+  # Windows. A CROSS build on an ordinary Linux runner -- nix does not run on
+  # Windows, so there is no Windows runner in this workflow; the executing of
+  # the result is covered separately by logos-windows-ci.
+  #
+  # bin-bundle-dir rather than `default`: it is the same portable directory the
+  # AppImage and .app jobs above package, laid out the way the app expects
+  # (bin/ + lib/qt-6/{plugins,qml} + an explicit qt.conf). A PE records no
+  # rpath, so this layout IS the deployment contract -- see nix-bundle-dir's PE
+  # path.
+  build-windows:
+    environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
+    # Self-hosted when the WINDOWS_RUNNER repo variable holds a JSON label array
+    # (["self-hosted","linux","x64"]); clear it to fall back to GitHub-hosted.
+    runs-on: ${{ fromJSON(vars.WINDOWS_RUNNER || '["ubuntu-latest"]') }}
+
+    steps:
+      # Frees a self-hosted workspace left read-only by an earlier run. Must
+      # precede checkout: checkout's own clean is what fails on one.
+      - name: Make the persisted workspace writable
+        run: chmod -R u+w . || true
+
+      - uses: actions/checkout@v4
+
+      - uses: logos-co/setup-nix-cache-action@v1
+        with:
+          attic-token-ci: ${{ secrets.ATTIC_TOKEN_CI }}
+          attic-token-public: ${{ secrets.ATTIC_TOKEN_PUBLIC }}
+
+      # This is the platform the gate exists for. PE has no symbol
+      # interposition, so a duplicate runtime that Linux and macOS silently
+      # collapse to one is FATAL here -- and CI cross-builds this bundle and
+      # never runs it, so a build-time assertion is the only signal there is.
+      - name: One-runtime symbol gate
+        run: |
+          nix build .#packages.x86_64-windows.symbol-gate -L
+          nix build .#packages.x86_64-windows.symbol-gate-negative -L
+
+      # The installer is the only Windows artifact. It builds bin-bundle-dir
+      # transitively, so dropping the separate bundle + zip steps costs no
+      # coverage: the two assertions the zip step carried -- that the tree was
+      # DEREFERENCED (its DLLs are symlinks into the nix store, and an archive
+      # of dangling links extracts to a tree that cannot start) and that it
+      # holds a runnable .exe -- moved into nix/windows-installer.nix, where
+      # they now run on every `nix build` rather than only here. That file also
+      # asserts LogosBasecamp.exe is subsystem 00000002: CI cross-builds this
+      # and never runs it, so a build-time check is the only signal a
+      # regression to a console-subsystem image would produce.
+      - name: Build the Windows installer
+        run: nix build .#packages.x86_64-windows.bin-installer -L -o result-installer
+
+      - name: Stage the installer
+        run: |
+          set -euo pipefail
+          cp -L result-installer/*-setup.exe .
+          ls -la ./*-setup.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: '*-setup.exe'
+
+  build-macos-app:
+    environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: logos-co/setup-nix-cache-action@v1
+        with:
+          attic-token-ci: ${{ secrets.ATTIC_TOKEN_CI }}
+          attic-token-public: ${{ secrets.ATTIC_TOKEN_PUBLIC }}
+
+      - name: Build bin-macos-app
+        run: nix build .#bin-macos-app
+
+      # A library staged twice must be the same build: macOS binds to lib/,
+      # Linux to the sibling. Reached #361 as a package_manager crash with
+      # every Linux job green. Here because this job already built the bundle.
+      - name: Duplicate-library link gate
+        run: |
+          nix build .#link-gate --no-link -L
+          nix build .#link-gate-negative --no-link -L
+
+      - name: Smoke test
+        run: |
+          nix build .#smoke-test-bundle --out-link result-smoke -L
+          cat result-smoke/smoke-test.log
+
+      - name: Package app bundle as tarball
+        run: |
+          app=$(find result/ -name '*.app' -maxdepth 1 -print -quit)
+          tar -czf logos-basecamp-aarch64-unsigned.app.tar.gz -C result "$(basename "$app")"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-app-aarch64-darwin
+          path: logos-basecamp-aarch64-unsigned.app.tar.gz
+
+  test-linux:
+    environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64-linux
+            runner: ubuntu-latest
+          - arch: aarch64-linux
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: logos-co/setup-nix-cache-action@v1
+        with:
+          attic-token-ci: ${{ secrets.ATTIC_TOKEN_CI }}
+          attic-token-public: ${{ secrets.ATTIC_TOKEN_PUBLIC }}
+
+      - name: Unit tests
+        run: nix build .#unit-tests -L
+
+      - name: QML tests
+        run: nix build .#qml-tests -L
+
+      - name: Sandbox test
+        run: nix build .#sandbox-test -L
+
+      - name: Integration test (UI tests)
+        run: nix build .#integration-test -L
+
+      - name: Shutdown test
+        run: nix build .#shutdown-test -L
+        
+      # Guards the capability trust root end to end: asserts a NON-"core"
+      # identity actually completes a capability-gated call chain, so a
+      # logos-liblogos / default-module-loader pin that predates the
+      # host-services grant fails HERE instead of shipping green.
+      # (integration-test carries the same assertion, but a pin failure
+      # deserves a gate whose name says what broke.)
+      - name: Host-services grant guard
+        run: nix build .#host-services-test -L
+
+      # The one control that mechanically enforces the one-runtime invariant:
+      # each of TokenManager / StoreRegistry / LogosAPI / LogosAPIClient is
+      # DEFINED by exactly one image among those sharing a process, and the
+      # main_ui plugin defines none of them. Until this step existed the gate
+      # was exposed in flake.nix `checks` and built by nothing -- no job
+      # enumerated it and no `nix flake check` runs in this repo -- so a PR that
+      # linked the logos runtime back into main_ui would merge green.
+      #
+      # The negative control is not optional. It plants a REAL duplicate definer
+      # where an in-process consumer goes and asserts the gate REJECTS that tree.
+      # An absence assertion that has never been seen to fail is indistinguish-
+      # able from a broken one, so the two ship together or not at all.
+      #
+      # Also wired into build-windows, which is where it matters most: PE has
+      # no symbol interposition to collapse a duplicate, and CI cross-builds
+      # that bundle without ever running it.
+      - name: One-runtime symbol gate
+        run: |
+          nix build .#symbol-gate -L
+          nix build .#symbol-gate-negative -L
+
+      # The gate above reads what we SHIP -- one liblogos_protocol in $out/lib
+      # -- which stays true while qt-host was compiled against a second one that
+      # only the closure names, and that is an 8-byte heap overrun on every
+      # getClient(). The rule lives in logos-protocol, where the ABI is owned;
+      # run it from the revision we lock, not master, so the check and the build
+      # agree. It reads the lock, so one platform covers both.
+      - name: qt-host/protocol pairing
+        run: |
+          nix build .#app -o result-abi-subject -L
+          # Resolve the ROOT logos-protocol edge. The flat node of that name
+          # belongs to whichever edge claimed it first, which is not ours.
+          rev=$(nix flake metadata --json |
+            jq -r '.locks as $l | $l.nodes[$l.nodes[$l.root].inputs["logos-protocol"]].locked.rev')
+          nix run "github:logos-co/logos-protocol/$rev#abi-closure-check" -- ./result-abi-subject
+
+      # Report-only non-blocking for now
+      - name: Coverage report
+        continue-on-error: true
+        run: |
+          nix build .#coverage -L
+          {
+            echo '## Unit-test coverage'
+            echo '```'
+            cat result/coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: result/
+          if-no-files-found: ignore
+
+  test-macos:
+    environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: logos-co/setup-nix-cache-action@v1
+        with:
+          attic-token-ci: ${{ secrets.ATTIC_TOKEN_CI }}
+          attic-token-public: ${{ secrets.ATTIC_TOKEN_PUBLIC }}
+
+      - name: Unit tests
+        run: nix build .#unit-tests -L
+
+      - name: QML tests
+        run: nix build .#qml-tests -L
+
+      - name: Sandbox test
+        run: nix build .#sandbox-test -L
+
+      - name: Integration test (UI tests)
+        run: nix build .#integration-test-bundle -L
+
+      - name: Shutdown test
+        run: nix build .#shutdown-test -L
+        
+      # macOS twin of the Linux job's host-services guard, run against the
+      # real .app bundle (same pairing as integration-test-bundle above).
+      - name: Host-services grant guard
+        run: nix build .#host-services-test-bundle -L
+
+      # The one control that mechanically enforces the one-runtime invariant:
+      # each of TokenManager / StoreRegistry / LogosAPI / LogosAPIClient is
+      # DEFINED by exactly one image among those sharing a process, and the
+      # main_ui plugin defines none of them. Until this step existed the gate
+      # was exposed in flake.nix `checks` and built by nothing -- no job
+      # enumerated it and no `nix flake check` runs in this repo -- so a PR that
+      # linked the logos runtime back into main_ui would merge green.
+      #
+      # The negative control is not optional. It plants a REAL duplicate definer
+      # where an in-process consumer goes and asserts the gate REJECTS that tree.
+      # An absence assertion that has never been seen to fail is indistinguish-
+      # able from a broken one, so the two ship together or not at all.
+      #
+      # Also wired into build-windows, which is where it matters most: PE has
+      # no symbol interposition to collapse a duplicate, and CI cross-builds
+      # that bundle without ever running it.
+      - name: One-runtime symbol gate
+        run: |
+          nix build .#symbol-gate -L
+          nix build .#symbol-gate-negative -L
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    needs: [build-appimage, build-macos-app, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: appimage-x86_64-linux
+          path: artifacts/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: appimage-aarch64-linux
+          path: artifacts/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-app-aarch64-darwin
+          path: artifacts/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-x86_64
+          path: artifacts/
+
+      - name: Generate tag
+        id: tag
+        run: echo "tag=pre-release-${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Pre-release ${{ steps.tag.outputs.tag }}
+          prerelease: true
+          files: |
+            artifacts/*.AppImage
+            artifacts/*.app.tar.gz
+            artifacts/*-setup.exe

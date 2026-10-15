@@ -1,0 +1,465 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+
+import Logos.Controls
+import Logos.Icons
+import Logos.Theme
+
+Item {
+    id: root
+
+    property var repositories: []
+    property bool loading: false
+    // "any", "logos" or "http"; empty hides the selector (a downloader that
+    // predates the setting).
+    property string downloadSource: ""
+
+    signal refreshRequested()
+    signal addRequested(string url)
+    signal removeRequested(string url)
+    signal setEnabledRequested(string url, bool enabled)
+    signal downloadSourceRequested(string source)
+
+    onDownloadSourceChanged: d.pendingDownloadSource = ""
+
+    function reportOperationResult(operation, url, success, error) {
+        // A refused source snaps the selector back to the real one.
+        if (operation === "setDownloadSource" && !success) d.pendingDownloadSource = ""
+        if (success) {
+            d.lastError = ""
+            if (operation === "add") d.newRepoUrl = ""
+            return
+        }
+        d.lastError = error.length > 0 ? error : qsTr("Operation failed")
+    }
+
+    QtObject {
+        id: d
+        property string newRepoUrl: ""
+        property string lastError: ""
+        property string pendingRemoveUrl: ""
+
+        readonly property var downloadSourceValues: ["any", "logos", "http"]
+        readonly property var downloadSourceLabels: [qsTr("Any"), qsTr("Logos only"), qsTr("HTTP only")]
+        // The pick, shown until the downloader confirms it.
+        property string pendingDownloadSource: ""
+        readonly property int downloadSourceIndex: Math.max(0,
+            downloadSourceValues.indexOf(pendingDownloadSource || root.downloadSource))
+
+        // Display names claimed by more than one configured repository.
+        readonly property var duplicateNames: {
+            const counts = ({})
+            const originals = ({})
+            const repos = root.repositories || []
+            for (let i = 0; i < repos.length; ++i) {
+                const label = String(repos[i].displayName || repos[i].name || "")
+                if (label.length === 0) continue
+                const key = label.toLowerCase()
+                counts[key] = (counts[key] || 0) + 1
+                if (originals[key] === undefined) originals[key] = label
+            }
+            const dupes = []
+            for (const key in counts)
+                if (counts[key] > 1) dupes.push(originals[key])
+            dupes.sort()
+            return dupes
+        }
+
+        function isDuplicateName(label) {
+            const l = String(label || "").toLowerCase()
+            if (l.length === 0) return false
+            for (let i = 0; i < duplicateNames.length; ++i)
+                if (String(duplicateNames[i]).toLowerCase() === l) return true
+            return false
+        }
+
+        readonly property string duplicateSignature: duplicateNames.join("\u0001")
+        property string dismissedDuplicateSignature: ""
+        readonly property bool showDuplicateWarning:
+            duplicateNames.length > 0
+            && duplicateSignature !== dismissedDuplicateSignature
+    }
+
+    LogosScrollView {
+        id: scroll
+        anchors.fill: parent
+        anchors.margins: Theme.spacing.large
+        clip: true
+
+        ColumnLayout {
+            width: scroll.availableWidth
+            spacing: Theme.spacing.large
+
+            // Header.
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.medium
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.tiny
+
+                    LogosText {
+                        text: qsTr("Package Repositories")
+                        font.pixelSize: Theme.typography.panelTitleText
+                        font.weight: Theme.typography.weightMedium
+                        color: Theme.palette.text
+                    }
+                    LogosText {
+                        text: qsTr("The catalog merges the built-in repository with any repositories you add here.")
+                        font.pixelSize: Theme.typography.secondaryText
+                        color: Theme.palette.textSecondary
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+
+                LogosButton {
+                    objectName: "repositories.refreshButton"
+                    text: root.loading ? qsTr("Refreshing…") : qsTr("Refresh")
+                    enabled: !root.loading
+                    implicitWidth: 120
+                    implicitHeight: 36
+                    onClicked: root.refreshRequested()
+                }
+            }
+
+            // Error banner — shown until the next successful op.
+            Rectangle {
+                objectName: "repositories.errorBanner"
+                Layout.fillWidth: true
+                visible: d.lastError.length > 0
+                radius: Theme.spacing.radiusSmall
+                color: Theme.colors.getColor(Theme.palette.error, 0.12)
+                border.color: Theme.palette.error
+                border.width: 1
+                implicitHeight: errorRow.implicitHeight + Theme.spacing.medium * 2
+
+                RowLayout {
+                    id: errorRow
+                    anchors.fill: parent
+                    anchors.margins: Theme.spacing.medium
+                    spacing: Theme.spacing.medium
+
+                    LogosText {
+                        Layout.fillWidth: true
+                        text: d.lastError
+                        color: Theme.palette.text
+                        font.pixelSize: Theme.typography.secondaryText
+                        wrapMode: Text.WordWrap
+                    }
+                    LogosIconButton {
+                        objectName: "repositories.errorDismiss"
+                        iconSource: LogosIcons.close
+                        size: 20
+                        iconSize: 14
+                        iconColor: Theme.palette.textTertiary
+                        background: Item {}
+                        onClicked: d.lastError = ""
+                    }
+                }
+            }
+
+            // Duplicate-name warning. Derived from the current repository
+            // list rather than raised once on add, so it stays visible for
+            // as long as the clash exists and can't be missed by an add
+            // that completes while the user is elsewhere.
+            LogosNotice {
+                id: duplicateNameNotice
+                objectName: "repositories.duplicateNameWarning"
+                Layout.fillWidth: true
+                severity: LogosNotice.Warning
+                closable: true
+                shown: false
+                title: d.duplicateNames.length === 1
+                       ? qsTr("More than one repository calls itself “%1”.")
+                             .arg(d.duplicateNames[0])
+                       : qsTr("These names are each claimed by more than one repository: %1.")
+                             .arg(d.duplicateNames.join(qsTr(", ")))
+                message: qsTr("A repository's name comes from its own logos-repo.json, so any "
+                            + "repository can claim any name. Check the URLs below to tell "
+                            + "them apart before installing.")
+                onDismissed: d.dismissedDuplicateSignature = d.duplicateSignature
+                Component.onCompleted: shown = d.showDuplicateWarning
+            }
+
+            Connections {
+                target: d
+                function onShowDuplicateWarningChanged() {
+                    duplicateNameNotice.shown = d.showDuplicateWarning
+                }
+            }
+
+            // Where packages download from.
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                visible: root.downloadSource.length > 0
+
+                LogosText {
+                    text: qsTr("Download source")
+                    font.pixelSize: Theme.typography.subtitleText
+                    font.weight: Theme.typography.weightMedium
+                    color: Theme.palette.text
+                }
+                LogosText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: qsTr("Where packages download from. Versions the selected source "
+                             + "cannot serve are listed as not available.")
+                    font.pixelSize: Theme.typography.secondaryText
+                    color: Theme.palette.textTertiary
+                }
+                LogosComboBox {
+                    objectName: "repositories.downloadSource"
+                    Layout.topMargin: Theme.spacing.tiny
+                    Layout.preferredWidth: 220
+                    Layout.preferredHeight: 40
+                    model: d.downloadSourceLabels
+                    currentIndex: d.downloadSourceIndex
+                    onActivated: function(idx) {
+                        const picked = d.downloadSourceValues[idx]
+                        if (picked && picked !== (d.pendingDownloadSource || root.downloadSource)) {
+                            d.pendingDownloadSource = picked
+                            root.downloadSourceRequested(picked)
+                        }
+                        currentIndex = Qt.binding(function() { return d.downloadSourceIndex })
+                    }
+                }
+            }
+
+            // Add a repository form.
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+
+                LogosText {
+                    text: qsTr("Add a repository")
+                    font.pixelSize: Theme.typography.subtitleText
+                    font.weight: Theme.typography.weightMedium
+                    color: Theme.palette.text
+                }
+                LogosText {
+                    text: qsTr("Paste the URL of a logos-repo.json index.")
+                    font.pixelSize: Theme.typography.secondaryText
+                    color: Theme.palette.textTertiary
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: Theme.spacing.tiny
+                    spacing: Theme.spacing.small
+
+                    LogosTextField {
+                        id: urlInput
+                        objectName: "repositories.urlField"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("https://example.com/logos-repo.json")
+                        text: d.newRepoUrl
+                        onTextChanged: if (text !== d.newRepoUrl) d.newRepoUrl = text
+                    }
+                    LogosButton {
+                        objectName: "repositories.addButton"
+                        text: qsTr("Add")
+                        enabled: d.newRepoUrl.trim().length > 0
+                        implicitWidth: 100
+                        implicitHeight: 40
+                        onClicked: root.addRequested(d.newRepoUrl.trim())
+                    }
+                }
+            }
+
+            // Divider below the add form.
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.bottomMargin: Theme.spacing.medium
+                Layout.preferredHeight: 1
+                color: Theme.palette.borderSubtle
+            }
+
+            // Repository list.
+            Repeater {
+                model: root.repositories
+                delegate: Rectangle {
+                    required property var modelData
+
+                    readonly property string url:          modelData.url || ""
+                    readonly property string displayName:  modelData.displayLabel || modelData.displayName || modelData.name || ""
+                    readonly property string claimedName:  modelData.displayName || modelData.name || ""
+                    readonly property string description:  modelData.description || ""
+                    readonly property string resolveError: modelData.resolveError || ""
+                    readonly property bool   isDefault:    modelData.isDefault === true
+                    readonly property bool   isEnabled:    modelData.enabled !== false
+
+                    objectName: "repositories.row." + url
+                    Layout.fillWidth: true
+                    implicitHeight: rowCol.implicitHeight + Theme.spacing.large * 2
+                    radius: Theme.spacing.radiusLarge
+                    color: Theme.palette.background
+                    border.color: Theme.palette.borderSubtle
+                    border.width: 1
+
+                    ColumnLayout {
+                        id: rowCol
+                        anchors.fill: parent
+                        anchors.margins: Theme.spacing.large
+                        spacing: Theme.spacing.small
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.spacing.small
+
+                            LogosText {
+                                text: displayName.length > 0 ? displayName : qsTr("(unnamed repository)")
+                                font.pixelSize: Theme.typography.primaryText
+                                font.weight: Theme.typography.weightMedium
+                                color: Theme.palette.text
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            LogosBadge {
+                                visible: isDefault
+                                text: qsTr("Default")
+                                color: Theme.palette.accentOrange
+                            }
+                            LogosBadge {
+                                visible: !isEnabled
+                                text: qsTr("Disabled")
+                                color: Theme.palette.textTertiary
+                            }
+                            LogosBadge {
+                                objectName: "repositories.duplicateNameBadge." + url
+                                visible: d.isDuplicateName(claimedName)
+                                text: qsTr("Name reused")
+                                color: Theme.palette.warning
+                            }
+                            LogosBadge {
+                                visible: resolveError.length > 0
+                                text: qsTr("Unreachable")
+                                color: Theme.palette.error
+                            }
+                        }
+
+                        LogosSelectableText {
+                            visible: url.length > 0
+                            Layout.fillWidth: true
+                            text: url
+                            font.pixelSize: Theme.typography.secondaryText
+                            color: Theme.palette.textSecondary
+                            wrapMode: TextEdit.WrapAnywhere
+                            persistentSelection: true
+                        }
+
+                        LogosText {
+                            visible: description.length > 0
+                            Layout.fillWidth: true
+                            text: description
+                            font.pixelSize: Theme.typography.secondaryText
+                            color: Theme.palette.textSecondary
+                            wrapMode: Text.WordWrap
+                        }
+
+                        LogosText {
+                            visible: resolveError.length > 0
+                            Layout.fillWidth: true
+                            text: resolveError
+                            font.pixelSize: Theme.typography.secondaryText
+                            color: Theme.palette.error
+                            wrapMode: Text.WordWrap
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.topMargin: Theme.spacing.small
+                            spacing: Theme.spacing.medium
+
+                            RowLayout {
+                                spacing: Theme.spacing.small
+                                LogosSwitch {
+                                    objectName: "repositories.enableSwitch." + url
+                                    checked: isEnabled
+                                    onToggled: root.setEnabledRequested(url, checked)
+                                }
+                                LogosText {
+                                    text: isEnabled ? qsTr("Enabled") : qsTr("Disabled")
+                                    color: Theme.palette.textSecondary
+                                    font.pixelSize: Theme.typography.secondaryText
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            LogosButton {
+                                text: qsTr("Remove")
+                                onClicked: {
+                                    if (isDefault) {
+                                        d.pendingRemoveUrl = url
+                                        removeDefaultDialog.open()
+                                    } else {
+                                        root.removeRequested(url)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            LogosText {
+                visible: root.repositories.length === 0
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                text: root.loading
+                      ? qsTr("Loading repositories…")
+                      : qsTr("No repositories configured.")
+                color: Theme.palette.textTertiary
+                font.pixelSize: Theme.typography.secondaryText
+            }
+
+            Item { Layout.fillHeight: true; Layout.minimumHeight: 1 }
+        }
+    }
+
+    // Confirmation for removing the default repository. Removal is a real
+    // delete — the row leaves the list and can only be brought back by
+    // pasting the exact URL into "Add a repository". Disable (toggle) is
+    // the reversible affordance.
+    LogosWarningDialog {
+        id: removeDefaultDialog
+
+        anchors.centerIn: parent
+        title: qsTr("Remove default repository?")
+        width: 420
+
+        message: qsTr("The default Logos repository provides the official package catalog. "
+                      + "Copy the URL first if you want to restore it later — you can re-add it "
+                      + "by pasting it into the \"Add a repository\" field. If you just want to "
+                      + "stop the default catalog from participating temporarily, disable it "
+                      + "with the toggle instead.")
+
+        leftActions: [
+            LogosButton {
+                objectName: "repositories.removeConfirm.cancel"
+                text: qsTr("Cancel")
+                onClicked: {
+                    d.pendingRemoveUrl = ""
+                    removeDefaultDialog.close()
+                }
+            }
+        ]
+
+        rightActions: [
+            LogosButton {
+                objectName: "repositories.removeConfirm.confirm"
+                text: qsTr("Remove")
+                variant: LogosButton.Variant.Primary
+                onClicked: {
+                    root.removeRequested(d.pendingRemoveUrl)
+                    d.pendingRemoveUrl = ""
+                    removeDefaultDialog.close()
+                }
+            }
+        ]
+    }
+}

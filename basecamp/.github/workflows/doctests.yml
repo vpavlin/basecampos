@@ -1,0 +1,623 @@
+name: basecamp Doc-Tests
+
+# Runs the executable basecamp doc-tests end-to-end via the shared doctest CLI,
+# one job per spec per OS; the specs and what each covers are listed at the
+# `doctests` job. Basecamp itself is built ONCE per OS, by `build`, into portable
+# trees the spec jobs download: they never build Basecamp, and need no cache for it.
+# Every spec's run half also runs on Windows, in the `windows` job.
+# `basecamp doc-tests (<os>)` is one verdict per OS over its build and specs.
+#
+# ──────────────────────────────────────────────────────────────────────────────
+# One-time setup required for the clickable report links to work:
+#
+#   1. Repo Settings → Pages → "Build and deployment" → Source: "Deploy from a
+#      branch", Branch: `gh-pages` / `(root)`. (The publish-report job creates
+#      the gh-pages branch on its first run.)
+#   2. Nothing else — GITHUB_TOKEN already has the permissions granted below.
+#
+# Each run publishes one two-column HTML report per spec per OS to:
+#   https://<owner>.github.io/<repo>/pr-<N>/<spec>/<os>/   (pull requests)
+#   https://<owner>.github.io/<repo>/main/<spec>/<os>/     (pushes to main/master)
+# and (for PRs) posts/updates a comment with the links. Pushes to the default
+# branch also (re)generate the Pages root index.html, so
+#   https://<owner>.github.io/<repo>/                  links to the latest reports
+# instead of 404ing.
+#
+# The gh-pages branch is rebuilt wholesale on every publish (single orphan
+# commit, no history) and holds only main/ plus the reports for open PRs and
+# PRs closed within REPORT_RETENTION_DAYS. A report link in the comment on a
+# PR closed longer ago than that will 404 — re-run the workflow to restore it.
+#
+# Note: pull requests opened from forks get a read-only GITHUB_TOKEN, so the
+# Pages push and PR comment are skipped for them — the downloadable artifact is
+# still produced. PRs from branches in this repo get the full clickable links.
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  pull_request:
+    branches: [master, main]
+  push:
+    branches: [master, main]
+
+concurrency:
+  group: doctests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Basecamp, built once per OS at the commit under test, as the portable trees
+  # the specs run: the inspector bundle, the test framework and (macOS) the .app.
+  # Each spec's Basecamp step links these when BASECAMP_BUNDLE, BASECAMP_QT_MCP
+  # or BASECAMP_MACOS_APP is set, and builds with nix only when it is not. A
+  # spec that needs another output of this repo must be given one the same way.
+  build:
+    name: build (${{ matrix.os }})
+    environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Nix cache
+        uses: logos-co/setup-nix-cache-action@v1
+        with:
+          attic-token-ci: ${{ secrets.ATTIC_TOKEN_CI }}
+          attic-token-public: ${{ secrets.ATTIC_TOKEN_PUBLIC }}
+
+      # The PR's head commit (not the synthetic merge commit), or the pushed one.
+      # Blank for fork PRs, whose commit nix cannot fetch from logos-co: their
+      # specs run against master, which the public cache already holds.
+      - name: Resolve commit under test
+        id: commit
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
+            echo "sha=" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${{ github.event.pull_request.head.sha || github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Tarred from inside each out-link: its own symlinks (macOS frameworks)
+      # stay symlinks, and upload-artifact cannot strip the exec bits.
+      - name: Build Basecamp's portable outputs
+        shell: bash
+        env:
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+          outs=(bin-bundle-dir-inspector logos-qt-mcp)
+          if [ "$RUNNER_OS" = macOS ]; then outs+=(bin-macos-app); fi
+          mkdir -p portable
+          for o in "${outs[@]}"; do
+            nix build -L "github:logos-co/logos-basecamp${SHA:+/$SHA}#$o" -o "result-$o"
+            tar -czf "portable/$o.tar.gz" -C "result-$o" .
+          done
+          ls -la portable
+
+      - name: Upload Basecamp's portable outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: basecamp-portable-${{ matrix.os }}
+          path: portable/
+          if-no-files-found: error
+          compression-level: 0
+
+  # One job per spec per OS: a failure names itself, a re-run repeats one spec,
+  # and a flaky download in one spec no longer fails the other thirteen.
+  doctests:
+    name: ${{ matrix.spec }} (${{ matrix.os }})
+    needs: build
+    # Runs even when the other OS's build failed; without its own OS's portable
+    # trees, the download below fails it.
+    if: ${{ !cancelled() }}
+    environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        # What each spec covers. All of them build this commit (--release-for).
+        #   basecamp-modules-bundle — the Modules-view walk against the portable
+        #     bundle. (Its dev-app twin, basecamp-modules, is not run here: the
+        #     walk is identical, and the dev app is covered by build.yml's tests.)
+        #   basecamp-bundle-ui — shell, Settings and Package Manager on the
+        #     bundle.
+        #   basecamp-fullapi-ui — hermetic full-API check: a ui_qml plugin
+        #     consumes the full_api contract via an interface dependency and
+        #     drives every method type + receives typed events, all from local
+        #     install-portable outputs (no catalog, no peer connection). This
+        #     replaces the flaky cross-version chat check.
+        #   basecamp-fullapi-ui-qml — the QML-only twin of the above: a
+        #     ui_qml plugin with NO C++ backend consumes test_fullapi_cpp
+        #     directly from QML via the `logos` bridge (logos.callModule /
+        #     onModuleEvent), covering the QML-expressible surface.
+        #   basecamp-package-lifecycle — installs, upgrades (0.1.1 → 0.2.1),
+        #     and uninstalls a hand-crafted local .lgx through the bundle's
+        #     real confirmation dialogs (hermetic — no catalog packages are downloaded or installed).
+        #   basecamp-missing-deps — seeds an installed ui_qml app whose
+        #     core-module dependency exists nowhere, then asserts the sidebar
+        #     red-cross marker and the Missing Dependencies dialog raised by
+        #     the load gate (hermetic: hand-written user-dir fixture).
+        #   basecamp-dependency-gate — the same load gate across its whole
+        #     verdict vocabulary: seven seeded ui_qml apps pin one real
+        #     signed fixture module (and one embedded module) seven ways, and
+        #     the run asserts a satisfied range, a satisfied signer pin and an
+        #     uncheckable signer pin all LOAD, while an absent dependency, a
+        #     rejected version and a foreign publisher are each refused with
+        #     their own dialog (hermetic: keys, module and fixtures built here).
+        #   basecamp-failure-paths — hands a truncated .lgx and a fake .lgx
+        #     to the Package Manager and asserts Basecamp's Install Failed
+        #     notice surfaces each error (then proves the intact package
+        #     still gates normally; hermetic — nothing is installed).
+        #   basecamp-persistence — installs a hand-crafted local .lgx through
+        #     the install gate, then relaunches the bundle against the same
+        #     user-dir and asserts the app is rediscovered from disk alone;
+        #     a third launch runs a store-free copy of the bundle against a
+        #     moved user-dir and asserts true portability (zero /nix/store
+        #     refs in dynamic-link metadata, app + module still loadable)
+        #     (hermetic — no catalog packages are downloaded or installed).
+        #   basecamp-module-unload — stages the logos-test-modules full-API
+        #     chain into a user-dir and drives Settings → Module Inspector:
+        #     the protected core modules (package_manager, package_downloader,
+        #     capability_module) have their Load/Unload toggle disabled; a
+        #     leaf module loads/unloads without a dialog; unloading a module
+        #     with running dependents raises the cascade dialog and Unload
+        #     All tears down exactly the chain; the app reloads afterwards;
+        #     unloading the chain's middle module cascades to its dependent
+        #     only and leaves its own dependencies loaded.
+        #   basecamp-intents — app-to-app intents with QML-only fixtures from
+        #     tests/fixtures/intents: an undeclared request is refused, two
+        #     providers raise the chooser, and only the chosen one hears.
+        #   basecamp-partial-reinstall is excluded while its local HTTPS
+        #     catalog fails certificate verification on Ubuntu (curl error 60).
+        spec:
+          - basecamp-modules-bundle
+          - basecamp-bundle-ui
+          - basecamp-fullapi-ui
+          - basecamp-fullapi-ui-qml
+          - basecamp-shortcut-bridge
+          - basecamp-package-lifecycle
+          - basecamp-missing-deps
+          - basecamp-dependency-gate
+          - basecamp-failure-paths
+          - basecamp-persistence
+          - basecamp-module-unload
+          - basecamp-deep-links
+          - basecamp-intents
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Nix cache
+        uses: logos-co/setup-nix-cache-action@v1
+        with:
+          attic-token-ci: ${{ secrets.ATTIC_TOKEN_CI }}
+          attic-token-public: ${{ secrets.ATTIC_TOKEN_PUBLIC }}
+
+      # The portable bundle (#bin-bundle-dir) is relocatable: it carries the app
+      # and its Qt runtime, but NOT host graphics libraries (you can't bundle a
+      # GPU driver), so it loads libGL/glvnd from the host via the normal loader
+      # path — exactly as it would on a real Linux desktop. The minimal CI runner
+      # has none of these, so the bundle binary fails at load with
+      # `libOpenGL.so.0: cannot open shared object file`. Install the standard
+      # glvnd/mesa runtime so the launch behaves like a normal host. (The dev-app
+      # spec is unaffected — `#app` is a nix build that RPATHs libGL from the
+      # store; only the bundle relies on host libs. macOS needs none of this.)
+      - name: Install graphics runtime libraries (Linux bundle launch)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libopengl0 libglx0 libgl1 libegl1 libglu1-mesa libvulkan1
+
+      - name: Resolve commit under test
+        id: commit
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
+            echo "sha=" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${{ github.event.pull_request.head.sha || github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download Basecamp's portable outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: basecamp-portable-${{ matrix.os }}
+          path: ${{ runner.temp }}/portable
+
+      # The specs link these instead of building Basecamp. Made writable so the
+      # runner can clean them up (store modes are read-only).
+      - name: Unpack them for the specs
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/basecamp"
+          for f in "$RUNNER_TEMP"/portable/*.tar.gz; do
+            o=$(basename "$f" .tar.gz)
+            mkdir -p "$root/$o"
+            tar -xzf "$f" -C "$root/$o"
+          done
+          chmod -R u+w "$root"
+          {
+            echo "BASECAMP_BUNDLE=$root/bin-bundle-dir-inspector"
+            echo "BASECAMP_QT_MCP=$root/logos-qt-mcp"
+            if [ -d "$root/bin-macos-app" ]; then echo "BASECAMP_MACOS_APP=$root/bin-macos-app"; fi
+          } >> "$GITHUB_ENV"
+          ls "$root"
+
+      # --continue-on-fail so the run walks every step and the published report
+      # is complete. The job still fails (non-zero exit) if any step failed.
+      # --release-for pins `github:logos-co/logos-basecamp{release}` in the spec
+      # to the commit under test.
+      - name: Run ${{ matrix.spec }}
+        env:
+          SPEC: ${{ matrix.spec }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          nix run github:logos-co/logos-doctest -- run \
+            "doctests/$SPEC.test.yaml" \
+            --verbose \
+            --continue-on-fail \
+            --release-for "logos-basecamp=$SHA" \
+            --report "${{ runner.temp }}/basecamp-doctest-report.html"
+
+      - name: Stage report for upload
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p report-out
+          # Name it index.html so the published directory URL renders directly.
+          if [ -f "${{ runner.temp }}/basecamp-doctest-report.html" ]; then
+            cp "${{ runner.temp }}/basecamp-doctest-report.html" report-out/index.html
+          else
+            echo "<h1>No report produced</h1>" > report-out/index.html
+          fi
+
+      - name: Upload the execution report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: basecamp-doctest-report-${{ matrix.spec }}-${{ matrix.os }}
+          path: report-out/index.html
+          if-no-files-found: warn
+
+      - name: Verify markdown generation
+        env:
+          SPEC: ${{ matrix.spec }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          nix run github:logos-co/logos-doctest -- generate \
+            "doctests/$SPEC.test.yaml" \
+            --release-for "logos-basecamp=$SHA" \
+            -o "/tmp/$SPEC.md"
+          test -s "/tmp/$SPEC.md"
+
+  # The required checks are named `basecamp doc-tests (<os>)`. This keeps them:
+  # one verdict per OS, green only when that OS's build and every spec passed.
+  verdict:
+    name: basecamp doc-tests (${{ matrix.os }})
+    needs: [build, doctests]
+    if: ${{ always() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: Every job for ${{ matrix.os }} passed
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OS: ${{ matrix.os }}
+        run: |
+          set -euo pipefail
+          # filter=latest: a re-run of one failed spec counts with its new result.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" \
+            --jq ".jobs[] | select(.name | endswith(\"($OS)\")) | select(.name != \"basecamp doc-tests ($OS)\") | \"\(.conclusion) \(.name)\"" \
+            > jobs.txt
+          cat jobs.txt
+          total=$(wc -l < jobs.txt)
+          failed=$(grep -cv '^success ' jobs.txt || true)
+          if [ "$total" -eq 0 ]; then echo "::error::no jobs found for $OS"; exit 1; fi
+          if [ "$failed" -ne 0 ]; then echo "::error::$failed of $total job(s) for $OS did not pass"; exit 1; fi
+          echo "All $total job(s) for $OS passed."
+
+  # Every spec's run half on Windows runners, from ONE cross-build.
+  # logos-windows-ci builds the targets and extra-targets once, stages each under
+  # its name (the names the build halves give their out-links), runs each spec on
+  # its own runner and uploads basecamp-doctest-report-<spec>-windows-latest.
+  # The test-modules fixtures import Qt and the SDK from the bundle's bin/, as
+  # they do at runtime; `assemble` tells the import gate so.
+  windows:
+    name: windows
+    uses: logos-co/logos-windows-ci/.github/workflows/windows-ci.yml@v1
+    with:
+      targets: bin-bundle-dir-inspector logos-qt-mcp intents-fixtures depsvc-lgx
+      extra-targets: >-
+        {"lgx": {"ref": "github:logos-co/logos-package#packages.x86_64-windows.lgx"},
+         "lgpm": {"ref": "github:logos-co/logos-package-manager#packages.x86_64-windows.cli-portable"},
+         "port-test_fullapi_cpp": {"ref": "github:logos-co/logos-test-modules#modules.x86_64-windows.test_fullapi_cpp.install-portable"},
+         "port-test_fullapi_rust": {"ref": "github:logos-co/logos-test-modules#modules.x86_64-windows.test_fullapi_rust.install-portable"},
+         "port-test_fullapi_proxy": {"ref": "github:logos-co/logos-test-modules#modules.x86_64-windows.test_fullapi_proxy.install-portable"},
+         "port-test_fullapi_ui": {"ref": "github:logos-co/logos-test-modules#modules.x86_64-windows.test_fullapi_ui.install-portable"},
+         "port-test_fullapi_ui_qml": {"ref": "github:logos-co/logos-test-modules#modules.x86_64-windows.test_fullapi_ui_qml.install-portable"}}
+      assemble: >-
+        {"port-test_fullapi_cpp": ["bin-bundle-dir-inspector/bin"],
+         "port-test_fullapi_rust": ["bin-bundle-dir-inspector/bin"],
+         "port-test_fullapi_proxy": ["bin-bundle-dir-inspector/bin"],
+         "port-test_fullapi_ui": ["bin-bundle-dir-inspector/bin"],
+         "port-test_fullapi_ui_qml": ["bin-bundle-dir-inspector/bin"]}
+      doctest-specs: >-
+        doctests/basecamp-modules-bundle.test.yaml
+        doctests/basecamp-bundle-ui.test.yaml
+        doctests/basecamp-fullapi-ui.test.yaml
+        doctests/basecamp-fullapi-ui-qml.test.yaml
+        doctests/basecamp-shortcut-bridge.test.yaml
+        doctests/basecamp-package-lifecycle.test.yaml
+        doctests/basecamp-missing-deps.test.yaml
+        doctests/basecamp-dependency-gate.test.yaml
+        doctests/basecamp-failure-paths.test.yaml
+        doctests/basecamp-persistence.test.yaml
+        doctests/basecamp-module-unload.test.yaml
+        doctests/basecamp-deep-links.test.yaml
+        doctests/basecamp-intents.test.yaml
+      doctest-artifact: basecamp-doctest-report
+
+  publish-report:
+    name: Publish report to GitHub Pages
+    needs: [doctests, windows]
+    # Run even when tests fail — a failing run is exactly when you want to open
+    # the report. Skip on forks, where GITHUB_TOKEN can't push or comment.
+    if: ${{ always() && github.event.pull_request.head.repo.fork != true }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write          # push to the gh-pages branch
+      pull-requests: write      # post/update the PR comment
+
+    # Serialize Pages pushes so two refs can't race on the gh-pages branch.
+    concurrency:
+      group: gh-pages-publish
+      cancel-in-progress: false
+
+    steps:
+      # Reports only: the Windows leg also uploads its ~600 MB staged tree.
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: basecamp-doctest-report-*
+
+      # ── Rebuild the whole site each run ────────────────────────────────────
+      # `force_orphan: true` on the deploy step republishes gh-pages as a single
+      # commit containing exactly `publish_dir`, so `publish_dir` has to be the
+      # WHOLE site rather than just this run's report — hence seeding site/ from
+      # what is already published.
+      #
+      # peaceiris' `keep_files` cannot do this job alongside force_orphan: it
+      # checks out an orphan branch into an empty directory and copies
+      # publish_dir over it, so there are no pre-existing files left to keep
+      # (peaceiris/actions-gh-pages#455 — open since 2020, despite the README
+      # saying v4 would fix it). Doing the merge here also gives us somewhere to
+      # reap from, which `keep_files` never had: it only ever added, so
+      # `pr-<N>/` directories accumulated forever (119 directories / 1.1 GB at
+      # the tip, 116 of them for long-closed PRs, on top of ~1 GB of superseded
+      # snapshots in the branch history).
+      #
+      # `filter: blob:none` keeps this cheap: git fetches the tree listing and
+      # then lazily fetches only the blobs actually copied below, so the reaped
+      # directories are never downloaded at all.
+      #
+      # The job-level `gh-pages-publish` concurrency group is load-bearing now
+      # that we force-push: it serializes seed-and-publish as a unit, so two
+      # runs can't both seed from the same tip and have the second clobber the
+      # first.
+      - name: Check out the published site
+        id: live
+        continue-on-error: true      # gh-pages doesn't exist on the very first run
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: live
+          fetch-depth: 1
+          filter: blob:none
+
+      - name: Seed site/ from the published site, reaping stale reports
+        if: steps.live.outcome == 'success'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Reports outlive their PR by this long, so a link in a just-merged
+          # PR's comment still resolves. Lower it to shrink the branch further.
+          REPORT_RETENTION_DAYS: 14
+        run: |
+          set -euo pipefail
+          mkdir -p site
+
+          # main/ and the root landing page are only regenerated on pushes to the
+          # default branch, so a PR run has to carry them across or it would
+          # publish a site whose root 404s.
+          for keep in main index.html .nojekyll; do
+            if [ -e "live/$keep" ]; then cp -R "live/$keep" site/; fi
+          done
+
+          # Keep: open PRs, and PRs closed recently enough to still be read.
+          gh pr list --repo "$GITHUB_REPOSITORY" --state all --limit 1000 \
+            --json number,state,closedAt \
+            | jq -r --argjson days "$REPORT_RETENTION_DAYS" '
+                .[]
+                | select(.state == "OPEN"
+                         or (.closedAt != null
+                             and now - (.closedAt | fromdate) < $days * 86400))
+                | "pr-\(.number)"
+              ' \
+            | sort -u > keep.txt
+
+          kept=0
+          reaped=0
+          for dir in live/pr-*/; do
+            [ -d "$dir" ] || continue
+            name="$(basename "$dir")"
+            if grep -qxF "$name" keep.txt; then
+              cp -R "$dir" "site/$name"
+              kept=$((kept + 1))
+            else
+              reaped=$((reaped + 1))
+            fi
+          done
+          echo "Carried over $kept report(s); reaped $reaped stale report(s)."
+
+      - name: Arrange site directory
+        id: arrange
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="pr-${{ github.event.pull_request.number }}"
+          else
+            BASE="main"
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+
+          # This run's reports are authoritative for $BASE — drop any copy carried
+          # over by the seed step, so a report this run didn't produce doesn't
+          # linger and get linked from the landing page below.
+          rm -rf "site/$BASE"
+          mkdir -p "site/$BASE"
+          found=""
+          # Artifacts are basecamp-doctest-report-<spec>-<os>. Split on the OS
+          # suffix: every spec name has dashes in it.
+          for dir in artifacts/basecamp-doctest-report-*/; do
+            [ -f "$dir/index.html" ] || continue
+            n="$(basename "$dir")"; n="${n#basecamp-doctest-report-}"
+            for os in ubuntu-latest macos-latest windows-latest; do
+              case "$n" in
+                *-"$os")
+                  spec="${n%-"$os"}"
+                  mkdir -p "site/$BASE/$spec/$os"
+                  cp "$dir/index.html" "site/$BASE/$spec/$os/index.html"
+                  found="$found $spec/$os"
+                  ;;
+              esac
+            done
+          done
+          echo "found=${found# }" >> "$GITHUB_OUTPUT"
+
+          # One row per spec, linking each OS it ran on. $1: href prefix.
+          spec_rows() {
+            for d in site/"$BASE"/*/; do
+              [ -d "$d" ] || continue
+              spec="$(basename "$d")"
+              printf '<li><strong>%s</strong> — ' "$spec"
+              sep=""
+              for os in ubuntu-latest macos-latest windows-latest; do
+                if [ -d "site/$BASE/$spec/$os" ]; then
+                  printf '%s<a href="%s%s/%s/">%s</a>' "$sep" "$1" "$spec" "$os" "$os"
+                  sep=" · "
+                fi
+              done
+              echo "</li>"
+            done
+          }
+
+          # Landing page for this ref.
+          {
+            echo "<!doctype html><meta charset=utf-8>"
+            echo "<title>basecamp doc-test reports — $BASE</title>"
+            echo "<style>body{font:16px system-ui;margin:40px;max-width:720px}a{color:#2563eb}li{margin:.35em 0}</style>"
+            echo "<h1>basecamp doc-test reports</h1>"
+            echo "<p><strong>$BASE</strong> · commit <code>${GITHUB_SHA::7}</code></p><ul>"
+            spec_rows "./"
+            echo "</ul>"
+          } > "site/$BASE/index.html"
+
+          # Root landing page for https://<owner>.github.io/<repo>/. Without an
+          # index.html at the Pages root, that URL 404s even though the per-ref
+          # reports exist under main/ and pr-<N>/. Regenerate it on pushes to the
+          # default branch (BASE=main) so the home page always points at the
+          # latest main/ reports. PR runs preserve it via the seed step above.
+          if [ "$BASE" = "main" ]; then
+            {
+              echo "<!doctype html><meta charset=utf-8>"
+              echo "<title>basecamp doc-test reports</title>"
+              echo "<style>body{font:16px system-ui;margin:40px;max-width:720px}a{color:#2563eb}li{margin:.35em 0}</style>"
+              echo "<h1>basecamp doc-test reports</h1>"
+              echo "<p>Executable end-to-end doc-tests for" \
+                   "<a href=\"https://github.com/${GITHUB_REPOSITORY}\">${GITHUB_REPOSITORY##*/}</a>," \
+                   "rendered as a two-column HTML report (each command/action run alongside its output).</p>"
+              echo "<h2>Latest (main)</h2><ul>"
+              spec_rows "./main/"
+              echo "</ul>"
+              echo "<p>Per-pull-request reports are published under <code>pr-&lt;N&gt;/</code>" \
+                   "and linked from a comment on each pull request.</p>"
+            } > "site/index.html"
+          fi
+
+      - name: Deploy to gh-pages
+        if: steps.arrange.outputs.found != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          # site/ is the complete site (seeded above), so republish the branch as
+          # a single orphan commit. This replaces keep_files: it keeps the branch
+          # permanently at one commit instead of appending a full snapshot of an
+          # ever-growing tree on every one of the ~15 publishes a day.
+          force_orphan: true
+          commit_message: "Publish basecamp doc-test report for ${{ steps.arrange.outputs.base }} (${{ github.sha }})"
+
+      - name: Comment on PR with report links
+        if: ${{ github.event_name == 'pull_request' && steps.arrange.outputs.found != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const base = "${{ steps.arrange.outputs.base }}";
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const root = `https://${owner}.github.io/${repo}/${base}`;
+            const cells = "${{ steps.arrange.outputs.found }}".trim().split(/\s+/).filter(Boolean);
+
+            // One line per spec, however many OSes it ran on.
+            const bySpec = new Map();
+            for (const cell of cells) {
+              const [spec, os] = cell.split("/");
+              if (!bySpec.has(spec)) bySpec.set(spec, []);
+              bySpec.get(spec).push(os);
+            }
+            const links = [...bySpec.entries()]
+              .map(([spec, oses]) =>
+                `- \`${spec}\` — ` + oses.map(os => `[${os}](${root}/${spec}/${os}/)`).join(" · "))
+              .join("\n");
+            const marker = "<!-- basecamp-doctest-report-links -->";
+            const body =
+              `${marker}\n` +
+              `### 📊 basecamp doc-test reports\n\n` +
+              `This commit of basecamp, built once per OS and driven by each doc-test, ` +
+              `rendered alongside the commands/actions actually run and their output ` +
+              `(updated each run, commit \`${context.sha.slice(0,7)}\`):\n\n` +
+              `${links}\n\n` +
+              `[All reports for this PR](${root}/)\n\n` +
+              `_Pages can take a minute to update after the run finishes._`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number: context.issue.number, per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: context.issue.number, body });
+            }

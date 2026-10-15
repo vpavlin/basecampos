@@ -1,0 +1,678 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import Logos.Controls
+import Logos.Icons
+import Logos.Theme
+import Basecamp.Backend 1.0
+
+Dialog {
+    id: root
+
+    property var metadata: ({})
+    property var requiredPackagesModel: null
+    property int installStage: InstallStage.None
+    // Reason for a failed install, shown in the footer. Set by OverlayDialogs'
+    // onCatalogInstallFailed; cleared on each (re)open.
+    property string installError: ""
+
+    signal installRequested(string name, string repositoryUrl)
+    signal launchRequested(string name)
+    signal versionChangeRequested(string name, string repositoryUrl, var versionPins, var optionalSelection, var optionalVersionPins)
+    signal uninstallRequested(string name, string repositoryUrl)
+
+    function openWith(metadata_) {
+        root.metadata = metadata_ || ({})
+        d.pickedVersions = ({})
+        d.optionalSelection = ({})
+        d.optionalPickedVersions = ({})
+        root.installStage = root.metadata.installStage || InstallStage.None
+        root.installError = ""   // clear any stale error from a prior open
+        open()
+    }
+
+    function refreshPreview() {
+        root.metadata = Object.assign({}, root.metadata, {resolutionPending: true})
+        root.versionChangeRequested(d.targetName, d.targetRepoUrl, d.buildVersionPins(),
+                                    d.optionalSelection, d.optionalPickedVersions)
+    }
+
+    function markInstallComplete() {
+        root.metadata = Object.assign({}, root.metadata, {
+            isInstalled: true,
+            installStatus: InstallStatus.Installed,
+            installedVersion: d.targetVersion,
+        })
+    }
+
+    QtObject {
+        id: d
+
+        readonly property bool installing:
+            root.installStage === InstallStage.Downloading
+            || root.installStage === InstallStage.Queued
+            || root.installStage === InstallStage.Installing
+        readonly property string stageLabel: {
+            switch (root.installStage) {
+            case InstallStage.Downloading: return qsTr("Downloading…")
+            case InstallStage.Queued:      return qsTr("Queued")
+            case InstallStage.Installing:  return qsTr("Installing…")
+            case InstallStage.Installed:   return qsTr("Installed")
+            case InstallStage.Failed:      return qsTr("Failed")
+            }
+            return ""
+        }
+
+        property var pickedVersions: ({})
+        property var optionalSelection: ({})
+        property var optionalPickedVersions: ({})
+        // The backend's default (`selected`) until the user toggles the row.
+        function isOptionalSelected(p) {
+            if (p.error || p.requiredFor) return false
+            if (p.installedOnly) return true
+            const own = d.optionalSelection[p.name]
+            return own !== undefined ? own : p.selected !== false
+        }
+        readonly property var optionalPackages: root.metadata.optionalPackages || []
+        onOptionalPackagesChanged: {
+            // Required-version changes resolve a new optional set. Keep a
+            // user's choice only while that version is still permitted.
+            var picks = {}
+            d.optionalPackages.forEach(function(p) {
+                const picked = d.optionalPickedVersions[p.name]
+                if (!p.error && picked && (picked === p.version
+                    || (p.versions || []).some(function(v) {
+                        return v && v.manifest && v.manifest.version === picked
+                    })))
+                    picks[p.name] = picked
+            })
+            d.optionalPickedVersions = picks
+        }
+
+        // ── Target app derived fields ──
+        readonly property string targetName:        root.metadata.name || ""
+        readonly property string targetRepoUrl:     root.metadata.repositoryUrl || ""
+        readonly property string targetVersion:     root.metadata.selectedVersion || ""
+        readonly property string targetDisplayName: root.metadata.displayName || root.metadata.name || ""
+        readonly property string targetIcon: {
+            const raw = root.metadata.icon || ""
+            if (raw.length === 0)       return ""
+            if (raw.indexOf("://") < 0) return ""
+            return raw
+        }
+        readonly property int tileSize: 64
+
+        readonly property bool   installed:        root.metadata.isInstalled === true
+        readonly property string installedVersion: root.metadata.installedVersion || ""
+        readonly property string latestVersion:    root.metadata.latestVersion || ""
+        readonly property bool   hasUpdate:
+            d.installed && d.latestVersion.length > 0
+            && d.installedVersion !== d.latestVersion
+        readonly property int installStatus:
+            root.metadata.installStatus !== undefined
+                ? root.metadata.installStatus
+                : InstallStatus.NotInstalled
+
+        readonly property string actionMode: {
+            if (d.installing) return "installing"
+            switch (d.installStatus) {
+            case InstallStatus.UpgradeAvailable:   return "update"
+            case InstallStatus.DowngradeAvailable: return "downgrade"
+            case InstallStatus.DifferentHash:      return "reinstall"
+            case InstallStatus.Installed:
+                return root.metadata.optionalChangesPending ? "install" : "launch"
+            }
+            return "install"
+        }
+        readonly property string actionText: {
+            if (root.metadata.resolutionPending && !d.installing && d.actionMode !== "launch")
+                return qsTr("Checking packages…")
+            switch (d.actionMode) {
+            case "installing": return d.stageLabel
+            case "install":    return qsTr("Install")
+            case "update":     return qsTr("Update")
+            case "downgrade":  return qsTr("Downgrade")
+            case "reinstall":  return qsTr("Reinstall")
+            case "launch":     return qsTr("Launch")
+            }
+            return ""
+        }
+
+        // Uninstall affordance. Keyed on installedVersion, NOT `installed` —
+        // the latter is `installStatus === Installed`, which goes false the
+        // moment an upgrade is available even though the package is very much
+        // on disk. Embedded packages and main_ui are structurally protected.
+        readonly property string installType: root.metadata.installType || ""
+        readonly property bool canUninstall:
+            d.installedVersion.length > 0
+            && !d.installing
+            && d.installType !== "embedded"
+            && d.targetName !== "main_ui"
+
+        readonly property bool actionEnabled:
+            d.targetName.length > 0
+            && !d.installing
+            && d.installingBuckets === 0
+            && (d.actionMode === "launch"
+                || (!root.metadata.resolutionPending && !d.hasResolutionErrors))
+
+        readonly property int totalDeps:
+            root.requiredPackagesModel ? root.requiredPackagesModel.visibleCount : 0
+        readonly property int installedDepsCount:
+            root.requiredPackagesModel ? root.requiredPackagesModel.installedCount : 0
+        readonly property bool hasResolutionErrors:
+            root.requiredPackagesModel ? root.requiredPackagesModel.hasResolutionErrors : false
+        readonly property string counterText:
+            d.installedDepsCount + " / " + d.totalDeps
+
+        // ── Fixed section heights ──
+        readonly property int showcaseHeight:   200
+        readonly property int versionRowHeight: 52
+
+        // ── Required-packages list ──
+        readonly property int depsRowHeight: 56
+        readonly property int depsMaxRows:   6
+        readonly property int depsWantedHeight: d.depsRowHeight * d.totalDeps
+
+        readonly property int installFreshBuckets:
+            root.requiredPackagesModel ? root.requiredPackagesModel.installFreshCount : 0
+        readonly property int upgradeBuckets:
+            root.requiredPackagesModel ? root.requiredPackagesModel.upgradeCount : 0
+        readonly property int reinstallBuckets:
+            root.requiredPackagesModel ? root.requiredPackagesModel.reinstallCount : 0
+        readonly property int alreadyInstalledBuckets:
+            root.requiredPackagesModel ? root.requiredPackagesModel.alreadyInstalledCount : 0
+        readonly property int installingBuckets:
+            root.requiredPackagesModel ? root.requiredPackagesModel.installingCount : 0
+        readonly property int errorBuckets:
+            root.requiredPackagesModel ? root.requiredPackagesModel.errorCount : 0
+        readonly property int changingBuckets:
+            d.installFreshBuckets + d.upgradeBuckets + d.reinstallBuckets
+
+        function buildFooterText() {
+            if (d.installing) {
+                if (d.changingBuckets > 0)
+                    return qsTr("%1 %2 package(s)…")
+                        .arg(d.stageLabel).arg(d.changingBuckets)
+                return d.stageLabel
+            }
+
+            if (d.installingBuckets > 0 && d.changingBuckets === 0) {
+                return qsTr("%1 of %2's required package(s) are currently being installed. "
+                            + "Wait for the active install to finish before launching %2.")
+                    .arg(d.installingBuckets).arg(d.targetDisplayName)
+            }
+
+            // Top-level + deps all match disk → nothing to do. The action
+            // button reads "Launch"; hide the footer entirely.
+            if (d.changingBuckets === 0) return ""
+
+            // Single-package (no separate deps): direct sentence tied to the
+            // top-level's actionMode.
+            if (d.totalDeps <= 1) {
+                switch (d.actionMode) {
+                case "install":
+                    return qsTr("%1 will be installed.").arg(d.targetDisplayName)
+                case "update":
+                    return d.installedVersion.length > 0 && d.targetVersion.length > 0
+                        ? qsTr("%1 will be updated from %2 to %3.")
+                            .arg(d.targetDisplayName).arg(d.installedVersion).arg(d.targetVersion)
+                        : qsTr("%1 will be updated.").arg(d.targetDisplayName)
+                case "downgrade":
+                    return d.installedVersion.length > 0 && d.targetVersion.length > 0
+                        ? qsTr("%1 will be downgraded from %2 to %3.")
+                            .arg(d.targetDisplayName).arg(d.installedVersion).arg(d.targetVersion)
+                        : qsTr("%1 will be downgraded.").arg(d.targetDisplayName)
+                case "reinstall":
+                    return qsTr("%1 will be reinstalled.").arg(d.targetDisplayName)
+                }
+                return ""
+            }
+
+            // Multi-package
+            const missing  = d.installFreshBuckets
+            const outdated = d.upgradeBuckets
+            const broken   = d.reinstallBuckets
+
+            let stateText, actionText
+            if (outdated > 0 && missing === 0 && broken === 0) {
+                stateText  = qsTr("have become outdated")
+                actionText = qsTr("please update your dependencies")
+            } else if (missing > 0 && outdated === 0 && broken === 0) {
+                stateText  = qsTr("are missing")
+                actionText = qsTr("please install your dependencies")
+            } else if (broken > 0 && outdated === 0 && missing === 0) {
+                stateText  = qsTr("need to be reinstalled")
+                actionText = qsTr("please reinstall your dependencies")
+            } else {
+                stateText  = qsTr("need updates")
+                actionText = qsTr("please update your dependencies")
+            }
+
+            return qsTr("%1 out of %2 required package dependencies %3, "
+                        + "%4 to be able to use the %5 application.")
+                .arg(d.changingBuckets)
+                .arg(d.totalDeps)
+                .arg(stateText)
+                .arg(actionText)
+                .arg(d.targetDisplayName)
+        }
+        readonly property string footerText: buildFooterText()
+
+        readonly property var selectedVersionRow: {
+            const list = root.metadata.versions || []
+            // Version lives at manifest.version, not a top-level `version`;
+            // matching the latter always fell through to list[0] (newest).
+            for (var i = 0; i < list.length; ++i) {
+                const v = (list[i] && list[i].manifest) ? list[i].manifest.version : undefined
+                if (v === d.targetVersion) return list[i]
+            }
+            return list.length > 0 ? list[0] : ({})
+        }
+
+        readonly property string sizeText:
+            d.formatBytes(root.requiredPackagesModel
+                              && root.requiredPackagesModel.totalDownloadBytes > 0
+                          ? root.requiredPackagesModel.totalDownloadBytes
+                          : d.selectedVersionRow.size)
+        readonly property string releasedText: d.formatDate(d.selectedVersionRow.releasedAt)
+
+        function buildVersionPins() {
+            const pins = Object.assign({}, d.pickedVersions)
+            if (d.targetVersion.length > 0 && !(d.targetName in pins)) {
+                pins[d.targetName] = d.targetVersion
+            }
+            return pins
+        }
+
+        function formatBytes(n) {
+            if (!n || n <= 0) return ""
+            const units = ["B", "KB", "MB", "GB"]
+            var i = 0
+            var v = n
+            while (v >= 1024 && i < units.length - 1) { v /= 1024; ++i }
+            return (Math.round(v * 10) / 10) + " " + units[i]
+        }
+
+        function formatDate(iso) {
+            if (!iso) return ""
+            const dt = new Date(iso)
+            if (isNaN(dt.getTime())) return ""
+            return dt.toLocaleDateString(Qt.locale(), Locale.ShortFormat)
+        }
+    }
+
+    modal: true
+    anchors.centerIn: parent
+    width: 560
+    height: root.parent
+            ? Math.min(implicitHeight, root.parent.height - 2 * Theme.spacing.large)
+            : implicitHeight
+    padding: 0
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+    background: Rectangle {
+        color: Theme.palette.backgroundSecondary
+        border.color: Theme.palette.borderSubtle
+        border.width: 1
+        radius: Theme.spacing.radiusLarge
+    }
+
+    contentItem: ColumnLayout {
+        spacing: Theme.spacing.large
+
+        // ─── Header ───
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.minimumHeight: implicitHeight
+            Layout.fillHeight: false
+            Layout.topMargin: Theme.spacing.large
+            Layout.leftMargin: Theme.spacing.large
+            Layout.rightMargin: Theme.spacing.large
+
+            LogosText {
+                Layout.fillWidth: true
+                text: qsTr("Add Application")
+                font.pixelSize: Theme.typography.pageTitleText
+                font.weight: Theme.typography.weightBold
+                color: Theme.palette.text
+            }
+
+            LogosIconButton {
+                objectName: "addApplicationDialog.closeButton"
+                iconSource: LogosIcons.close
+                size: 28
+                iconSize: 14
+                background: Rectangle {
+                    radius: width / 2
+                    color: Theme.palette.surfaceRaised
+                }
+                onClicked: root.close()
+            }
+        }
+
+        // ─── App showcase ───
+        Rectangle {
+            objectName: "addApplicationDialog.showcase"
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.spacing.large
+            Layout.rightMargin: Theme.spacing.large
+            Layout.preferredHeight: d.showcaseHeight
+            Layout.minimumHeight: d.showcaseHeight
+            color: Theme.palette.background
+            radius: Theme.spacing.radiusMedium
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                spacing: Theme.spacing.small
+
+                LogosTile {
+                    Layout.alignment: Qt.AlignHCenter
+                    label: d.targetDisplayName || d.targetName
+                    source: d.targetIcon
+                    fallbackColor: d.installed
+                                   ? Theme.palette.surfaceRaised
+                                   : AppColors.colorForApp(d.targetName)
+                    tileSize: d.tileSize
+                    interactive: false
+                }
+
+                LogosText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: d.targetDisplayName
+                    font.pixelSize: Theme.typography.primaryText
+                    font.weight: Theme.typography.weightMedium
+                    color: Theme.palette.text
+                }
+            }
+        }
+
+        // ─── Description ───
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.minimumHeight: implicitHeight
+            Layout.fillHeight: false
+            Layout.leftMargin: Theme.spacing.large
+            Layout.rightMargin: Theme.spacing.large
+            spacing: Theme.spacing.tiny
+
+            LogosText {
+                text: qsTr("Description")
+                font.pixelSize: Theme.typography.secondaryText
+                color: Theme.palette.textTertiary
+            }
+            LogosText {
+                Layout.fillWidth: true
+                text: root.metadata.description || ""
+                wrapMode: Text.WordWrap
+                font.pixelSize: Theme.typography.primaryText
+                color: Theme.palette.text
+            }
+        }
+
+        // ─── Version row: picker | date | size | Install | overflow ───
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.spacing.large
+            Layout.rightMargin: Theme.spacing.large
+            Layout.preferredHeight: d.versionRowHeight
+            Layout.minimumHeight: d.versionRowHeight
+            color: Theme.palette.background
+            radius: Theme.spacing.radiusMedium
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: Theme.spacing.medium
+                anchors.rightMargin: Theme.spacing.small
+                spacing: Theme.spacing.large
+
+                LogosText {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: d.targetVersion ? ("Version " + d.targetVersion) : ""
+                    color: Theme.palette.text
+                    font.pixelSize: Theme.typography.secondaryText
+                    font.weight: Theme.typography.weightMedium
+                }
+                LogosText {
+                    objectName: "addApplicationDialog.releasedText"
+                    Layout.alignment: Qt.AlignVCenter
+                    text: d.releasedText
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.secondaryText
+                }
+                LogosText {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: d.sizeText
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.secondaryText
+                }
+
+                Item { Layout.fillWidth: true }
+
+                LogosButton {
+                    id: uninstallButton
+                    objectName: "addApplicationDialog.uninstallButton"
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredHeight: 40
+                    Layout.leftMargin: Theme.spacing.small
+                    Layout.rightMargin: Theme.spacing.small
+                    visible: d.canUninstall
+                    text: qsTr("Uninstall")
+                    onClicked: {
+                        root.uninstallRequested(d.targetName, d.targetRepoUrl)
+                        root.close()
+                    }
+                    contentItem: LogosText {
+                        text: uninstallButton.text
+                        color: Theme.palette.error
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Item {}
+                }
+
+                LogosButton {
+                    id: actionButton
+                    objectName: "addApplicationDialog.primaryButton"
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredWidth: 110
+                    Layout.preferredHeight: 40
+                    enabled: d.actionEnabled
+                    text: d.actionText
+                    onClicked: {
+                        if (d.actionMode === "launch") {
+                            root.launchRequested(d.targetName)
+                            root.close()
+                            return
+                        }
+                        root.installRequested(d.targetName, d.targetRepoUrl)
+                    }
+                    background: Rectangle {
+                        radius: Theme.spacing.radiusXlarge
+                        color: !actionButton.enabled
+                                   ? Theme.palette.backgroundMuted
+                                   : (actionButton.isActive
+                                          ? Theme.palette.accentOrangeMid
+                                          : Theme.palette.accentOrange)
+                    }
+                }
+            }
+        }
+
+        // ─── Required Packages section ───
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.minimumHeight: implicitHeight
+            Layout.fillHeight: false
+            Layout.leftMargin: Theme.spacing.large
+            Layout.rightMargin: Theme.spacing.large
+            Layout.topMargin: Theme.spacing.medium
+
+            LogosText {
+                Layout.fillWidth: true
+                text: qsTr("Required Packages")
+                font.pixelSize: Theme.typography.panelTitleText
+                font.weight: Theme.typography.weightMedium
+                color: Theme.palette.text
+            }
+            LogosText {
+                text: d.counterText
+                font.pixelSize: Theme.typography.primaryText
+                color: Theme.palette.textSecondary
+            }
+        }
+
+        LogosListView {
+            objectName: "addApplicationDialog.requiredPackages"
+
+            // Full-bleed, unlike every other section: the scrollbar is an
+            // overlay painted at the view's right edge, so insetting the view
+            // parks it 20px into the dialog, on top of each row's stage badge.
+            // The 16px moves onto the rows instead (below), which leaves the
+            // bar hugging the dialog edge and the content clear of it.
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.preferredHeight: Math.min(d.depsWantedHeight,
+                                             d.depsRowHeight * d.depsMaxRows)
+            Layout.maximumHeight: Layout.preferredHeight
+            Layout.minimumHeight: d.depsRowHeight
+
+            interactive: d.depsWantedHeight > height
+            spacing: 0
+            model: root.requiredPackagesModel
+
+            delegate: PackageRowDelegate {
+                width: ListView.view.width
+                height: d.depsRowHeight
+
+                // The dialog's content margin, carried by the row rather than
+                // the view. Padding moves the contentItem only, so the row's
+                // separator rule still runs edge to edge.
+                leftPadding: Theme.spacing.large
+                rightPadding: Theme.spacing.large
+
+                appRow: model
+                installing: d.installing
+
+                onVersionPicked: function(rowName, newVersion) {
+                    var nextPicks = Object.assign({}, d.pickedVersions)
+                    nextPicks[rowName] = newVersion
+                    d.pickedVersions = nextPicks
+
+                    root.refreshPreview()
+                }
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: optionalHeading.implicitHeight + d.depsRowHeight + spacing
+            visible: d.optionalPackages.length > 0
+            LogosText {
+                id: optionalHeading
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.spacing.large
+                Layout.rightMargin: Theme.spacing.large
+                text: qsTr("Optional Packages")
+                font.pixelSize: Theme.typography.panelTitleText
+                font.weight: Theme.typography.weightMedium
+                color: Theme.palette.text
+            }
+            LogosListView {
+                objectName: "addApplicationDialog.optionalPackages"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: Math.min(d.optionalPackages.length * d.depsRowHeight,
+                                                 3 * d.depsRowHeight)
+                Layout.maximumHeight: Layout.preferredHeight
+                Layout.minimumHeight: d.depsRowHeight
+                interactive: contentHeight > height
+                clip: true
+                spacing: 0
+                model: d.optionalPackages
+                delegate: PackageRowDelegate {
+                    required property var modelData
+                    width: ListView.view ? ListView.view.width : 0
+                    height: d.depsRowHeight
+                    // A package that comes only with an optional sits under it, without a checkbox.
+                    leftPadding: Theme.spacing.large + (modelData.requiredFor ? 24 + Theme.spacing.small : 0)
+                    rightPadding: Theme.spacing.large
+                    appRow: modelData
+                    installing: d.installing
+                    selectable: !modelData.requiredFor
+                    selectionObjectName: "addApplicationDialog.optional." + modelData.name
+                    selected: d.isOptionalSelected(modelData)
+                    selectedVersion: d.optionalPickedVersions[modelData.name] || ""
+                    onSelectionToggled: function(checked) {
+                        var selected = Object.assign({}, d.optionalSelection)
+                        selected[modelData.name] = checked
+                        d.optionalSelection = selected
+                        root.refreshPreview()
+                    }
+                    onVersionPicked: function(name, version) {
+                        var picks = Object.assign({}, d.optionalPickedVersions)
+                        picks[name] = version
+                        d.optionalPickedVersions = picks
+                        root.refreshPreview()
+                    }
+                }
+            }
+        }
+
+        // ─── Footer summary ───
+        // On failure, show the error here; falls back to a generic line if the
+        // backend didn't carry a reason.
+        LogosText {
+            objectName: "addApplicationDialog.errorText"
+            Layout.fillWidth: true
+            Layout.minimumHeight: implicitHeight
+            Layout.leftMargin: Theme.spacing.large
+            Layout.rightMargin: Theme.spacing.large
+            Layout.topMargin: Theme.spacing.medium
+            Layout.bottomMargin: Theme.spacing.large
+            visible: root.installStage === InstallStage.Failed
+            wrapMode: Text.WordWrap
+            font.pixelSize: Theme.typography.secondaryText
+            color: Theme.palette.error
+            text: root.installError.length > 0
+                  ? qsTr("Install failed: %1").arg(root.installError)
+                  : qsTr("Install failed. Please try again.")
+        }
+        // Resolver couldn't resolve one or more deps. Surfaced as a
+        // warning-tone line
+        LogosText {
+            objectName: "addApplicationDialog.resolutionBanner"
+            Layout.fillWidth: true
+            Layout.minimumHeight: implicitHeight
+            Layout.leftMargin: Theme.spacing.large
+            Layout.rightMargin: Theme.spacing.large
+            Layout.topMargin: Theme.spacing.medium
+            Layout.bottomMargin: Theme.spacing.large
+            visible: root.installStage !== InstallStage.Failed && d.hasResolutionErrors
+            wrapMode: Text.WordWrap
+            font.pixelSize: Theme.typography.secondaryText
+            color: Theme.palette.warning
+            text: qsTr("Some required packages could not be resolved. "
+                       + "Adjust versions or check your repositories.")
+        }
+
+        // Steady-state breakdown of what this install will do.
+        LogosText {
+            objectName: "addApplicationDialog.footerText"
+            Layout.fillWidth: true
+            Layout.minimumHeight: implicitHeight
+            Layout.leftMargin: Theme.spacing.large
+            Layout.rightMargin: Theme.spacing.large
+            Layout.topMargin: Theme.spacing.medium
+            Layout.bottomMargin: Theme.spacing.large
+            visible: root.installStage !== InstallStage.Failed
+                     && !d.hasResolutionErrors
+                     && d.footerText.length > 0
+            wrapMode: Text.WordWrap
+            font.pixelSize: Theme.typography.secondaryText
+            color: Theme.palette.textTertiary
+            text: d.footerText
+        }
+    }
+}

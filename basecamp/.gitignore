@@ -1,0 +1,23 @@
+**/build/**
+.DS_Store
+.vscode/**
+.cursor/
+.cache
+result
+result-*
+*.swp
+*.swo
+.idea/
+qt-ios/build-ios-sim/*
+qt-ios/build-ios-device/*
+qt-ios/.ios-build-cache/
+build-ios-sim/*
+result-mcp
+qml-mcp
+
+# doctest run artifacts (generated reports/screenshots and build symlinks)
+doctests/outputs/
+doctests/result*
+
+# user-dirs staged by doctest run: blocks when executed from the repo root
+testdata/

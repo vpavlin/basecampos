@@ -1,0 +1,956 @@
+#include "MainUIBackend.h"
+
+#include <QDebug>
+
+#include "IntentBridgeAdapter.h"
+#include "IntentBroker.h"
+#include "IntentRegistry.h"
+#include "ShellIntentChooser.h"
+#include "ShellIntentInstaller.h"
+#include "ShellIntentEndpoint.h"
+#include "ShellIntents.h"
+#include "links/LinkRequestCoordinator.h"
+#include "UIPluginPresenter.h"
+#include "AppsModel.h"
+#include "BasecampModelRoles.h"
+#include "ShellSections.h"
+#include "CoreModuleManager.h"
+#include "ModuleInstanceModel.h"
+#include "UIPluginManager.h"
+#include "PackageCoordinator.h"
+#include "BuildInfo.h"
+
+#include <QDebug>
+#include <QJSValue>
+#include <QMap>
+#include <QTimer>
+
+// The shell's own capability tables and their registration live in
+// ShellIntents so a unit test can reach them; this file cannot be linked into
+// the test harness. Unqualified below to keep the use sites unchanged.
+using namespace ShellIntents;
+
+MainUIBackend::MainUIBackend(LogosAPI* logosAPI, ICoreRuntime* core, QObject* parent)
+    : QObject(parent)
+    , m_currentActiveSectionIndex(0)
+    , m_logosAPI(logosAPI)
+    , m_core(core)
+    , m_ownsLogosAPI(false)
+    , m_coreModuleManager(nullptr)
+    , m_uiPluginManager(nullptr)
+    , m_packageCoordinator(nullptr)
+    , m_uiModulesModel(new ModuleInstanceModel(this))
+    , m_coreModulesModel(new ModuleInstanceModel(this))
+{
+    if (!m_logosAPI) {
+        m_logosAPI = new LogosAPI("core", this);
+        m_ownsLogosAPI = true;
+    }
+
+    // Order matters: CoreModuleManager must exist before UIPluginManager so
+    // the latter's ctor can receive a valid pointer; UIPluginManager must
+    // exist before PackageCoordinator for the same reason. Qt tears children
+    // down in reverse order at destruction, so PackageCoordinator dies first
+    // (stops talking to the module), then UIPluginManager (tears down
+    // widgets while CoreModuleManager's C API handle is still valid).
+
+
+    m_appsModel         = new AppsModel(this);
+
+    // ── Intents: constructed FIRST, and the order is load-bearing ───────
+    //
+    // Qt destroys children in reverse construction order, and IntentBridgeAdapter
+    // tracks bridges that UIPluginManager owns indirectly. Built after it, the
+    // adapter would die first and those bridge destructors would call
+    // bridgeDestroyed() on freed memory. See ~IntentBridgeAdapter.
+    m_intentRegistry = new IntentRegistry(this);
+    m_intentBroker   = new IntentBroker(m_intentRegistry, /*presenter=*/nullptr, this);
+    m_intentAdapter  = new IntentBridgeAdapter(m_intentBroker, this);
+
+    m_coreModuleManager = new CoreModuleManager(m_logosAPI, m_core, this);
+    m_uiPluginManager   = new UIPluginManager(m_logosAPI, m_coreModuleManager, this);
+    m_packageCoordinator    = new PackageCoordinator(m_logosAPI, m_coreModuleManager, m_uiPluginManager, m_appsModel, this);
+    m_appsModel->setInstallRegistry(m_packageCoordinator->installRegistry());
+
+    // Setter-injection closes the cycle — UIPluginManager queries
+    // PackageCoordinator for installType / missing-deps when building its
+    // uiModules() list, and consumes uiPluginsFetched for its UI-specific
+    // metadata cache. See UIPluginManager::setPackageCoordinator for the signal
+    // connections it sets up internally.
+    m_uiPluginManager->setPackageCoordinator(m_packageCoordinator);
+
+    // Bridges become intent-capable from here on. PluginLoader attaches each
+    // ui_qml app's bridge as it loads, before its QML runs.
+    m_uiPluginManager->setIntentAdapter(m_intentAdapter);
+
+    m_intentPresenter = new UIPluginPresenter(
+        m_uiPluginManager,
+        [this]() { return m_currentActiveSectionIndex; },
+        this);
+    m_intentPresenter->setDialogProbe([this]() { return m_overlayActive; });
+    m_intentBroker->setPresenter(m_intentPresenter);
+    wireIntents();
+
+    // Forward manager signals into our own signals of the same name. QML
+    // binds to these; by funneling through the facade we keep a stable
+    // surface regardless of which manager emitted them.
+    //
+    // UIPluginManager drives uiModulesChanged/launcherAppsChanged on load/
+    // unload events; PackageCoordinator's own uiModulesChanged/launcherAppsChanged
+    // already flow through UIPluginManager (wired in setPackageCoordinator) so
+    // we only need to listen to UIPluginManager here. The refresh slot
+    // repopulates m_uiModulesModel in one shot; QML consumers listen to the
+    // model's own dataChanged/modelReset signals rather than any signal here.
+    connect(m_uiPluginManager, &UIPluginManager::uiModulesChanged,
+            this,              &MainUIBackend::refreshUiModulesModel);
+    // Clear the Modules Reload overlay once the user-initiated UI refresh
+    // lands its first uiModulesChanged (list is already updated by then).
+    connect(m_uiPluginManager, &UIPluginManager::uiModulesChanged,
+            this, [this]() {
+                if (!m_pendingUiModulesRefresh) return;
+                m_pendingUiModulesRefresh = false;
+                endModulesLoading();
+            });
+    connect(m_uiPluginManager, &UIPluginManager::launcherAppsChanged,
+            this,              &MainUIBackend::launcherAppsChanged);
+    connect(m_uiPluginManager, &UIPluginManager::recentlyClosedAppsChanged,
+            this,              &MainUIBackend::recentlyClosedAppsChanged);
+    connect(m_uiPluginManager, &UIPluginManager::loadingModulesChanged,
+            this,              &MainUIBackend::loadingModulesChanged);
+    connect(m_uiPluginManager, &UIPluginManager::currentVisibleAppChanged,
+            this,              &MainUIBackend::currentVisibleAppChanged);
+    connect(m_uiPluginManager, &UIPluginManager::navigateToApps,
+            this,              &MainUIBackend::navigateToApps);
+    connect(m_uiPluginManager, &UIPluginManager::packageInstallFailedNotice,
+            this,              &MainUIBackend::installFailureNoticeRequested);
+    connect(m_uiPluginManager, &UIPluginManager::missingDepsPopupRequested,
+            this,              &MainUIBackend::missingDepsPopupRequested);
+    connect(m_uiPluginManager, &UIPluginManager::unloadCascadeConfirmationRequested,
+            this,              &MainUIBackend::unloadCascadeConfirmationRequested);
+    connect(m_uiPluginManager, &UIPluginManager::pluginWindowRequested,
+            this,              &MainUIBackend::pluginWindowRequested);
+    connect(m_uiPluginManager, &UIPluginManager::pluginWindowRemoveRequested,
+            this,              &MainUIBackend::pluginWindowRemoveRequested);
+    connect(m_uiPluginManager, &UIPluginManager::presentAppRequested,
+            this,              &MainUIBackend::presentAppRequested);
+
+    // Forward PackageCoordinator dialog signals. One uninstallPlanRequested
+    // serves all four initiators — see buildPlanPayload.
+    connect(m_packageCoordinator, &PackageCoordinator::uninstallPlanRequested,
+            this,             &MainUIBackend::uninstallPlanRequested);
+    connect(m_packageCoordinator, &PackageCoordinator::dependencyDataReadyChanged,
+            this,             &MainUIBackend::dependencyDataReadyChanged);
+    // Distinct upgrade/downgrade/reinstall cascade signal — same dialog shape
+    // as the uninstall variant, but the title + body need the target version +
+    // UpgradeMode so a downgrade doesn't look like a bare uninstall.
+    connect(m_packageCoordinator, &PackageCoordinator::upgradeCascadeConfirmationRequested,
+            this,             &MainUIBackend::upgradeCascadeConfirmationRequested);
+    connect(m_packageCoordinator, &PackageCoordinator::optionalGatePreviewUpdated,
+            this, &MainUIBackend::optionalGatePreviewUpdated);
+    connect(m_packageCoordinator, &PackageCoordinator::installGateConfirmationRequested,
+            this,             &MainUIBackend::installGateConfirmationRequested);
+    connect(m_packageCoordinator, &PackageCoordinator::requestOpenAddApplicationDialog,
+            this,             &MainUIBackend::requestOpenAddApplicationDialog);
+    connect(m_packageCoordinator, &PackageCoordinator::addApplicationDataUpdated,
+            this,             &MainUIBackend::addApplicationDataUpdated);
+    connect(m_packageCoordinator, &PackageCoordinator::launchAppRequested,
+            this,             &MainUIBackend::launchAppRequested);
+    connect(m_packageCoordinator, &PackageCoordinator::launchAppRequested,
+            this, [this](const QString& name) {
+        m_uiPluginManager->onAppLauncherClicked(name);
+    }, Qt::QueuedConnection);
+    // The resolver's required packages are cached here and published as a
+    // property; QML binds a shell-declared AppsFilterProxy to it. Nothing on
+    // this side holds a pointer to that proxy.
+    connect(m_packageCoordinator, &PackageCoordinator::requiredPackagesResolved,
+            this, [this](const QVariantList& entries) {
+        if (m_requiredPackages == entries) return;
+        m_requiredPackages = entries;
+        emit requiredPackagesChanged();
+    });
+
+    // Widened to int at this hop rather than connected signal-to-signal, so
+    // the conversion is written down instead of relying on the implicit
+    // enum-to-int the connect check would otherwise permit silently.
+    connect(m_packageCoordinator, &PackageCoordinator::catalogInstallStageChanged,
+            this, [this](const QString& name, InstallStage::Value stage) {
+        emit catalogInstallStageChanged(name, static_cast<int>(stage));
+    });
+    connect(m_packageCoordinator, &PackageCoordinator::catalogInstallFinished,
+            this,             &MainUIBackend::catalogInstallFinished);
+    connect(m_packageCoordinator, &PackageCoordinator::catalogInstallFailed,
+            this,             &MainUIBackend::catalogInstallFailed);
+
+    // Package repositories — pure re-emits so QML binding to backend.*
+    connect(m_packageCoordinator, &PackageCoordinator::repositoriesChanged,
+            this,             &MainUIBackend::repositoriesChanged);
+    connect(m_packageCoordinator, &PackageCoordinator::repositoriesLoadingChanged,
+            this,             &MainUIBackend::repositoriesLoadingChanged);
+    connect(m_packageCoordinator, &PackageCoordinator::downloadSourceChanged,
+            this,             &MainUIBackend::downloadSourceChanged);
+    connect(m_packageCoordinator, &PackageCoordinator::appsLoadingChanged,
+            this,             &MainUIBackend::appsLoadingChanged);
+    connect(m_packageCoordinator, &PackageCoordinator::repositoryOperationCompleted,
+            this,             &MainUIBackend::repositoryOperationCompleted);
+
+    // Any of the three managers can trigger coreModulesChanged:
+    //   * CoreModuleManager on stats-tick / refresh
+    //   * UIPluginManager on cascade-induced state changes (re-emits
+    //     PackageCoordinator's coreModulesChanged as part of that wiring)
+    // Both fan into the same refresh slot. Qt coalesces redundant dataChanged
+    // notifies within a frame, so the two-connect layout doesn't cause
+    // visible flicker.
+    connect(m_uiPluginManager,   &UIPluginManager::coreModulesChanged,
+            this, &MainUIBackend::refreshCoreModulesModel);
+    connect(m_coreModuleManager, &CoreModuleManager::coreModulesChanged,
+            this, &MainUIBackend::refreshCoreModulesModel);
+
+    // Kick the first catalog scan now that all wiring is in place. We do
+    // this AFTER setPackageCoordinator (and its signal connections) so the
+    // resulting uiPluginsFetched / uiModulesChanged land on live slots.
+    QTimer::singleShot(0, this, [this]() {
+        m_packageCoordinator->refresh();
+    });
+
+    qDebug() << "MainUIBackend created";
+}
+
+MainUIBackend::~MainUIBackend() = default;
+
+QAbstractItemModel* MainUIBackend::appsModel() const
+{
+    return m_appsModel;
+}
+
+void MainUIBackend::beginShutdown()
+{
+    if (m_uiPluginManager) {
+        m_uiPluginManager->shutdown();
+    }
+}
+
+int MainUIBackend::currentActiveSectionIndex() const
+{
+    return m_currentActiveSectionIndex;
+}
+
+void MainUIBackend::setCurrentActiveSectionIndex(int index)
+{
+    // Section list is owned by QML (SidebarPanel). The upper bound is
+    // self-policed there; we only guard against negative indices.
+    // Per-section side effects (e.g., the Modules-view auto-refresh) live
+    // in the QML view that becomes visible, not here.
+    if (m_currentActiveSectionIndex != index && index >= 0) {
+        m_currentActiveSectionIndex = index;
+        emit currentActiveSectionIndexChanged();
+    }
+}
+
+// --- coreModules() composer ------------------------------------------------
+//
+// coreModules is the one QML-visible property that spans multiple managers.
+// Known + loaded + stats come from CoreModuleManager (raw liblogos state);
+// installType comes from PackageCoordinator (populated during its dep-info
+// refresh). We compose here so neither manager has to know about the other's
+// schema.
+QVariantList MainUIBackend::buildCoreModulesSnapshot() const
+{
+    QVariantList modules;
+    if (!m_coreModuleManager) return modules;
+
+    const QStringList known  = m_coreModuleManager->knownModules();
+    const QStringList loaded = m_coreModuleManager->loadedModules();
+
+    for (const QString& name : known) {
+        QVariantMap module;
+        module["name"] = name;
+        module["displayName"] = m_packageCoordinator ? m_packageCoordinator->displayNameFor(name) : name;
+        module["isLoaded"] = loaded.contains(name);
+        // installType populated lazily by refreshDependencyInfo's full-scan
+        // pass on PackageCoordinator. Empty means "not known yet" — QML treats
+        // that as a non-user module and hides Uninstall, which is the safe
+        // default.
+        module["installType"] = m_packageCoordinator ? m_packageCoordinator->installType(name) : QString();
+
+        const QVariantMap stats = m_coreModuleManager->moduleStats(name);
+        if (!stats.isEmpty()) {
+            module["cpu"] = stats["cpu"];
+            module["memory"] = stats["memory"];
+        } else {
+            module["cpu"] = "0.0";
+            module["memory"] = "0.0";
+        }
+
+        modules.append(module);
+    }
+
+    return modules;
+}
+
+// --- Manager delegations ---------------------------------------------------
+//
+// Each slot is a one-liner routing to the right manager. These stay on
+// MainUIBackend so the QML `backend.foo(...)` contract is untouched by the
+// refactor (QML still sees one receiver).
+
+QVariantList MainUIBackend::buildUiModulesSnapshot() const { return m_uiPluginManager->uiModules(); }
+
+// Refresh slots — fold "compute snapshot + push into model" into one call
+// so the ctor can wire signal→slot directly rather than routing through a
+// lambda for each source of change.
+void MainUIBackend::refreshUiModulesModel()
+{
+    m_uiModulesModel->replaceRows(buildUiModulesSnapshot());
+}
+
+void MainUIBackend::refreshCoreModulesModel()
+{
+    m_coreModulesModel->replaceRows(buildCoreModulesSnapshot());
+}
+
+QVariantList MainUIBackend::launcherApps() const     { return m_uiPluginManager->launcherApps(); }
+QVariantList MainUIBackend::recentlyClosedApps() const { return m_uiPluginManager->recentlyClosedApps(); }
+QString      MainUIBackend::currentVisibleApp() const{ return m_uiPluginManager->currentVisibleApp(); }
+QStringList  MainUIBackend::loadingModules() const   { return m_uiPluginManager->loadingModules(); }
+
+// UIPluginManager — UI plugin widget lifecycle + local unload cascade.
+void MainUIBackend::loadUiModule(const QString& n)            { m_uiPluginManager->loadUiModule(n); }
+void MainUIBackend::unloadUiModule(const QString& n)          { m_uiPluginManager->unloadUiModule(n); }
+void MainUIBackend::activateApp(const QString& n)             { m_uiPluginManager->activateApp(n); }
+void MainUIBackend::confirmUnloadCascade(const QString& n)    { m_uiPluginManager->confirmUnloadCascade(n); }
+void MainUIBackend::loadCoreModule(const QString& n)          { m_uiPluginManager->loadCoreModule(n); }
+void MainUIBackend::unloadCoreModule(const QString& n)        { m_uiPluginManager->unloadCoreModule(n); }
+void MainUIBackend::refreshUiModules()
+{
+    if (!m_pendingUiModulesRefresh) {
+        beginModulesLoading();
+        m_pendingUiModulesRefresh = true;
+    }
+    m_uiPluginManager->refreshUiModules();
+}
+void MainUIBackend::onAppLauncherClicked(const QString& n)    { m_uiPluginManager->onAppLauncherClicked(n); }
+void MainUIBackend::setCurrentVisibleApp(const QString& n)    { m_uiPluginManager->setCurrentVisibleApp(n); }
+void MainUIBackend::setOverlayActive(bool active)             { m_overlayActive = active; }
+
+// PackageCoordinator — package_manager IPC and package-lifecycle cascade.
+void MainUIBackend::wireIntents()
+{
+    // Registry rebuilds follow the UI-plugin metadata cache, which
+    // PackageCoordinator already keeps fresh on every install/uninstall via its
+    // event subscriptions (100 ms debounce) and on refresh(). Label and icon
+    // are injected as callables so the chooser can never disagree with the
+    // sidebar about what an app is called or what it looks like.
+    connect(m_uiPluginManager, &UIPluginManager::uiPluginMetadataChanged,
+            this, &MainUIBackend::rebuildIntentRegistry);
+
+    // Activation queue drains. appReady is the success edge; the other two are
+    // the failure edges. Without the missing-deps one a request sits for the
+    // full activation deadline while the user stares at a modal dialog.
+    connect(m_uiPluginManager, &UIPluginManager::appReady,
+            m_intentBroker, &IntentBroker::onAppReady);
+    connect(m_uiPluginManager, &UIPluginManager::pluginLoadFailedNotice,
+            this, [this](const QString& name, const QString&) {
+                m_intentBroker->onAppUnavailable(name);
+            });
+    connect(m_uiPluginManager, &UIPluginManager::missingDepsPopupRequested,
+            this, [this](const QString& name, const QVariantList&, const QString&) {
+                m_intentBroker->onAppUnavailable(name);
+            });
+
+    // Chooser signals are re-emitted for QML. The broker itself is NOT put into
+    // the QML context — that would break the facade contract this class holds.
+    connect(m_intentBroker, &IntentBroker::chooserRequested,
+            this,           &MainUIBackend::intentChooserRequested);
+    connect(m_intentBroker, &IntentBroker::chooserDismissed,
+            this,           &MainUIBackend::intentChooserDismissed);
+
+    // …and the seam that tells the broker whether anyone is actually listening
+    // to those signals. Counting receivers on the broker would always report
+    // the two connections just made above.
+    m_intentChooser = std::make_unique<ShellIntentChooser>(
+        [this](const QString& dispatchId, const QString& intent,
+               const QString& requesterName, const QVariantList& providers) {
+            const int receivers = this->receivers(
+                SIGNAL(intentChooserRequested(QString, QString, QString, QVariantList)));
+            if (receivers > 0) {
+                // Its details and its not-installed section come from the
+                // catalog, which is fetched the first time something needs it.
+                if (m_packageCoordinator) m_packageCoordinator->requestCatalog();
+                emit intentChooserRequested(dispatchId, intent, requesterName, providers);
+            }
+            return receivers;
+        },
+        [this](const QString& dispatchId) {
+            emit intentChooserDismissed(dispatchId);
+        });
+    m_intentBroker->setChooser(m_intentChooser.get());
+
+    // The install suggestion. No receiver count and no withdraw: the request
+    // that prompted this is already answered, so a prompt that fails to mount
+    // costs nothing and there is nothing to take back.
+    m_intentInstaller = std::make_unique<ShellIntentInstaller>(
+        [this](const QString& intent, const QStringList& candidates) {
+            QVariantList detailed;
+            for (const QString& name : candidates)
+                detailed.append(installCandidateDetails(name));
+            emit intentInstallOffered(intent, candidates, detailed);
+        },
+        // The catalog is fetched the first time something needs it, so "no
+        // candidate" may only mean "not fetched yet": look again once it is.
+        [this](const QString& intent) {
+            if (!m_packageCoordinator || m_packageCoordinator->catalogFetched())
+                return;
+            m_packageCoordinator->whenCatalogLoaded([this, intent]() {
+                const QStringList candidates = m_intentRegistry
+                    ? m_intentRegistry->installableProvidersFor(intent)
+                    : QStringList{};
+                if (!candidates.isEmpty())
+                    m_intentInstaller->offerInstall(intent, candidates);
+            });
+        });
+    m_intentBroker->setInstaller(m_intentInstaller.get());
+
+    // Catalog-sourced providers follow the apps model, which is what carries
+    // packages that are NOT installed. Kept in a table the resolver never
+    // consults — see IntentRegistry::setInstallableProviders.
+    if (m_appsModel) {
+        // ALL FOUR SIGNALS. Catalog rows arrive via beginInsertRows /
+        // endInsertRows, not a model reset — connecting only modelReset and
+        // dataChanged meant a freshly fetched catalog never reached the
+        // registry, so an intent nothing installed could service went straight
+        // to `unavailable` even with a package for it sitting in the catalog.
+        connect(m_appsModel, &QAbstractItemModel::modelReset,
+                this, &MainUIBackend::rebuildInstallableProviders);
+        connect(m_appsModel, &QAbstractItemModel::dataChanged,
+                this, &MainUIBackend::rebuildInstallableProviders);
+        connect(m_appsModel, &QAbstractItemModel::rowsInserted,
+                this, &MainUIBackend::rebuildInstallableProviders);
+        connect(m_appsModel, &QAbstractItemModel::rowsRemoved,
+                this, &MainUIBackend::rebuildInstallableProviders);
+        rebuildInstallableProviders();
+    }
+
+    // The shell's endpoint. deliverRequest returns the receiver count of the
+    // QML-facing signal: zero means nothing in ContentViews.qml is listening,
+    // and the broker must turn that into a timeout rather than waiting forever
+    // on a handler that does not exist.
+    m_shellEndpoint = std::make_unique<ShellIntentEndpoint>(
+        [this](const QString& dispatchId, const QString& intent,
+               const QVariantMap& params, const QString& requesterName) {
+            // Package confirmations are serviced in C++, NOT through the QML
+            // relay below: PackageCoordinator owns the cascade-unload that must
+            // finish before the requester is told it may delete anything, the
+            // dependent caches the dialog is drawn from, and the pending
+            // dispatch id that binds an answer to the dialog it came from.
+            //
+            // They also could not use the relay's receiver count: that counts
+            // ContentViews' connections, and these dialogs live in the separate
+            // OverlayDialogs widget.
+            // Also serviced in C++ rather than the QML relay: it takes a
+            // parameter, has to decide whether the named app is installed, and
+            // must answer on a timing floor. A `case` in ContentViews' switch
+            // could do none of that.
+            if (intent == kAppLaunchIntent)
+                return beginAppLaunch(dispatchId, params);
+
+            if (kPackageConfirmIntents.contains(intent)) {
+                return m_packageCoordinator
+                    && m_packageCoordinator->beginPackageConfirmation(
+                           dispatchId, intent, params, requesterName)
+                    ? 1 : 0;
+            }
+            const int receivers =
+                this->receivers(SIGNAL(shellIntentRequested(QString, QString, QVariantMap, QString)));
+            if (receivers > 0)
+                emit shellIntentRequested(dispatchId, intent, params, requesterName);
+            return receivers;
+        });
+    m_intentBroker->registerEndpoint(QStringLiteral("main_ui"), m_shellEndpoint.get());
+
+    // How PackageCoordinator answers. A callback rather than the broker itself,
+    // so it never has to know one exists.
+    if (m_packageCoordinator) {
+        m_packageCoordinator->setIntentResponder(
+            [this](const QString& requestId, bool ok, const QString& error, const QVariant& data) {
+                return respondToShellIntent(requestId, ok, data, error);
+            });
+    }
+
+    // The shell's own provided capabilities, its `uses`, and the requester
+    // restrictions on the destructive ones. main_ui is the only module allowed
+    // a "basecamp.*" name; IntentRegistry refuses that namespace, and the
+    // platform's "logos.*", from any disk record.
+    //
+    // In ShellIntents rather than inline so shell_intents_test.cpp can assert
+    // against this exact registration — this file cannot be linked into the
+    // unit-test harness, and the shell's capability list is the last thing that
+    // should be covered only by reading.
+    ShellIntents::registerWith(
+        m_intentRegistry,
+        QStringLiteral("main_ui"),
+        QStringLiteral("Logos"),
+        QStringLiteral("qrc:/qt/qml/Basecamp/Icons/assets/settings.svg"));
+
+    // The synthetic requester a clicked URL submits under. Registered as a
+    // REQUESTER ONLY — never through registerShellProvider — because the broker
+    // skips the chooser when the shell is either party, and a URL inheriting
+    // that would dispatch with no consent at all.
+    //
+    // Its `uses` is derived on every rebuild from these plus every app that
+    // opted in with `"web": true`, so the broker's ordinary `declaresUse` gate
+    // is what enforces web reachability. No link-shaped special case exists
+    // anywhere inside the broker.
+    m_intentRegistry->registerLinkRequester(
+        LinkRequestCoordinator::requesterName(), ShellIntents::kWebReachableIntents);
+
+    m_linkRequests = new LinkRequestCoordinator(m_intentBroker, m_intentRegistry, this);
+    connect(m_linkRequests, &LinkRequestCoordinator::linkFailed,
+            this, &MainUIBackend::linkFailed);
+
+    rebuildIntentRegistry();
+    m_intentRegistryBootstrapped = true;
+}
+
+void MainUIBackend::rebuildIntentRegistry()
+{
+    if (!m_intentRegistry || !m_uiPluginManager) return;
+    m_intentRegistry->rebuild(
+        m_uiPluginManager->uiPluginMetadataSnapshot(),
+        [this](const QString& name) { return displayNameFor(name); },
+        [this](const QString& name) {
+            return m_uiPluginManager->pluginIconUrl(name);
+        });
+
+    // Surface what was skipped or refused. Without this a malformed `uses`
+    // block is invisible: the app's request comes back `not_declared` and the
+    // only clue is on the requester's side, which cannot see why.
+    const QStringList problems = m_intentRegistry->diagnostics();
+    for (const QString& problem : problems)
+        qWarning().noquote() << "IntentRegistry:" << problem;
+
+    // THE COLD-START GATE, and it must skip the bootstrap call above.
+    //
+    // A URL that launched the app has been sitting in the inbox since main().
+    // Replaying it needs the registry to know what is INSTALLED, which the
+    // constructor-time rebuild does not — its snapshot is empty because the
+    // plugin scan has not run. Opening the gate there made shell intents work
+    // (they are registered in code) while `basecamp://app/<name>` silently did
+    // nothing: the name was absent from an empty snapshot, so it fell through
+    // to the install branch and there was nothing to install it with either.
+    //
+    // uiPluginMetadataChanged is emitted unconditionally once the scan
+    // completes — including with nothing installed, which is still a truthful
+    // "here is what is on disk" — so this cannot strand a link on a clean
+    // machine. The coordinator's park deadline remains the backstop.
+    if (m_intentRegistryBootstrapped && m_linkRequests)
+        m_linkRequests->onRegistryReady();
+}
+
+void MainUIBackend::rebuildInstallableProviders()
+{
+    if (!m_intentRegistry || !m_appsModel) return;
+
+    QMap<QString, QStringList> byModule;
+    for (int row = 0; row < m_appsModel->rowCount(); ++row) {
+        const QModelIndex idx = m_appsModel->index(row, 0);
+
+        // Installed packages are answered by the real registry. Offering to
+        // install something already present would be nonsense.
+        if (idx.data(AppsModelRoles::IsInstalledRole).toBool())
+            continue;
+
+        const QStringList provides =
+            idx.data(AppsModelRoles::ProvidesRole).toStringList();
+        if (provides.isEmpty())
+            continue;
+
+        byModule.insert(idx.data(AppsModelRoles::NameRole).toString(), provides);
+    }
+    m_intentRegistry->setInstallableProviders(byModule);
+
+    // One line per rebuild, and only when something is actually offerable —
+    // silence here is what an empty catalog looks like, which is exactly the
+    // state that made an install offer never appear.
+    if (!byModule.isEmpty()) {
+        qWarning().noquote() << "IntentRegistry: installable providers ="
+                             << QStringList(byModule.keys()).join(QStringLiteral(", "));
+    }
+}
+
+// ── Intent surface for QML — all delegating one-liners ──────────────────────
+
+bool MainUIBackend::respondToShellIntent(const QString& requestId, bool ok,
+                                         const QVariant& data, const QString& error)
+{
+    // `data` is an untyped QVariant, so QML hands over the QJSValue wrapper
+    // untouched — and a QJSValue is engine-bound, hence non-canonical, so the
+    // broker would drop the response and mint `failed` at a caller that did
+    // nothing wrong. LogosQmlBridge::respond flattens for the same reason on
+    // the app path; this is the shell's copy of that boundary.
+    const QVariant flat = data.userType() == qMetaTypeId<QJSValue>()
+                        ? data.value<QJSValue>().toVariant()
+                        : data;
+
+    if (!m_intentBroker || !m_shellEndpoint) return false;
+    return m_intentBroker->submitResponse(m_shellEndpoint.get(), requestId, ok, flat, error);
+}
+
+void MainUIBackend::resolveIntentChooser(const QString& dispatchId,
+                                         const QString& providerName)
+{
+    if (m_intentBroker) m_intentBroker->resolveChooser(dispatchId, providerName);
+}
+
+void MainUIBackend::cancelIntentChooser(const QString& dispatchId)
+{
+    if (m_intentBroker) m_intentBroker->cancelChooser(dispatchId);
+}
+
+QString MainUIBackend::repositoryUrlFor(const QString& packageName) const
+{
+    if (!m_appsModel) return QString();
+    for (int row = 0; row < m_appsModel->rowCount(); ++row) {
+        const QModelIndex idx = m_appsModel->index(row, 0);
+        if (idx.data(AppsModelRoles::NameRole).toString() == packageName)
+            return idx.data(AppsModelRoles::RepositoryUrlRole).toString();
+    }
+    return QString();   // installed but not in any catalog we know
+}
+
+// Carry WHERE a candidate comes from. A package suggested by a repo the user
+// added for something unrelated deserves to be recognised as such before it is
+// installed. Shared by the install offer and the chooser's not-installed
+// section, so the same package cannot be described two ways.
+QVariantMap MainUIBackend::installCandidateDetails(const QString& name) const
+{
+    const QString repoUrl = repositoryUrlFor(name);
+    const QVariantMap src = m_packageCoordinator
+        ? m_packageCoordinator->repositorySource(repoUrl)
+        : QVariantMap{};
+    return QVariantMap{
+        {QStringLiteral("moduleName"), name},
+        {QStringLiteral("displayName"), displayNameFor(name)},
+        {QStringLiteral("repositoryUrl"), repoUrl},
+        {QStringLiteral("repositoryLabel"), src.value(QStringLiteral("label"))},
+        {QStringLiteral("repositoryLink"),  src.value(QStringLiteral("link"))},
+    };
+}
+
+// Catalog packages that could service `intent` and are NOT installed — the
+// registry drops any entry already on disk, so this never overlaps the
+// chooser's real providers.
+QVariantList MainUIBackend::installableProvidersFor(const QString& intent) const
+{
+    if (!m_intentRegistry) return {};
+    QVariantList out;
+    for (const QString& name : m_intentRegistry->installableProvidersFor(intent))
+        out.append(installCandidateDetails(name));
+    return out;
+}
+
+// Raise the install offer for ONE package, for a user who picked it out of the
+// chooser's not-installed section. The request it came from has already been
+// answered `cancelled` by the dialog — installing resumes nothing, exactly as
+// on the nothing-installed path.
+void MainUIBackend::offerInstallFor(const QString& intent, const QString& moduleName)
+{
+    if (intent.isEmpty() || moduleName.isEmpty()) return;
+    emit intentInstallOffered(intent, QStringList{moduleName},
+                              QVariantList{installCandidateDetails(moduleName)});
+}
+
+QVariantMap MainUIBackend::providerDetailsFor(const QString& packageName) const
+{
+    QVariantMap out;
+    out.insert(QStringLiteral("moduleName"), packageName);
+    out.insert(QStringLiteral("displayName"), displayNameFor(packageName));
+
+    // Every package is unsigned today: the catalog carries no signatures and
+    // `trustedSigners` is empty. Stated outright rather than omitted, because a
+    // detail panel that lists a version and an origin and says nothing about
+    // provenance reads as reassurance it has not earned. When signing lands
+    // this becomes a real answer instead of a constant.
+    out.insert(QStringLiteral("verified"), false);
+
+    if (m_packageCoordinator) {
+        out.insert(QStringLiteral("installType"),
+                   m_packageCoordinator->installType(packageName));
+
+        // DELIBERATELY NOT the content hash, though it is available
+        // (PackageCoordinator::installedRootHash). A hash is only evidence when
+        // the reader holds an independent, trusted value to compare it against,
+        // and with nothing signed the catalog that serves the package serves
+        // the hash too — so an attacker controlling one controls the other. A
+        // tampered copy does not keep the original digest, but it does not need
+        // to: it simply presents its own.
+        //
+        // Shown here it would be worse than absent. A 64-character digest beside
+        // the word "Unsigned" reads as rigour, and weakens the one honest
+        // statement on the panel. When signing lands it stops being decoration,
+        // because a signature is exactly the trusted reference it lacks today.
+    }
+
+    for (int row = 0; m_appsModel && row < m_appsModel->rowCount(); ++row) {
+        const QModelIndex idx = m_appsModel->index(row, 0);
+        if (idx.data(AppsModelRoles::NameRole).toString() != packageName)
+            continue;
+
+        out.insert(QStringLiteral("version"),
+                   idx.data(AppsModelRoles::InstalledVersionRole).toString());
+        out.insert(QStringLiteral("repositoryUrl"),
+                   idx.data(AppsModelRoles::RepositoryUrlRole).toString());
+        out.insert(QStringLiteral("description"),
+                   idx.data(AppsModelRoles::DescriptionRole).toString());
+        break;
+    }
+
+    if (m_packageCoordinator) {
+        const QVariantMap src = m_packageCoordinator->repositorySource(
+            out.value(QStringLiteral("repositoryUrl")).toString());
+        out.insert(QStringLiteral("repositoryLabel"), src.value(QStringLiteral("label")));
+        out.insert(QStringLiteral("repositoryLink"),  src.value(QStringLiteral("link")));
+    }
+    return out;
+}
+
+void MainUIBackend::showPackageDetails(const QString& packageName)
+{
+    if (packageName.isEmpty()) return;
+
+    // Ask whoever provides `packages.show` — in practice the Package Manager,
+    // which renders it in its own details panel.
+    //
+    // An intent rather than a direct call into package_manager_ui on purpose.
+    // basecamp used to carry exactly one hardcoded edge into that app — a .rep
+    // SIGNAL, a replica connect, two forwarding C++ signals and a QML handler,
+    // all to reach one settings screen — and it has since been deleted in
+    // favour of the generic path. Adding a second would be walking backwards.
+    // This also means the shell dogfoods the mechanism it asks apps to use.
+    if (m_intentBroker && m_shellEndpoint
+        && m_registryDeclares(QStringLiteral("packages.show"))) {
+        m_intentBroker->submit(m_shellEndpoint.get(),
+                               QStringLiteral("shell-details-") + packageName,
+                               QStringLiteral("packages.show"),
+                               QVariantMap{{QStringLiteral("name"), packageName}});
+        return;
+    }
+
+    showPackageDetailsFallback(packageName);
+}
+
+void MainUIBackend::requestPackageInstall(const QString& packageName)
+{
+    if (packageName.isEmpty()) return;
+    if (m_intentBroker && m_shellEndpoint
+        && m_registryDeclares(QStringLiteral("packages.install"))) {
+        m_intentBroker->submit(m_shellEndpoint.get(),
+                               QStringLiteral("shell-install-") + packageName,
+                               QStringLiteral("packages.install"),
+                               QVariantMap{{QStringLiteral("name"), packageName}});
+        return;
+    }
+
+    if (m_packageCoordinator)
+        m_packageCoordinator->openApp(packageName, repositoryUrlFor(packageName),
+                                      {}, /*allowFastLaunch=*/false);
+}
+
+bool MainUIBackend::m_registryDeclares(const QString& intent) const
+{
+    return m_intentRegistry
+        && m_intentRegistry->resolve(intent).status != IntentRegistry::None;
+}
+
+void MainUIBackend::offerInstallForUnknownApp(const QString& appName)
+{
+    if (appName.isEmpty() || !m_appsModel || !m_packageCoordinator)
+        return;
+
+    // The offer needs the app's catalog row, which may not be fetched yet.
+    m_packageCoordinator->whenCatalogLoaded([this, appName]() {
+        const QVariantMap row = m_appsModel->rowDataByName(appName, QString());
+        if (row.isEmpty())
+            return;
+
+        const QVariantList detailed{ QVariantMap{
+            { QStringLiteral("moduleName"),    appName },
+            { QStringLiteral("displayName"),   displayNameFor(appName) },
+            { QStringLiteral("repositoryUrl"), repositoryUrlFor(appName) },
+        } };
+
+        emit intentInstallOffered(kAppLaunchIntent, QStringList{ appName }, detailed);
+    });
+}
+
+int MainUIBackend::beginAppLaunch(const QString& dispatchId,
+                                  const QVariantMap& params)
+{
+    // The shell's `provides` carries no `params` — registerShellProvider takes
+    // no spec — so nothing upstream has type-checked this. Validate here, and
+    // treat a bad payload exactly like a missing app: same answer, same floor.
+    // Reporting `bad_request` would leak that the name was well-formed but
+    // absent, which is half the oracle back.
+    const QVariant raw = params.value(kAppLaunchParam);
+    const QString appName =
+        raw.typeId() == QMetaType::QString ? raw.toString().trimmed() : QString();
+
+    // ALWAYS ATTEMPT THE LAUNCH; the snapshot only decides whether to ALSO
+    // offer an install.
+    //
+    // Gating the launch on the snapshot made this silently do nothing whenever
+    // the snapshot was empty or stale — the name was absent, so it fell to the
+    // install branch, and with nothing to install it with the click vanished.
+    // onAppLauncherClicked/activateApp already no-op on a name they do not
+    // recognise, so trying first and asking questions after is both simpler and
+    // strictly harder to break.
+    const bool known = m_uiPluginManager
+                    && m_uiPluginManager->uiPluginMetadataSnapshot().contains(appName);
+
+    if (appName == kPackageManagerAppName) {
+        setCurrentActiveSectionIndex(ShellSection::PackageManager);
+    } else if (!appName.isEmpty() && m_intentPresenter) {
+        m_intentPresenter->ensureAppLoaded(appName);
+        m_intentPresenter->presentApp(appName);
+
+        if (!known)
+            offerInstallForUnknownApp(appName);
+    }
+
+    constexpr int kLaunchAnswerFloorMs = 400;
+    QTimer::singleShot(kLaunchAnswerFloorMs, this, [this, dispatchId]() {
+        respondToShellIntent(dispatchId, true, QVariant(), QString());
+    });
+
+    return 1;
+}
+
+void MainUIBackend::showPackageDetailsFallback(const QString& packageName)
+{
+    if (!m_packageCoordinator) return;
+
+    // Nothing provides packages.show — no Package Manager installed, or an
+    // older build of it. The App Manager's own detail dialog answers the same
+    // question (version, publisher, dependencies, install state), so the
+    // Details button still does something rather than silently failing.
+    //
+    // allowFastLaunch=false is the point: the user asked to LOOK, not to run.
+    m_packageCoordinator->openApp(packageName, repositoryUrlFor(packageName),
+                                  {}, /*allowFastLaunch=*/false);
+}
+
+void MainUIBackend::beginIntentInstall(const QString& providerName)
+{
+    if (!m_packageCoordinator || providerName.isEmpty())
+        return;
+
+    // The normal install path, gate dialog and all. Being prompted by an intent
+    // buys no shortcut past the confirmation the user would see anywhere else —
+    // it is the same install, started for a different reason.
+    m_packageCoordinator->openApp(providerName, repositoryUrlFor(providerName), {},
+                                  /*allowFastLaunch=*/false);
+}
+
+QString MainUIBackend::displayNameFor(const QString& n) const {
+    return m_packageCoordinator ? m_packageCoordinator->displayNameFor(n) : n;
+}
+void MainUIBackend::uninstallUiModule(const QString& n)       { m_packageCoordinator->uninstallUiModule(n); }
+void MainUIBackend::uninstallApp(const QString& n, const QString& repositoryUrl)
+                                                             { m_packageCoordinator->uninstallApp(n, repositoryUrl); }
+void MainUIBackend::uninstallCoreModule(const QString& n)     { m_packageCoordinator->uninstallCoreModule(n); }
+void MainUIBackend::confirmUninstallCascade(const QString& n, const QStringList& optionalNames, const QVariantMap& optionalVersionPins) { m_packageCoordinator->confirmUninstallCascade(n, optionalNames, optionalVersionPins); }
+void MainUIBackend::confirmUninstallMultiCascade(const QStringList& names) { m_packageCoordinator->confirmUninstallMultiCascade(names); }
+void MainUIBackend::cancelMultiUninstall(const QStringList& names)         { m_packageCoordinator->cancelMultiUninstall(names); }
+void MainUIBackend::cancelPendingUninstallApp(const QString& name)         { m_packageCoordinator->cancelPendingUninstallApp(name); }
+void MainUIBackend::refreshOptionalPreview(const QString& n, const QString& repo,
+                                            const QVariantMap& pins, const QVariantMap& selection,
+                                            const QVariantMap& optionalPins, bool gate)
+{ m_packageCoordinator->refreshOptionalPreview(n, repo, pins, selection, optionalPins, gate); }
+void MainUIBackend::confirmInstallGate(const QString& n, const QStringList& optionalNames, const QVariantMap& optionalVersionPins) { m_packageCoordinator->confirmInstallGate(n, optionalNames, optionalVersionPins); }
+void MainUIBackend::cancelInstallGate(const QString& n)       { m_packageCoordinator->cancelInstallGate(n); }
+void MainUIBackend::openApp(const QString& name, const QString& repositoryUrl, const QVariantMap& versionPins, bool allowFastLaunch)
+{ m_packageCoordinator->openApp(name, repositoryUrl, versionPins, allowFastLaunch); }
+void MainUIBackend::confirmCatalogInstall(const QString& name, const QString& repositoryUrl)
+{ m_packageCoordinator->confirmCatalogInstall(name, repositoryUrl); }
+void MainUIBackend::notifyAddApplicationDialogClosed()
+{ m_packageCoordinator->notifyAddApplicationDialogClosed(); }
+
+// cancelPendingAction is the one slot that doesn't route to a single manager:
+// a pending action lives on either UIPluginManager (local unload cascade) or
+// PackageCoordinator (uninstall/upgrade cascade) but not both. Fan out to both —
+// the un-involved manager no-ops on name-mismatch. This preserves the QML
+// contract (single `backend.cancelPendingAction(name)` call for either dialog).
+void MainUIBackend::cancelPendingAction(const QString& n) {
+    m_uiPluginManager->cancelUnloadCascade(n);
+    m_packageCoordinator->cancelPendingAction(n);
+}
+
+// Package repositories — delegations + cache pass-through.
+QVariantList MainUIBackend::repositories() const        { return m_packageCoordinator->repositories(); }
+bool         MainUIBackend::repositoriesLoading() const { return m_packageCoordinator->repositoriesLoading(); }
+QString      MainUIBackend::downloadSource() const      { return m_packageCoordinator->downloadSource(); }
+bool MainUIBackend::appsLoading() const
+{ return !m_packageCoordinator || m_packageCoordinator->appsLoading(); }
+
+bool MainUIBackend::dependencyDataReady() const
+{ return m_packageCoordinator && m_packageCoordinator->dependencyDataReady(); }
+
+bool MainUIBackend::modulesLoading() const
+{ return m_modulesLoadingCount > 0; }
+
+void MainUIBackend::beginModulesLoading()
+{
+    if (++m_modulesLoadingCount == 1)
+        emit modulesLoadingChanged();
+}
+
+void MainUIBackend::endModulesLoading()
+{
+    if (m_modulesLoadingCount <= 0) return;
+    if (--m_modulesLoadingCount == 0)
+        emit modulesLoadingChanged();
+}
+
+void MainUIBackend::refreshRepositories()                                  { m_packageCoordinator->refreshRepositories(); }
+void MainUIBackend::refreshAppCatalog()                                    { m_packageCoordinator->remoteRefresh(); }
+void MainUIBackend::requestCatalog()                                       { m_packageCoordinator->requestCatalog(); }
+void MainUIBackend::addRepository(const QString& url)                      { m_packageCoordinator->addRepository(url); }
+void MainUIBackend::removeRepository(const QString& url)                   { m_packageCoordinator->removeRepository(url); }
+void MainUIBackend::setRepositoryEnabled(const QString& url, bool enabled) { m_packageCoordinator->setRepositoryEnabled(url, enabled); }
+void MainUIBackend::refreshDownloadSource()                                { m_packageCoordinator->refreshDownloadSource(); }
+void MainUIBackend::setDownloadSource(const QString& source)               { m_packageCoordinator->setDownloadSource(source); }
+
+// --- CoreModuleManager delegations ----------------------------------------
+
+void MainUIBackend::refreshCoreModules()
+{
+    beginModulesLoading();
+    m_coreModuleManager->refresh();
+    QTimer::singleShot(0, this, [this]() { endModulesLoading(); });
+}
+QString MainUIBackend::getCoreModuleMethods(const QString& n)       { return m_coreModuleManager->getMethods(n); }
+QString MainUIBackend::getCoreModuleEvents(const QString& n)        { return m_coreModuleManager->getEvents(n); }
+QString MainUIBackend::callCoreModuleMethod(const QString& n,
+                                             const QString& m,
+                                             const QString& a)      { return m_coreModuleManager->callMethod(n, m, a); }
+
+// --- Build info -----------------------------------------------------------
+//
+// Thin QML-facing wrappers over the shared LogosBasecampBuildInfo helper
+// (app/utils/BuildInfo.h), which reads the nix-generated logos_build_info.h.
+
+QString      MainUIBackend::buildVersion() const    { return LogosBasecampBuildInfo::version(); }
+bool         MainUIBackend::isPortableBuild() const { return LogosBasecampBuildInfo::isPortableBuild(); }
+
+// Read the environment rather than a compile-time flag.
+bool         MainUIBackend::isMockBackend() const
+{
+    return qEnvironmentVariableIsSet("LOGOS_MOCK_FIXTURE");
+}
+QVariantList MainUIBackend::buildCommits() const    { return LogosBasecampBuildInfo::commits(); }
+
+
+void MainUIBackend::setLinkRaiseHandler(std::function<void()> raise)
+{
+    if (m_linkRequests)
+        m_linkRequests->setRaiseHandler(std::move(raise));
+}

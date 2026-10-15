@@ -1,0 +1,305 @@
+name: "Exploring Installed Apps and Loaded Modules in Basecamp"
+output: basecamp-modules.md
+release: ""
+
+intro: |
+  [`logos-basecamp`](https://github.com/logos-co/logos-basecamp) is the Logos
+  desktop application shell — a Qt/QML app with a sidebar of section buttons
+  (Workspace, Applications, Package Manager, Settings), an in-app **Applications**
+  catalog, and a **Settings** view whose **Apps Inspector** and **Module Inspector**
+  sub-sections list the UI plugins installed in the app and the core modules loaded
+  into its runtime. This doc-test builds **this** basecamp commit as its normal
+  **development app** (`#app`) — the binary you get from a plain `nix build` —
+  launches it headless, and drives its UI to inspect what is installed and loaded
+  out of the box.
+
+  Unlike the portable bundle (`#bin-bundle-dir`), the development app is what you
+  build and run while working on basecamp itself: `nix build` produces
+  `result/bin/LogosBasecamp`, with its starter set of modules and UI plugins
+  baked in alongside the binary (`result/modules/` and `result/plugins/`). It is
+  built with the QML inspector compiled in by default, so
+  [`logos-qt-mcp`](https://github.com/logos-co/logos-qt-mcp) can connect and
+  drive it without any extra flags.
+
+  The flow this doc-test exercises is the everyday "what's in my app?" check:
+
+  1. Launch the dev app and land on the **Workspace** (the empty MDI tab area).
+  2. Open the **Applications** view from the sidebar — basecamp's catalog of
+     installable apps.
+  3. Open the **Package Manager** from the sidebar — clicking the sidebar entry
+     opens the bundled `package_manager_ui` plugin directly into the main
+     content area.
+  4. Open **Settings → Apps Inspector** — the apps (UI plugins) installed in
+     basecamp, e.g. the main UI and the package manager UI.
+  5. Switch to **Settings → Module Inspector** — the background modules loaded
+     into the runtime (package manager, package downloader, capability module)
+     shown as **Loaded** with live CPU/memory stats.
+
+  The app is launched headless (`QT_QPA_PLATFORM=offscreen`) and driven through
+  its QML inspector: we wait for elements, click sidebar items and sections,
+  assert on the rendered text, and capture a screenshot at each step. Because
+  the app is built from the commit under test, a green run is real evidence that
+  this change still produces a launchable dev app whose Settings inspectors
+  correctly report the installed plugins and loaded modules.
+
+what_you_build: "This `logos-basecamp` commit, built as the normal development app (`#app`, inspector-enabled by default) and driven through its sidebar (Applications, Package Manager, Settings → Apps Inspector / Module Inspector) to inspect the installed UI plugins and the loaded core modules."
+
+what_you_learn:
+  - How a plain `nix build` of basecamp produces the dev app with its modules and UI plugins baked in alongside the binary
+  - How the sidebar navigates between the **Workspace** (MDI), **Applications** catalog, **Package Manager**, and **Settings**
+  - How **Settings → Apps Inspector** lists the apps (UI plugins) installed in basecamp
+  - How **Settings → Module Inspector** shows which runtime modules are loaded, with live CPU/memory stats
+  - How the **Package Manager** sidebar entry opens the bundled `package_manager_ui` plugin directly into the main content area
+  - How to drive a headless Qt/QML app with logos-qt-mcp (wait, click, assert) and capture screenshots
+
+prerequisites:
+  - |
+    **Nix** with flakes enabled. Install from [nixos.org](https://nixos.org/download.html), then enable flakes:
+
+    ```bash
+    mkdir -p ~/.config/nix
+    echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+    ```
+
+    Verify: `nix flake --help >/dev/null 2>&1 && echo "Flakes enabled"`
+  - "**A Linux or macOS machine.** The app runs headless via `QT_QPA_PLATFORM=offscreen`, so no display is required. No network access is needed — everything inspected here ships inside the dev build."
+
+sections:
+  - title: "Dev app vs. portable bundle"
+    text: |
+      basecamp has two main build outputs:
+
+      ```
+      #app              -> result/bin/LogosBasecamp   the development app (this doc-test)
+                           result/modules/ + plugins/  baked in next to the binary
+                           QML inspector ON by default
+
+      #bin-bundle-dir   -> the portable, self-contained bundle you ship
+                           (Qt runtime carried inside, inspector OFF)
+      ```
+
+      This doc-test uses `#app` — what you get from a plain `nix build` while
+      developing basecamp. Its starter modules and UI plugins are installed at
+      build time into `result/modules/` (core modules) and `result/plugins/`
+      (UI plugins), and the app discovers them relative to its own binary on
+      launch. The **Settings → Apps Inspector** and **Settings → Module
+      Inspector** sub-views are the in-app windows into those two lists; the
+      **Package Manager** sidebar entry surfaces the bundled
+      `package_manager_ui` plugin directly.
+
+  - title: "Build the qt-mcp test driver"
+    step: true
+    text: |
+      [`logos-qt-mcp`](https://github.com/logos-co/logos-qt-mcp) is the harness the
+      doc-test uses to connect to the app's QML inspector and drive it. Build it
+      once and link it as `./result-mcp`.
+    steps:
+      - title: "Build logos-qt-mcp"
+        # QT_MCP_FLAKE lets you point this at a local logos-qt-mcp checkout to
+        # validate an inspector change before it is published, e.g.
+        #   export QT_MCP_FLAKE=path:/abs/path/to/logos-qt-mcp
+        # Unset (CI / normal runs) it builds the published flake shown below.
+        run: 'nix build "${QT_MCP_FLAKE:-github:logos-co/logos-qt-mcp}" -o result-mcp'
+        code_block: "nix build 'github:logos-co/logos-qt-mcp' -o result-mcp"
+        check_file: "result-mcp"
+
+  - title: "Build the basecamp dev app"
+    step: true
+    text: |
+      Build **this** basecamp commit as the development app — the same thing a
+      plain `nix build` gives you — and link it as `./result-app`. The build
+      compiles the app and every baked-in module/plugin through Nix, so the first
+      build is slow (subsequent runs hit the cache).
+
+      > The `{release}` in the URL pins the build to a specific commit: the
+      > doc-test runner expands it to a concrete ref. Locally that is this
+      > checkout's `HEAD` (see `run.sh`); in CI it is the commit being tested.
+      > With no pin it falls back to the latest `master`.
+    steps:
+      - title: "Build the dev app"
+        text: |
+          This is the normal development build — `#app` is the default package,
+          so from inside the clone it is simply `nix build`:
+        run: "nix build 'github:logos-co/logos-basecamp{release}#app' -o result-app"
+        code_block: |
+          # From inside the clone this is simply: nix build
+          nix build 'github:logos-co/logos-basecamp{release}#app' -o result-app
+        check_file: "result-app/bin/LogosBasecamp"
+        post_text: |
+          The dev app is laid out next to its binary: the launcher lives at
+          `result-app/bin/LogosBasecamp`, with `lib/` (Qt + app libraries),
+          `modules/` (baked-in core modules) and `plugins/` (baked-in UI plugins)
+          all alongside it.
+
+      - title: "Confirm the baked-in UI plugins"
+        text: |
+          The UI plugins ship under `plugins/`. Basecamp's own shell is one of
+          them again — `main_ui` — but a privilege-free one: it links Qt and
+          nothing else, and reaches the host only through `IShellHost`.
+        run: "ls result-app/plugins"
+        expect_contains:
+          - "main_ui"
+          - "package_manager_ui"
+
+      - title: "Confirm the baked-in core modules"
+        text: |
+          The core modules the runtime loads are installed under `modules/` —
+          confirm the package manager, package downloader, and capability module
+          are present:
+        run: "ls result-app/modules"
+        expect_contains:
+          - "package_manager"
+          - "package_downloader"
+          - "capability_module"
+
+  - title: "Launch the dev app and walk its sidebar"
+    step: true
+    text: |
+      Launch the dev app binary headless and drive its UI: confirm the sidebar
+      renders, open **Applications**, open the **Package Manager**, then go into
+      **Settings** and walk both **Apps Inspector** (installed UI plugins) and
+      **Module Inspector** (loaded core modules) — each interaction a real
+      round-trip through this basecamp build.
+    steps:
+      - title: "Launch and drive the dev app"
+        ui_test:
+          launch: "./result-app/bin/LogosBasecamp"
+          qt_mcp: "result-mcp"
+          # The app is already built (previous step), so the launch only has to
+          # boot the binary and open the inspector port — allow time for a cold
+          # first boot before the inspector is expected to answer.
+          launch_timeout: 300
+          tests:
+            # The app starts on the Workspace (MDI tab area). The sidebar is
+            # always visible — wait for one of its section labels to confirm
+            # the QML tree is up.
+            - name: "App window opens with the sidebar visible"
+              action: wait_for
+              texts: ["Applications", "Package Manager", "Settings"]
+              timeout: 60000
+              text: "The dev app launches headless. The sidebar renders with the **Applications**, **Package Manager**, and **Settings** entries."
+              screenshot: "basecamp-launch.png"
+
+            # Click the Applications sidebar entry → AppManagerView renders.
+            # Assert the page title + subtitle the view ships with.
+            - name: "Open the Applications view"
+              action: click
+              target: "Applications"
+
+            - name: "Applications view loads"
+              action: wait_for
+              texts: ["Install and manage applications."]
+              timeout: 30000
+              text: "The **Applications** view lists the apps you can install and the ones already on disk."
+              screenshot: "basecamp-applications.png"
+
+            # Click the Package Manager sidebar entry → MainContainer routes
+            # the click to stack slot 2, which hosts the bundled
+            # package_manager_ui plugin's sandboxed QQuickWidget.
+            #
+            # IMPORTANT: we deliberately do NOT assert on the package manager's
+            # own QML text. PMUI runs in its own QQmlEngine (sandboxed with
+            # RestrictedUrlInterceptor + DenyAllNAMFactory), and its
+            # IPC-driven catalog refresh can stall a deep inspector traversal
+            # past the framework's per-command ceiling. So we click, let it
+            # render, and capture a SCREENSHOT (framebuffer grab — does not
+            # traverse QML properties).
+            - name: "Open the Package Manager"
+              action: click
+              target: "Package Manager"
+
+            - name: "Let the Package Manager view render, then capture it"
+              action: sleep
+              ms: 10000
+              text: "Clicking **Package Manager** opens the bundled `package_manager_ui` plugin in-place."
+              screenshot: "basecamp-package-manager.png"
+
+            # Now into Settings → Modules to inspect plugins + core modules.
+            - name: "Open Settings"
+              action: click
+              target: "Settings"
+
+            - name: "Settings view loads"
+              action: wait_for
+              texts: ["Manage modules, apps and dashboards.", "Sections"]
+              timeout: 30000
+              text: "The **Settings** view loads with its left rail (Sections) and Dashboard selected by default."
+              screenshot: "basecamp-settings.png"
+
+            # Click the Apps Inspector entry in the Settings left rail.
+            # find_and_click lands on it; the section title is unique.
+            - name: "Open Settings → Apps Inspector"
+              action: click
+              target: "Apps Inspector"
+
+            - name: "Apps Inspector loads"
+              action: wait_for
+              texts: ["Apps Inspector", "UI plugins available in this installation."]
+              timeout: 30000
+              text: "The **Settings → Apps Inspector** section lists the UI plugins installed in the app, with the same page-level search + Reload controls as the App Manager panel."
+              screenshot: "basecamp-apps-inspector.png"
+
+            # The baked-in UI plugins appear as rows. package_manager_ui
+            # renders under its displayName "Package Manager". Basecamp's own
+            # shell is no longer an installed app -- it is compiled into the
+            # executable -- so there is no "Main UI" row to wait for.
+            - name: "Installed apps are listed"
+              action: wait_for
+              texts: ["Package Manager"]
+              timeout: 30000
+              text: "The installed apps appear as rows — here, the package manager UI."
+              screenshot: "basecamp-apps-inspector-list.png"
+
+            # Switch to Module Inspector — the background modules loaded into
+            # the runtime. Selecting this section triggers backend.refreshCoreModules().
+            - name: "Open Settings → Module Inspector"
+              action: click
+              target: "Module Inspector"
+
+            - name: "Module Inspector loads"
+              action: wait_for
+              texts: ["Module Inspector", "Core modules known to the runtime, with live resource usage."]
+              timeout: 30000
+              text: "The **Settings → Module Inspector** section shows the background modules loaded into the runtime, with live resource usage."
+              screenshot: "basecamp-module-inspector.png"
+
+            # The auto-loaded core modules must show a "Loaded" status badge
+            # with an "Unload" button (not "Not loaded" / "Load"). This is the
+            # exact regression the ui-tests.mjs suite guards: a stale refresh
+            # once wiped the loaded flag and rendered everything as Not loaded.
+            # Core modules render `displayName || name`; package_manager and
+            # capability_module both set display_name in their metadata.
+            - name: "Core modules are present"
+              action: wait_for
+              texts: ["Package Manager", "Capabilities"]
+              timeout: 30000
+
+            - name: "Core modules report as loaded"
+              action: wait_for
+              texts: ["Loaded", "Unload"]
+              timeout: 30000
+              text: "The baked-in core modules report a **Loaded** status badge with an Unload action."
+              screenshot: "basecamp-core-loaded.png"
+
+            # Give the stats timer (polls logos_core_get_module_stats every ~2s)
+            # a tick so the rendered rows carry live CPU/Mem values, then capture.
+            - name: "Let the module stats populate"
+              action: sleep
+              ms: 3000
+              text: "After a stats tick, each loaded module row carries live CPU / memory usage."
+              screenshot: "basecamp-core-stats.png"
+        post_text: |
+          Every step here is a real action against this basecamp dev app: the
+          sidebar renders with **Applications**, **Package Manager**, and
+          **Settings** entries; opening **Applications** shows the install
+          catalog; clicking **Package Manager** opens the bundled
+          `package_manager_ui` plugin in-place (captured as a screenshot, since
+          its sandboxed QML can't be safely walked by the inspector);
+          **Settings → Apps Inspector** lists the installed apps
+          (`package_manager_ui`), and **Settings → Module Inspector** reports
+          the baked-in runtime modules (`package_manager`, `package_downloader`,
+          `capability_module`) as **Loaded** with live CPU/memory stats. A
+          green run is end-to-end proof that this commit builds a launchable
+          dev app whose Settings inspectors faithfully report what is installed
+          and loaded. The captured screenshots are embedded above and in the
+          CI report.

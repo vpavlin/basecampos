@@ -1,0 +1,165 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+
+import Basecamp.AppManager
+import Basecamp.Settings
+import Basecamp.Backend
+
+Item {
+    id: root
+
+    // Entry point for the shell: the welcome page's search routes a result
+    // here and hands over the query that produced it.
+    function applyAppSearch(query) { appManagerView.applySearch(query) }
+
+    // Section indices come from ShellSection (src/ShellSections.h), the single
+    // source of truth shared with MainContainer's C++ switch and
+    // SidebarPanel.qml's viewSections order.
+    readonly property int sidebarAppManager: ShellSection.AppManager
+    readonly property int sidebarSettings:   ShellSection.Settings
+    readonly property int sidebarPackages:   ShellSection.PackageManager
+
+    // The App Manager shows the catalog, which is fetched the first time
+    // something needs it rather than at launch.
+    readonly property bool appManagerShown:
+        backend.currentActiveSectionIndex === root.sidebarAppManager
+    onAppManagerShownChanged: if (appManagerShown) backend.requestCatalog()
+    Component.onCompleted: if (appManagerShown) backend.requestCatalog()
+
+    // The App Manager's view of the catalog. Declared here rather than handed
+    // over by the backend: a filter proxy is view configuration, so it belongs
+    // to whoever draws the view. Only the source model crosses, as a plain
+    // QAbstractItemModel*.
+    AppsFilterProxy {
+        id: uiAppsProxy
+        sourceModel:   backend.appsModel
+        typeFilter:    "ui_qml"
+        excludeMainUi: true
+        showUnavailable: appManagerView.showUnavailable
+    }
+
+    Connections {
+        target: backend
+        function onRepositoryOperationCompleted(operation, url, success, error) {
+            settingsView.reportRepositoryResult(operation, url, success, error)
+        }
+        // Capabilities the shell itself provides *that are pure navigation* —
+        // no state, no IPC, answerable on the spot. Adding the next one of
+        // those is one more `case`. Anything unrecognised must still be
+        // answered, or the requester waits out the full deadline for a reply
+        // never coming.
+        //
+        // NOT EVERY SHELL INTENT REACHES HERE. `basecamp.packages.confirm_*` is
+        // intercepted in C++ before this signal is emitted — see
+        // kPackageConfirmIntents in MainUIBackend.cpp. Those need the
+        // cascade-unload, the dependent caches and a pending dispatch id, and
+        // their dialogs live in OverlayDialogs rather than this layer. So the
+        // `unavailable` default below is not the whole story: check that list
+        // before concluding an intent is unhandled.
+        function onShellIntentRequested(requestId, intent, params, requesterName) {
+            switch (intent) {
+            case "basecamp.repositories.manage":
+                backend.setCurrentActiveSectionIndex(root.sidebarSettings)
+                settingsView.showRepositories()
+                backend.respondToShellIntent(requestId, true, ({}), "")
+                return
+            case "basecamp.settings.open":
+                backend.setCurrentActiveSectionIndex(root.sidebarSettings)
+                backend.respondToShellIntent(requestId, true, ({}), "")
+                return
+            case "basecamp.apps.open":
+                backend.setCurrentActiveSectionIndex(root.sidebarAppManager)
+                backend.respondToShellIntent(requestId, true, ({}), "")
+                return
+            case "basecamp.packages.open":
+                backend.setCurrentActiveSectionIndex(root.sidebarPackages)
+                backend.respondToShellIntent(requestId, true, ({}), "")
+                return
+            }
+            console.warn("ContentViews: unhandled shell intent", intent,
+                         "from", requesterName)
+            backend.respondToShellIntent(requestId, false, ({}), "unavailable")
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        color: "#1e1e1e"
+    }
+
+    // Content views stack — only App Manager and Settings live here.
+    // Apps (backend idx 0) is the C++ WorkspaceArea (QDockWidget-based),
+    // and Modules (backend idx 2) is the sandboxed package_manager_ui
+    // QQuickWidget.
+    StackLayout {
+        id: contentStack
+        anchors.fill: parent
+
+        // Map backend's sidebar index to this stack's two-entry layout.
+        currentIndex: backend.currentActiveSectionIndex === root.sidebarSettings ? 1 : 0
+
+        // App Manager (sidebar sidebarAppManager -> stack index 0)
+        AppManagerView {
+            id: appManagerView
+
+            appsProxy:      uiAppsProxy
+            hostVariant:    backend.appsModel ? backend.appsModel.hostVariant : ""
+            repositories:   backend.repositories
+            loading:        backend.appsLoading
+            onAppClicked: function(name, repositoryUrl) {
+                // Primary click — fast-path launch for installed apps.
+                backend.openApp(name, repositoryUrl, ({}), true)
+            }
+            onManageAppRequested: function(name, repositoryUrl) {
+                // Context menu's Install… / App details… — force the dialog
+                // open. The modal is the install confirmation (version picker
+                // + required packages), so both items land here.
+                backend.openApp(name, repositoryUrl, ({}), false)
+            }
+            onUninstallAppRequested: function(name, repositoryUrl) {
+                backend.uninstallApp(name, repositoryUrl)
+            }
+            onNavigateToRepositories: {
+                backend.setCurrentActiveSectionIndex(root.sidebarSettings)
+                settingsView.showRepositories()
+            }
+            onRefreshRequested: backend.refreshAppCatalog()
+        }
+
+        // Settings (backend index 3 -> internal index 1)
+        SettingsView {
+            id: settingsView
+
+            repositories:        backend.repositories
+            repositoriesLoading: backend.repositoriesLoading
+            downloadSource:      backend.downloadSource
+            uiModulesModel:      backend.uiModulesModel
+            coreModulesModel:    backend.coreModulesModel
+            modulesLoading:      backend.modulesLoading
+
+            onRepositoryRefreshRequested: backend.refreshRepositories()
+            onRepositoryAddRequested:     url => backend.addRepository(url)
+            onRepositoryRemoveRequested:  url => backend.removeRepository(url)
+            onRepositoryEnabledRequested: (url, e) => backend.setRepositoryEnabled(url, e)
+            onDownloadSourceRequested:    source => backend.setDownloadSource(source)
+            onRepositoriesBecameVisible: {
+                Qt.callLater(backend.refreshRepositories)
+                Qt.callLater(backend.refreshDownloadSource)
+            }
+
+            // Apps Inspector (UI plugins). View-only — uninstall lives in PMUI.
+            onAppsRefreshRequested:       backend.refreshUiModules()
+            onAppLoadRequested:           name => backend.loadUiModule(name)
+            onAppUnloadRequested:         name => backend.unloadUiModule(name)
+            onAppsInspectorBecameVisible: Qt.callLater(backend.refreshUiModules)
+
+            // Module Inspector (core modules). View-only — uninstall lives in PMUI.
+            onModulesRefreshRequested:      backend.refreshCoreModules()
+            onModuleLoadRequested:          name => backend.loadCoreModule(name)
+            onModuleUnloadRequested:        name => backend.unloadCoreModule(name)
+            onModuleInspectorBecameVisible: Qt.callLater(backend.refreshCoreModules)
+        }
+    }
+}
+
