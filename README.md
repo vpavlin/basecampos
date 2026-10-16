@@ -1,6 +1,8 @@
 # Basecamp OS (experimental)
 
-<!-- VIDEO: drag the demo video onto this line in the GitHub editor -->
+
+https://github.com/user-attachments/assets/a71dc6a6-16b0-4d82-9e18-de325fb97d94
+
 
 Logos Basecamp as a desktop: full screen, your wallpaper, a dock, every app in its own window,
 frosted glass, tiling, and Spotlight search. Built on the default Basecamp style and the
