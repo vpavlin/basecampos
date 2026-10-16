@@ -307,6 +307,16 @@ Item {
                         onClicked: wallpaperDialog.open()
                     }
                 }
+
+                LogosComboBox {
+                    objectName: "appearance.wallpaperFit"
+                    Layout.preferredWidth: 360
+                    readonly property var values: ["fit", "fill", "stretch"]
+                    model: [qsTr("Fit: whole image, blurred edges"), qsTr("Fill: cover the screen, crop"),
+                            qsTr("Stretch")]
+                    currentIndex: root.prefs ? Math.max(0, values.indexOf(root.prefs.wallpaperFit)) : 0
+                    onActivated: index => root.prefs.wallpaperFit = values[index]
+                }
             }
 
             LogosNotice {

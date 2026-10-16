@@ -237,7 +237,7 @@ void MainContainer::setupUi()
         setPalette(own);
         if (m_sidebarWidget)
             m_sidebarWidget->setClearColor(bg);
-        if (m_contentWidget)
+        if (m_contentWidget && !m_desktopLayout)
             m_contentWidget->setClearColor(bg);
         QWidget* top = window();
         if (top && top != this) {
@@ -317,7 +317,8 @@ void MainContainer::setupUi()
         m_mainLayout->setContentsMargins(0, 0, 0, 0);
         m_sidebarWidget->hide();
         contentArea->hide();
-        auto* desktopColumn = new QWidget(this);
+        m_desktopRoot = new DesktopRoot(this);
+        auto* desktopColumn = m_desktopRoot;
         auto* column = new QVBoxLayout(desktopColumn);
         column->setContentsMargins(0, 0, 0, 0);
         column->setSpacing(0);
@@ -623,10 +624,21 @@ void MainContainer::onPresentAppRequested(QWidget* widget)
 
 void MainContainer::setupDesktopUi()
 {
-    m_desktop->setWallpaper(m_prefs->wallpaperPath());
+    m_desktopRoot->setWallpaper(m_prefs->wallpaperPath(), m_prefs->wallpaperFit());
     connect(m_prefs, &ShellPrefs::wallpaperChanged, this, [this]() {
-        m_desktop->setWallpaper(m_prefs->wallpaperPath());
+        m_desktopRoot->setWallpaper(m_prefs->wallpaperPath(), m_prefs->wallpaperFit());
     });
+    connect(m_statusBar, &DesktopStatusBar::tileClicked, this, [this]() {
+        m_desktop->setTiling(!m_desktop->tiling());
+    });
+    connect(m_desktop, &DesktopArea::tilingChanged, m_statusBar, &DesktopStatusBar::setTiling);
+
+    // The shell's own windows (Applications, Settings) draw frosted glass
+    // themselves (see GlassInfo).
+    m_contentWidget->engine()->addImageProvider(QStringLiteral("backdrop"),
+                                                new BackdropProvider(m_desktopRoot));
+    m_contentWidget->rootContext()->setContextProperty(
+        "glass", new GlassInfo(m_desktopRoot, m_contentWidget, m_contentWidget));
     connect(m_desktop, &DesktopArea::windowsChanged, this, &MainContainer::updateDock);
     connect(m_desktop, &DesktopArea::closeRequested, this, &MainContainer::onDesktopCloseRequested);
 
@@ -763,6 +775,10 @@ QWidget* MainContainer::systemAppContent(const QString& key)
             m_settingsWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
             m_settingsWidget->setClearColor(
                 Logos::themeColor(QStringLiteral("background"), QColor("#171717")));
+            m_settingsWidget->engine()->addImageProvider(QStringLiteral("backdrop"),
+                                                         new BackdropProvider(m_desktopRoot));
+            m_settingsWidget->rootContext()->setContextProperty(
+                "glass", new GlassInfo(m_desktopRoot, m_settingsWidget, m_settingsWidget));
             m_settingsWidget->rootContext()->setContextProperty("backend", m_host->backendObject());
             m_settingsWidget->rootContext()->setContextProperty("shellPrefs", m_prefs);
             ShellDevQml::load(m_settingsWidget,

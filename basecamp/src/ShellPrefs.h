@@ -19,6 +19,8 @@ class ShellPrefs : public QObject
     Q_PROPERTY(QUrl wallpaperUrl READ wallpaperUrl NOTIFY wallpaperChanged)
     Q_PROPERTY(QUrl builtinWallpaperUrl READ builtinWallpaperUrl CONSTANT)
     Q_PROPERTY(QUrl customWallpaperUrl READ customWallpaperUrl NOTIFY wallpaperChanged)
+    // "fit" (whole image, blurred spare room), "fill" (cover, crops) or "stretch".
+    Q_PROPERTY(QString wallpaperFit READ wallpaperFit WRITE setWallpaperFit NOTIFY wallpaperChanged)
 
 public:
     explicit ShellPrefs(QObject* parent = nullptr);
@@ -36,6 +38,8 @@ public:
     QUrl customWallpaperUrl() const;
 
     Q_INVOKABLE void setWallpaper(const QString& id);
+    QString wallpaperFit() const;
+    void setWallpaperFit(const QString& fit);
     // Copies the chosen image into Basecamp's data folder and selects it.
     // Returns an error message, or "" on success.
     Q_INVOKABLE QString setCustomWallpaper(const QUrl& file);

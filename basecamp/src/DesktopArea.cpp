@@ -8,6 +8,8 @@
 #include <QPainterPath>
 #include <QScrollBar>
 #include <QVBoxLayout>
+#include <QTimer>
+#include <QPaintEvent>
 
 #include <ThemeColors.h>
 
@@ -16,6 +18,15 @@ namespace {
 QColor tok(const char* name, const char* fallback)
 {
     return Logos::themeColor(QString::fromLatin1(name), QColor(QString::fromLatin1(fallback)));
+}
+
+// Window chrome over the blurred wallpaper: translucent, a little more
+// opaque on the active window.
+QColor glassTint(bool active)
+{
+    QColor c = active ? tok("backgroundSecondary", "#262626") : tok("background", "#171717");
+    c.setAlphaF(active ? 0.78 : 0.68);
+    return c;
 }
 
 } // namespace
@@ -63,8 +74,7 @@ protected:
     {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
-        p.fillRect(rect(), m_active ? tok("backgroundSecondary", "#262626")
-                                    : tok("background", "#171717"));
+        DesktopRoot::paintGlass(p, this, rect(), glassTint(m_active));
 
         int x = 12;
         if (!m_icon.isNull()) {
@@ -231,7 +241,7 @@ protected:
     void paintEvent(QPaintEvent*) override
     {
         QPainter p(this);
-        p.fillRect(rect(), m_active ? tok("backgroundSecondary", "#262626") : tok("background", "#171717"));
+        DesktopRoot::paintGlass(p, this, rect(), glassTint(m_active));
         p.setPen(m_active ? tok("borderStrong", "#4a4a4a") : tok("border", "#333333"));
         p.drawRect(rect().adjusted(0, 0, -1, -1));
     }
@@ -292,6 +302,8 @@ AppWindow::AppWindow(const QString& key, const QString& title, const QString& ic
     , m_content(content)
 {
     setAttribute(Qt::WA_DeleteOnClose, false);
+    setAttribute(Qt::WA_TranslucentBackground);
+    setAutoFillBackground(false);
     setWindowTitle(title);
 
     // The frame (border + resize handle), then the title bar and the app.
@@ -360,6 +372,14 @@ void AppWindow::resizeEvent(QResizeEvent* event)
     QMdiSubWindow::resizeEvent(event);
 }
 
+void AppWindow::moveEvent(QMoveEvent* event)
+{
+    QMdiSubWindow::moveEvent(event);
+    // The glass shows what is under it, which just changed.
+    m_frame->update();
+    m_titleBar->update();
+}
+
 // ── DesktopArea ─────────────────────────────────────────────────────────────
 
 DesktopArea::DesktopArea(QWidget* parent)
@@ -370,15 +390,55 @@ DesktopArea::DesktopArea(QWidget* parent)
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setActivationOrder(QMdiArea::ActivationHistoryOrder);
     connect(this, &QMdiArea::subWindowActivated, this, &DesktopArea::onActivated);
-    connect(Logos::ThemeNotifier::instance(), &Logos::ThemeNotifier::currentChanged,
-            this, [this]() { viewport()->update(); });
+    // See-through: DesktopRoot paints the wallpaper behind us.
+    setBackground(Qt::NoBrush);
+    setAutoFillBackground(false);
+    viewport()->setAutoFillBackground(false);
 }
 
-void DesktopArea::setWallpaper(const QString& path)
+void DesktopArea::setTiling(bool on)
 {
-    m_wallpaper = path.isEmpty() ? QPixmap() : QPixmap(path);
-    m_scaled = QPixmap();
-    viewport()->update();
+    if (on == m_tiling)
+        return;
+    m_tiling = on;
+    if (on) {
+        for (AppWindow* w : appWindows())
+            w->setMaximizedOnDesktop(false);
+        retile();
+    }
+    emit tilingChanged(on);
+}
+
+void DesktopArea::retileSoon()
+{
+    if (!m_tiling || m_retilePending)
+        return;
+    m_retilePending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_retilePending = false;
+        retile();
+    });
+}
+
+void DesktopArea::retile()
+{
+    if (!m_tiling)
+        return;
+    QList<AppWindow*> shown;
+    for (const QString& key : m_order)
+        if (AppWindow* w = window(key); w && w->isVisible())
+            shown << w;
+    if (shown.isEmpty())
+        return;
+    const int gap = 10;
+    const QRect area = maximizedRect();
+    const int n = shown.size();
+    const int colW = (area.width() - (n + 1) * gap) / n;
+    for (int i = 0; i < n; ++i) {
+        shown[i]->setMaximizedOnDesktop(false);
+        shown[i]->setGeometry(area.x() + gap + i * (colW + gap), area.y() + gap,
+                              colW, area.height() - 2 * gap);
+    }
 }
 
 void DesktopArea::setBottomReserve(int px)
@@ -444,6 +504,8 @@ AppWindow* DesktopArea::openWindow(const QString& key, const QString& title,
     w->setGeometry(QRect(pos, size));
     w->show();
     setActiveSubWindow(w);
+    m_order << key;
+    retileSoon();
     emit windowsChanged();
     return w;
 }
@@ -455,6 +517,7 @@ void DesktopArea::restoreAndRaise(AppWindow* w)
     w->show();
     w->raise();
     setActiveSubWindow(w);
+    retileSoon();
     emit windowsChanged();
 }
 
@@ -467,6 +530,7 @@ void DesktopArea::minimize(AppWindow* w)
     for (QMdiSubWindow* other : subWindowList(QMdiArea::ActivationHistoryOrder))
         if (other != w && other->isVisible())
             setActiveSubWindow(other);
+    retileSoon();
     emit windowsChanged();
 }
 
@@ -475,8 +539,10 @@ void DesktopArea::removeWindow(AppWindow* w)
     if (!w)
         return;
     w->releaseContent();
+    m_order.removeAll(w->key());
     removeSubWindow(w);
     w->deleteLater();
+    retileSoon();
     emit windowsChanged();
 }
 
@@ -501,30 +567,10 @@ void DesktopArea::onActivated(QMdiSubWindow* active)
     emit windowsChanged();
 }
 
-void DesktopArea::paintEvent(QPaintEvent*)
-{
-    QPainter p(viewport());
-    const QSize s = viewport()->size();
-    if (m_wallpaper.isNull()) {
-        p.fillRect(viewport()->rect(), tok("background", "#171717"));
-        return;
-    }
-    // Cover: fill the screen, crop the overflow, keep the centre.
-    if (m_scaled.isNull() || m_scaled.deviceIndependentSize().toSize() != s) {
-        const QPixmap big = m_wallpaper.scaled(s * devicePixelRatioF(), Qt::KeepAspectRatioByExpanding,
-                                               Qt::SmoothTransformation);
-        const QSize target = s * devicePixelRatioF();
-        m_scaled = big.copy((big.width() - target.width()) / 2, (big.height() - target.height()) / 2,
-                            target.width(), target.height());
-        m_scaled.setDevicePixelRatio(devicePixelRatioF());
-    }
-    p.drawPixmap(0, 0, m_scaled);
-}
-
 void DesktopArea::resizeEvent(QResizeEvent* event)
 {
     QMdiArea::resizeEvent(event);
-    m_scaled = QPixmap();
+    retileSoon();
     for (AppWindow* w : appWindows())
         if (w->isMaximizedOnDesktop())
             w->setGeometry(maximizedRect());
@@ -548,6 +594,12 @@ DesktopStatusBar::DesktopStatusBar(QWidget* parent)
             this, [this]() { m_lambda = QPixmap(); update(); });
 }
 
+QRect DesktopStatusBar::tileRect() const
+{
+    const QRect sr = searchRect();
+    return QRect(sr.left() - 8 - 28, sr.top(), 28, sr.height());
+}
+
 QRect DesktopStatusBar::searchRect() const
 {
     // Left of the clock, sized for "Search  Ctrl K".
@@ -558,7 +610,9 @@ void DesktopStatusBar::paintEvent(QPaintEvent*)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
-    p.fillRect(rect(), tok("backgroundSecondary", "#262626"));
+    QColor tint = tok("backgroundSecondary", "#262626");
+    tint.setAlphaF(0.62);
+    DesktopRoot::paintGlass(p, this, rect(), tint);
     p.setPen(tok("borderHairline", "#2a2a2a"));
     p.drawLine(0, height() - 1, width(), height() - 1);
 
@@ -600,6 +654,23 @@ void DesktopStatusBar::paintEvent(QPaintEvent*)
     p.setPen(tok("textSecondary", "#a0a0a0"));
     p.drawText(sr, Qt::AlignCenter, tr("Search   Ctrl K"));
 
+    // Tiling toggle: three columns; accent while on.
+    const QRect tr_ = tileRect();
+    if (m_tileHover || m_tiling) {
+        p.setPen(Qt::NoPen);
+        p.setBrush(m_tiling ? tok("accentOrange", "#ff8800") : tok("surfaceRaised", "#333333"));
+        p.drawRoundedRect(tr_, 6, 6);
+    }
+    {
+        const QColor ink = m_tiling ? tok("accentForeground", "#171717") : tok("textSecondary", "#a0a0a0");
+        p.setPen(QPen(ink, 1.2));
+        p.setBrush(Qt::NoBrush);
+        const QRectF g(tr_.center().x() - 7.5, tr_.center().y() - 5.5, 15, 11);
+        p.drawRoundedRect(g, 1.5, 1.5);
+        p.drawLine(QPointF(g.left() + 5, g.top()), QPointF(g.left() + 5, g.bottom()));
+        p.drawLine(QPointF(g.left() + 10, g.top()), QPointF(g.left() + 10, g.bottom()));
+    }
+
     // Clock.
     f.setWeight(QFont::Medium);
     f.setPixelSize(13);
@@ -612,9 +683,11 @@ void DesktopStatusBar::paintEvent(QPaintEvent*)
 void DesktopStatusBar::mouseMoveEvent(QMouseEvent* e)
 {
     const bool hover = searchRect().contains(e->position().toPoint());
-    if (hover != m_searchHover) {
+    const bool tileHover = tileRect().contains(e->position().toPoint());
+    if (hover != m_searchHover || tileHover != m_tileHover) {
         m_searchHover = hover;
-        setCursor(hover ? Qt::PointingHandCursor : Qt::ArrowCursor);
+        m_tileHover = tileHover;
+        setCursor(hover || tileHover ? Qt::PointingHandCursor : Qt::ArrowCursor);
         update();
     }
 }
@@ -623,10 +696,178 @@ void DesktopStatusBar::mouseReleaseEvent(QMouseEvent* e)
 {
     if (e->button() == Qt::LeftButton && searchRect().contains(e->position().toPoint()))
         emit searchClicked();
+    else if (e->button() == Qt::LeftButton && tileRect().contains(e->position().toPoint()))
+        emit tileClicked();
 }
 
 void DesktopStatusBar::leaveEvent(QEvent*)
 {
     m_searchHover = false;
+    m_tileHover = false;
     update();
+}
+
+
+// ── DesktopRoot ─────────────────────────────────────────────────────────────
+
+namespace {
+
+// A cheap, smooth blur: shrink hard, then scale back up twice.
+QImage blurred(const QImage& src, int factor)
+{
+    if (src.isNull())
+        return src;
+    const QSize small(qMax(1, src.width() / factor), qMax(1, src.height() / factor));
+    QImage s = src.scaled(small, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    s = s.scaled(small * 4, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    return s.scaled(src.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+}
+
+} // namespace
+
+DesktopRoot::DesktopRoot(QWidget* parent)
+    : QWidget(parent)
+{
+    setAttribute(Qt::WA_OpaquePaintEvent);
+    connect(Logos::ThemeNotifier::instance(), &Logos::ThemeNotifier::currentChanged,
+            this, [this]() { rebuild(); });
+}
+
+void DesktopRoot::setWallpaper(const QString& path, const QString& fit)
+{
+    m_source = path.isEmpty() ? QPixmap() : QPixmap(path);
+    m_fit = fit;
+    rebuild();
+}
+
+void DesktopRoot::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    rebuild();
+}
+
+void DesktopRoot::rebuild()
+{
+    const qreal dpr = devicePixelRatioF();
+    const QSize target = size() * dpr;
+    if (target.isEmpty())
+        return;
+    QImage out(target, QImage::Format_ARGB32_Premultiplied);
+    out.fill(tok("background", "#171717"));
+    if (!m_source.isNull()) {
+        const QImage src = m_source.toImage();
+        QPainter p(&out);
+        p.setRenderHint(QPainter::SmoothPixmapTransform);
+        auto cover = [&]() {
+            const QImage big = src.scaled(target, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+            return big.copy((big.width() - target.width()) / 2, (big.height() - target.height()) / 2,
+                            target.width(), target.height());
+        };
+        if (m_fit == QLatin1String("stretch")) {
+            p.drawImage(0, 0, src.scaled(target, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+        } else if (m_fit == QLatin1String("fill")) {
+            p.drawImage(0, 0, cover());
+        } else {
+            // Fit: the whole image, centred; the spare room is the same image
+            // blurred and dimmed, so there are no bars.
+            p.drawImage(0, 0, blurred(cover(), 24));
+            p.fillRect(out.rect(), QColor(0, 0, 0, 90));
+            const QImage fitted = src.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            p.drawImage((target.width() - fitted.width()) / 2, (target.height() - fitted.height()) / 2, fitted);
+        }
+    }
+    m_composed = QPixmap::fromImage(out);
+    m_composed.setDevicePixelRatio(dpr);
+    m_blurredImage = blurred(out, 18);
+    m_blurred = QPixmap::fromImage(m_blurredImage);
+    m_blurred.setDevicePixelRatio(dpr);
+    ++m_revision;
+    emit backdropChanged();
+    update();
+    // Everything frosted shows the new backdrop.
+    for (QWidget* w : findChildren<QWidget*>())
+        w->update();
+}
+
+void DesktopRoot::paintEvent(QPaintEvent* event)
+{
+    QPainter p(this);
+    if (m_composed.isNull())
+        p.fillRect(event->rect(), tok("background", "#171717"));
+    else
+        p.drawPixmap(event->rect(), m_composed,
+                     QRectF(QPointF(event->rect().topLeft()) * m_composed.devicePixelRatio(),
+                            QSizeF(event->rect().size()) * m_composed.devicePixelRatio()));
+}
+
+void DesktopRoot::paintGlass(QPainter& p, QWidget* w, const QRect& r, const QColor& tint)
+{
+    DesktopRoot* root = nullptr;
+    for (QWidget* a = w; a; a = a->parentWidget())
+        if ((root = qobject_cast<DesktopRoot*>(a)))
+            break;
+    if (root && !root->m_blurred.isNull()) {
+        const QPoint at = w->mapTo(root, r.topLeft());
+        const qreal dpr = root->m_blurred.devicePixelRatio();
+        p.drawPixmap(r, root->m_blurred,
+                     QRectF(QPointF(at) * dpr, QSizeF(r.size()) * dpr));
+    }
+    p.fillRect(r, tint);
+}
+
+
+// ── QML glass ───────────────────────────────────────────────────────────────
+
+GlassInfo::GlassInfo(DesktopRoot* root, QWidget* widget, QObject* parent)
+    : QObject(parent), m_root(root), m_widget(widget)
+{
+    if (root)
+        connect(root, &DesktopRoot::backdropChanged, this, &GlassInfo::refresh);
+    // The widget moves when its window moves; watch every ancestor up to the root.
+    for (QWidget* w = widget; w && w != root; w = w->parentWidget())
+        w->installEventFilter(this);
+    refresh();
+}
+
+int GlassInfo::rootWidth() const { return m_root ? m_root->width() : 0; }
+int GlassInfo::rootHeight() const { return m_root ? m_root->height() : 0; }
+int GlassInfo::revision() const { return m_root ? m_root->revision() : 0; }
+
+bool GlassInfo::eventFilter(QObject* watched, QEvent* event)
+{
+    switch (event->type()) {
+    case QEvent::Move:
+    case QEvent::Resize:
+    case QEvent::Show:
+    case QEvent::ParentChange:
+        if (event->type() == QEvent::ParentChange && m_widget) {
+            // Re-parented into a new window: watch the new ancestors.
+            for (QWidget* w = m_widget; w && w != m_root; w = w->parentWidget())
+                w->installEventFilter(this);
+        }
+        refresh();
+        break;
+    default:
+        break;
+    }
+    return QObject::eventFilter(watched, event);
+}
+
+void GlassInfo::refresh()
+{
+    if (!m_root || !m_widget)
+        return;
+    bool inside = false;
+    for (QWidget* w = m_widget; w; w = w->parentWidget())
+        if (w == m_root) { inside = true; break; }
+    m_offset = inside ? m_widget->mapTo(m_root, QPoint(0, 0)) : QPoint();
+    emit changed();
+}
+
+QImage BackdropProvider::requestImage(const QString&, QSize* size, const QSize&)
+{
+    const QImage img = m_root ? m_root->blurredImage() : QImage();
+    if (size)
+        *size = img.size();
+    return img;
 }

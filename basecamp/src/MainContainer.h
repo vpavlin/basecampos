@@ -13,6 +13,7 @@ class DesktopArea;
 class AppWindow;
 class ShellPrefs;
 class DesktopStatusBar;
+class DesktopRoot;
 class ShortcutBridge;
 
 // MainContainer — the UI shell. Holds exactly one host-side pointer, an
@@ -94,6 +95,7 @@ private:
     QQuickWidget* m_settingsWidget = nullptr;
     QQuickWidget* m_spotlight = nullptr;
     DesktopStatusBar* m_statusBar = nullptr;
+    DesktopRoot* m_desktopRoot = nullptr;
     bool m_packagesPending = false;
     bool m_wentFullScreen = false;
 

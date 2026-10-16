@@ -42,14 +42,15 @@ Item {
         width: row.width + 2 * Theme.spacing.medium
         height: root.panelHeight
         radius: Theme.spacing.radiusXlarge
-        color: Theme.colors.getColor(Theme.palette.backgroundSecondary, 0.9)
+        color: Theme.colors.getColor(Theme.palette.backgroundSecondary, 0.62)
         border.color: Theme.palette.borderHairline
         border.width: 1
 
+        // Tiles sit in the panel's vertical centre; the running dots go in
+        // the bottom padding, outside the tiles' box.
         Row {
             id: row
             anchors.centerIn: parent
-            anchors.verticalCenterOffset: -4
 
             Repeater {
                 model: root.systemApps
@@ -70,7 +71,7 @@ Item {
                 Rectangle {
                     anchors.centerIn: parent
                     width: 1
-                    height: parent.height - 12
+                    height: parent.height - 8
                     color: Theme.palette.border
                 }
             }
@@ -107,7 +108,7 @@ Item {
         signal activated()
 
         width: root.pitch
-        height: root.tileSize + 16
+        height: root.tileSize
         hoverEnabled: true
         // Above its neighbours, so the name label isn't drawn under them.
         z: hovered ? 10 : 0
@@ -118,7 +119,7 @@ Item {
             width: root.tileSize
             height: root.tileSize
             anchors.horizontalCenter: parent.horizontalCenter
-            y: item.hovered ? 2 : 6
+            y: item.hovered ? -4 : 0
             Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
             LogosGlow {
@@ -170,8 +171,8 @@ Item {
             objectName: "dock.dot." + item.key
             visible: item.open
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 1
+            anchors.top: parent.bottom
+            anchors.topMargin: 5
             width: item.front ? 14 : 5
             height: 5
             radius: 2.5

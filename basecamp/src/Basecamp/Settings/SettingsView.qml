@@ -73,7 +73,9 @@ Rectangle {
         onSelectedIndexChanged: searchText = ""
     }
 
-    color: Theme.palette.background
+    // 0 in a desktop window: the window's frosted glass shows through.
+    property real backgroundOpacity: 1
+    color: Theme.colors.getColor(Theme.palette.background, backgroundOpacity)
 
     ColumnLayout {
         anchors.fill: parent

@@ -10,6 +10,7 @@
 namespace {
 const char* kLayoutKey = "BasecampShell/layout";
 const char* kWallpaperKey = "BasecampShell/wallpaper";
+const char* kFitKey = "BasecampShell/wallpaperFit";
 const char* kBuiltin = ":/qt/qml/Basecamp/Icons/Basecamp/Icons/basecamp-wallpaper.jpg";
 
 QString customPath()
@@ -118,4 +119,18 @@ QString ShellPrefs::setCustomWallpaper(const QUrl& file)
     QFile(dst).setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     setWallpaper(QStringLiteral("custom"));
     return QString();
+}
+
+QString ShellPrefs::wallpaperFit() const
+{
+    const QString v = QSettings().value(QLatin1String(kFitKey), QStringLiteral("fit")).toString();
+    return (v == QLatin1String("fill") || v == QLatin1String("stretch")) ? v : QStringLiteral("fit");
+}
+
+void ShellPrefs::setWallpaperFit(const QString& fit)
+{
+    if (fit != QLatin1String("fit") && fit != QLatin1String("fill") && fit != QLatin1String("stretch"))
+        return;
+    QSettings().setValue(QLatin1String(kFitKey), fit);
+    emit wallpaperChanged();
 }

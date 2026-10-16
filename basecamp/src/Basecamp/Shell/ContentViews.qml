@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Basecamp.AppManager
 import Basecamp.Settings
 import Basecamp.Backend
+import Logos.Theme
 
 Item {
     id: root
@@ -100,6 +101,31 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: "#1e1e1e"
+        visible: !glassBg.visible
+    }
+
+    // Desktop window: frosted glass, the blurred wallpaper under a tint
+    // (the backdrop image, shifted to where this window sits).
+    Item {
+        id: glassBg
+        anchors.fill: parent
+        clip: true
+        readonly property var info: typeof glass !== "undefined" ? glass : null
+        visible: root.pinnedSection >= 0 && info !== null
+
+        Image {
+            x: glassBg.info ? -glassBg.info.offsetX : 0
+            y: glassBg.info ? -glassBg.info.offsetY : 0
+            width: glassBg.info ? glassBg.info.rootWidth : 0
+            height: glassBg.info ? glassBg.info.rootHeight : 0
+            source: glassBg.visible ? "image://backdrop/blur?" + glassBg.info.revision : ""
+            cache: false
+            smooth: true
+        }
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.colors.getColor(Theme.palette.background, 0.72)
+        }
     }
 
     // Content views stack — only App Manager and Settings live here.
@@ -116,6 +142,7 @@ Item {
         // App Manager (sidebar sidebarAppManager -> stack index 0)
         AppManagerView {
             id: appManagerView
+            backgroundOpacity: root.pinnedSection >= 0 ? 0 : 1
 
             appsProxy:      uiAppsProxy
             hostVariant:    backend.appsModel ? backend.appsModel.hostVariant : ""
@@ -145,6 +172,7 @@ Item {
         // Settings (backend index 3 -> internal index 1)
         SettingsView {
             id: settingsView
+            backgroundOpacity: root.pinnedSection >= 0 ? 0 : 1
 
             repositories:        backend.repositories
             repositoriesLoading: backend.repositoriesLoading
