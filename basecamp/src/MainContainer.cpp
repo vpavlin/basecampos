@@ -5,6 +5,8 @@
 #include "InstallEnums.h"
 #include "ShortcutBridge.h"
 #include "WorkspaceArea.h"
+#include "DesktopArea.h"
+#include "ShellPrefs.h"
 
 #include <QQuickWidget>
 #include <QQmlEngine>
@@ -23,6 +25,9 @@
 #include <QPalette>
 #include <QEvent>
 #include <QTimer>
+#include <QShortcut>
+#include <QShowEvent>
+#include <QUrl>
 
 #include <ThemeColors.h>
 
@@ -68,6 +73,9 @@ MainContainer::MainContainer(IShellHost* host, QWidget* parent)
 
     // Set QML style
     QQuickStyle::setStyle("Basic");
+
+    m_prefs = new ShellPrefs(this);
+    m_desktopLayout = m_prefs->desktopLayout();
 
     setupUi();
 
@@ -279,8 +287,17 @@ void MainContainer::setupUi()
     m_contentWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
     m_contentWidget->setClearColor(bgColor);
     m_contentWidget->rootContext()->setContextProperty("backend", m_host->backendObject());
+    m_contentWidget->rootContext()->setContextProperty("shellPrefs", m_prefs);
     ShellDevQml::load(m_contentWidget,
-        QUrl(QStringLiteral("qrc:/qt/qml/Basecamp/Shell/Basecamp/Shell/ContentViews.qml")));
+        QUrl(QStringLiteral("qrc:/qt/qml/Basecamp/Shell/Basecamp/Shell/ContentViews.qml")),
+        [this](QObject* root) {
+            // Desktop layout: this instance is the Applications window, and
+            // Settings is a second instance (see systemAppContent).
+            if (!m_desktopLayout)
+                return;
+            root->setProperty("pinnedSection", int(ShellSection::AppManager));
+            connect(root, SIGNAL(repositoriesRequested()), this, SLOT(openSettingsRepositories()));
+        });
     m_contentStack->addWidget(m_contentWidget);
 
     // Index 2: placeholder for package_manager_ui — shows a centered
@@ -293,8 +310,26 @@ void MainContainer::setupUi()
     contentLayout->addWidget(m_contentStack, 1);
 
     // Add widgets to main layout
-    m_mainLayout->addWidget(m_sidebarWidget);
-    m_mainLayout->addWidget(contentArea, 1);
+    if (m_desktopLayout) {
+        // The sidebar and content stack still exist (their wiring is shared
+        // with the sidebar layout) but stay hidden; the desktop takes the
+        // window and the content views move into app windows on demand.
+        m_mainLayout->setContentsMargins(0, 0, 0, 0);
+        m_sidebarWidget->hide();
+        contentArea->hide();
+        auto* desktopColumn = new QWidget(this);
+        auto* column = new QVBoxLayout(desktopColumn);
+        column->setContentsMargins(0, 0, 0, 0);
+        column->setSpacing(0);
+        m_statusBar = new DesktopStatusBar(desktopColumn);
+        column->addWidget(m_statusBar);
+        m_desktop = new DesktopArea(desktopColumn);
+        column->addWidget(m_desktop, 1);
+        m_mainLayout->addWidget(desktopColumn, 1);
+    } else {
+        m_mainLayout->addWidget(m_sidebarWidget);
+        m_mainLayout->addWidget(contentArea, 1);
+    }
 
     // === OVERLAY DIALOGS (QML) ===
     // Child of `this` but deliberately NOT added to m_mainLayout — we
@@ -329,11 +364,17 @@ void MainContainer::setupUi()
 
     // Set reasonable minimum size
     setMinimumSize(800, 600);
+
+    if (m_desktopLayout)
+        setupDesktopUi();
 }
 
 void MainContainer::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
+    positionDock();
+    if (m_spotlight && m_spotlight->isVisible())
+        m_spotlight->setGeometry(rect());
     if (m_overlayWidget) {
         m_overlayWidget->setGeometry(0, 0, width(), height());
         // Qt re-stacks siblings on resize in some cases; keep the
@@ -369,6 +410,8 @@ void MainContainer::onSidebarTooltipRequested(const QString& text, qreal y)
 
 bool MainContainer::eventFilter(QObject* watched, QEvent* event)
 {
+    if (watched == m_dockWidget && event->type() == QEvent::Resize)
+        QTimer::singleShot(0, this, [this]() { positionDock(); });
     if (watched == m_sidebarWidget && event->type() == QEvent::Leave) {
         if (m_overlayWidget) {
             QObject* overlayRoot = m_overlayWidget->rootObject();
@@ -401,6 +444,21 @@ void MainContainer::onSectionIndexChanged(int index)
     }
 
     const int sectionIndex = index;
+
+    // Desktop layout: a section is an app window. Open it, then park the
+    // section back on Workspace so asking for the same one again re-opens it.
+    if (m_desktopLayout) {
+        switch (sectionIndex) {
+        case ShellSection::AppManager:     openSystemApp(QStringLiteral("sys:applications")); break;
+        case ShellSection::PackageManager: openSystemApp(QStringLiteral("sys:packages")); break;
+        case ShellSection::Settings:       openSystemApp(QStringLiteral("sys:settings")); break;
+        default: return;
+        }
+        QTimer::singleShot(0, this, [this]() {
+            m_host->setCurrentSectionIndex(ShellSection::Workspace);
+        });
+        return;
+    }
 
     qDebug() << "MainContainer: Active section index changed to" << sectionIndex;
 
@@ -438,12 +496,39 @@ void MainContainer::onNavigateToApps()
         return;
     }
 
-    // This is called when an app is loaded and we need to switch to Apps view
+    // This is called when an app is loaded and we need to switch to Apps view.
+    // The desktop has no such view: the app's window is already in front.
+    if (m_desktopLayout)
+        return;
     m_host->setCurrentSectionIndex(ShellSection::Workspace);
 }
 
 void MainContainer::onPluginWindowRequested(QWidget* widget, const QString& title)
 {
+    if (m_desktopLayout && widget) {
+        if (title == QStringLiteral("package_manager_ui") && !m_pmuiWidget
+            && offersSection(ShellSection::PackageManager)) {
+            // Preloaded in the background: keep it until Package Manager is opened.
+            m_pmuiWidget = widget;
+            widget->setParent(this);
+            widget->hide();
+            m_suppressNextNavToApps = true;
+            if (m_packagesPending)
+                openSystemApp(QStringLiteral("sys:packages"));
+            return;
+        }
+        const QVariantMap entry = launcherEntry(title);
+        const QString resolved = m_host->displayNameFor(title);
+        QString icon = entry.value(QStringLiteral("iconPath")).toString();
+        if (icon.startsWith(QStringLiteral("file:")))
+            icon = QUrl(icon).toLocalFile();
+        else if (icon.startsWith(QStringLiteral("qrc:")))
+            icon = icon.mid(3);
+        m_desktop->openWindow(title, resolved.isEmpty() ? title : resolved, icon, widget);
+        updateDock();
+        return;
+    }
+
     // package_manager_ui is not a dock: it becomes the Package Manager page of
     // the content stack, replacing the placeholder that sits there at startup.
     // Only where that section exists — a host without it (standalone mode)
@@ -481,6 +566,14 @@ void MainContainer::onPluginWindowRequested(QWidget* widget, const QString& titl
 
 void MainContainer::onPluginWindowRemoveRequested(QWidget* widget)
 {
+    if (m_desktopLayout) {
+        if (AppWindow* w = m_desktop->windowFor(widget))
+            m_desktop->removeWindow(w);
+        if (widget && widget == m_pmuiWidget)
+            m_pmuiWidget = nullptr;
+        updateDock();
+        return;
+    }
     if (widget && widget == m_pmuiWidget) {
         // package_manager_ui is the Package Manager PAGE, not a dock, so it must
         // not reach removePluginDock() -- but it cannot simply be left in the
@@ -502,6 +595,15 @@ void MainContainer::onPresentAppRequested(QWidget* widget)
 {
     if (!widget) return;
 
+    if (m_desktopLayout) {
+        if (widget == m_pmuiWidget)
+            openSystemApp(QStringLiteral("sys:packages"));
+        else if (AppWindow* w = m_desktop->windowFor(widget))
+            m_desktop->restoreAndRaise(w);
+        updateDock();
+        return;
+    }
+
     // Hoisted into the content stack, not docked, so "to the front" means
     // selecting its section rather than raising a tab.
     if (widget == m_pmuiWidget) {
@@ -517,4 +619,292 @@ void MainContainer::onPresentAppRequested(QWidget* widget)
     m_workspaceArea->activatePluginDock(widget);
 }
 
+// ── Desktop layout ──────────────────────────────────────────────────────────
 
+void MainContainer::setupDesktopUi()
+{
+    m_desktop->setWallpaper(m_prefs->wallpaperPath());
+    connect(m_prefs, &ShellPrefs::wallpaperChanged, this, [this]() {
+        m_desktop->setWallpaper(m_prefs->wallpaperPath());
+    });
+    connect(m_desktop, &DesktopArea::windowsChanged, this, &MainContainer::updateDock);
+    connect(m_desktop, &DesktopArea::closeRequested, this, &MainContainer::onDesktopCloseRequested);
+
+    // The dock floats over the desktop, like the overlay: a translucent
+    // QQuickWidget sized to its content and kept centred at the bottom.
+    m_dockWidget = new QQuickWidget(this);
+    m_dockWidget->setResizeMode(QQuickWidget::SizeViewToRootObject);
+    m_dockWidget->setAttribute(Qt::WA_AlwaysStackOnTop);
+    m_dockWidget->setAttribute(Qt::WA_TranslucentBackground);
+    m_dockWidget->setClearColor(Qt::transparent);
+    m_dockWidget->rootContext()->setContextProperty("backend", m_host->backendObject());
+    ShellDevQml::load(m_dockWidget,
+        QUrl(QStringLiteral("qrc:/qt/qml/Basecamp/Shell/Basecamp/Shell/DockPanel.qml")),
+        [this](QObject* root) {
+            connect(root, SIGNAL(openSystemApp(QString)), this, SLOT(openSystemApp(QString)));
+            connect(root, SIGNAL(launchApp(QString)), this, SLOT(launchFromDock(QString)));
+            updateDock();
+        });
+    m_dockWidget->installEventFilter(this);
+    m_dockWidget->show();
+    // Panel 72 + 12 from the edge + a little air: maximised windows stop above it.
+    m_desktop->setBottomReserve(92);
+
+    // Spotlight: the workspace's search page (search, Recently Closed,
+    // results) in spotlight mode, over the whole desktop. Ctrl+K toggles it.
+    m_spotlight = new QQuickWidget(this);
+    m_spotlight->setResizeMode(QQuickWidget::SizeRootObjectToView);
+    m_spotlight->setAttribute(Qt::WA_AlwaysStackOnTop);
+    m_spotlight->setAttribute(Qt::WA_TranslucentBackground);
+    m_spotlight->setClearColor(Qt::transparent);
+    m_spotlight->rootContext()->setContextProperty("backend", m_host->backendObject());
+    ShellDevQml::load(m_spotlight,
+        QUrl(QStringLiteral("qrc:/qt/qml/Basecamp/Shell/Basecamp/Shell/WelcomePage.qml")),
+        [this](QObject* root) {
+            root->setProperty("spotlight", true);
+            root->setProperty("searchShortcutEnabled", false);
+            connect(root, SIGNAL(dismissRequested()), this, SLOT(hideSpotlight()));
+            connect(root, SIGNAL(reopenAppRequested(QString)), this, SLOT(spotlightReopen(QString)));
+            connect(root, SIGNAL(appActivated(QString,QString)), this, SLOT(spotlightOpenApp(QString,QString)));
+            connect(root, SIGNAL(packageActivated(QString)), this, SLOT(spotlightPackage(QString)));
+            connect(root, SIGNAL(packageInstallRequested(QString)), this, SLOT(spotlightInstall(QString)));
+            connect(root, SIGNAL(showAllResultsRequested(QString,QString)),
+                    this, SLOT(spotlightShowAll(QString,QString)));
+        });
+    m_spotlight->hide();
+    if (m_workspaceArea && m_workspaceArea->welcomePageWidget()
+        && m_workspaceArea->welcomePageWidget()->rootObject())
+        m_workspaceArea->welcomePageWidget()->rootObject()->setProperty("searchShortcutEnabled", false);
+    auto* search = new QShortcut(QKeySequence(QStringLiteral("Ctrl+K")), this);
+    search->setContext(Qt::ApplicationShortcut);
+    auto toggleSpotlight = [this]() {
+        if (m_spotlight->isVisible())
+            hideSpotlight();
+        else
+            showSpotlight();
+    };
+    connect(search, &QShortcut::activated, this, toggleSpotlight);
+    // Apps and the hidden Applications / Package Manager views have their
+    // own Ctrl+K, which makes this one ambiguous; on the desktop the shell's wins.
+    connect(search, &QShortcut::activatedAmbiguously, this, [toggleSpotlight]() {
+        qDebug() << "MainContainer: Ctrl+K ambiguous; Spotlight takes it";
+        toggleSpotlight();
+    });
+    connect(m_statusBar, &DesktopStatusBar::searchClicked, this, &MainContainer::showSpotlight);
+
+    // Full screen is the desktop's natural state; F11 leaves and re-enters it.
+    auto* fullScreen = new QShortcut(QKeySequence(Qt::Key_F11), this);
+    fullScreen->setContext(Qt::ApplicationShortcut);
+    connect(fullScreen, &QShortcut::activated, this, [this]() {
+        QWidget* top = window();
+        if (top->isFullScreen())
+            top->showNormal();
+        else
+            top->showFullScreen();
+    });
+}
+
+void MainContainer::showEvent(QShowEvent* event)
+{
+    QWidget::showEvent(event);
+    if (m_desktopLayout && !m_wentFullScreen) {
+        m_wentFullScreen = true;
+        QTimer::singleShot(0, this, [this]() { window()->showFullScreen(); });
+    }
+}
+
+void MainContainer::positionDock()
+{
+    if (!m_dockWidget)
+        return;
+    m_dockWidget->move((width() - m_dockWidget->width()) / 2,
+                       height() - m_dockWidget->height() - 12);
+    m_dockWidget->raise();
+    if (m_overlayWidget && m_overlayWidget->isVisible())
+        m_overlayWidget->raise();
+}
+
+void MainContainer::updateDock()
+{
+    if (!m_dockWidget || !m_desktop)
+        return;
+    QObject* root = m_dockWidget->rootObject();
+    if (!root)
+        return;
+    root->setProperty("openKeys", QVariant(m_desktop->openKeys()));
+    const QString active = m_desktop->activeKey();
+    root->setProperty("activeKey", active);
+    if (!active.isEmpty() && !active.startsWith(QStringLiteral("sys:")))
+        m_host->setCurrentVisibleApp(active);
+}
+
+QVariantMap MainContainer::launcherEntry(const QString& name) const
+{
+    if (QObject* backend = m_host->backendObject()) {
+        for (const QVariant& v : backend->property("launcherApps").toList()) {
+            const QVariantMap m = v.toMap();
+            if (m.value(QStringLiteral("name")).toString() == name)
+                return m;
+        }
+    }
+    return {};
+}
+
+QWidget* MainContainer::systemAppContent(const QString& key)
+{
+    if (key == QStringLiteral("sys:applications"))
+        return m_contentWidget;
+    if (key == QStringLiteral("sys:packages"))
+        return m_pmuiWidget;
+    if (key == QStringLiteral("sys:settings")) {
+        if (!m_settingsWidget) {
+            m_settingsWidget = new QQuickWidget(this);
+            m_settingsWidget->hide();
+            m_settingsWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
+            m_settingsWidget->setClearColor(
+                Logos::themeColor(QStringLiteral("background"), QColor("#171717")));
+            m_settingsWidget->rootContext()->setContextProperty("backend", m_host->backendObject());
+            m_settingsWidget->rootContext()->setContextProperty("shellPrefs", m_prefs);
+            ShellDevQml::load(m_settingsWidget,
+                QUrl(QStringLiteral("qrc:/qt/qml/Basecamp/Shell/Basecamp/Shell/ContentViews.qml")),
+                [](QObject* root) {
+                    root->setProperty("pinnedSection", int(ShellSection::Settings));
+                    root->setProperty("handlesIntents", false);
+                });
+        }
+        return m_settingsWidget;
+    }
+    return nullptr;
+}
+
+void MainContainer::openSystemApp(const QString& key)
+{
+    if (!m_desktop)
+        return;
+    if (AppWindow* w = m_desktop->window(key)) {
+        m_desktop->restoreAndRaise(w);
+        return;
+    }
+    static const QHash<QString, std::pair<QString, QString>> meta = {
+        { QStringLiteral("sys:applications"),
+          { tr("Applications"), QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/dashboard.svg") } },
+        { QStringLiteral("sys:packages"),
+          { tr("Package Manager"), QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/module.svg") } },
+        { QStringLiteral("sys:settings"),
+          { tr("Settings"), QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/settings.svg") } },
+    };
+    if (!meta.contains(key))
+        return;
+    QWidget* content = systemAppContent(key);
+    if (!content) {
+        // Package Manager arrives from the host; open it when it does.
+        if (key == QStringLiteral("sys:packages")) {
+            m_packagesPending = true;
+            m_host->loadUiModule(QStringLiteral("package_manager_ui"));
+        }
+        return;
+    }
+    if (key == QStringLiteral("sys:packages"))
+        m_packagesPending = false;
+    const auto& [title, icon] = meta.value(key);
+    m_desktop->openWindow(key, title, icon, content);
+    if (key == QStringLiteral("sys:applications"))
+        QMetaObject::invokeMethod(m_host->backendObject(), "requestCatalog");
+    updateDock();
+}
+
+void MainContainer::openSettingsRepositories()
+{
+    openSystemApp(QStringLiteral("sys:settings"));
+    if (m_settingsWidget && m_settingsWidget->rootObject())
+        QMetaObject::invokeMethod(m_settingsWidget->rootObject(), "showRepositories");
+}
+
+void MainContainer::launchFromDock(const QString& name)
+{
+    if (AppWindow* w = m_desktop ? m_desktop->window(name) : nullptr) {
+        m_desktop->restoreAndRaise(w);
+        return;
+    }
+    QMetaObject::invokeMethod(m_host->backendObject(), "onAppLauncherClicked",
+                              Qt::QueuedConnection, Q_ARG(QString, name));
+}
+
+void MainContainer::onDesktopCloseRequested(const QString& key)
+{
+    AppWindow* w = m_desktop->window(key);
+    if (!w)
+        return;
+    if (key.startsWith(QStringLiteral("sys:"))) {
+        // The shell's own views are kept for the next open.
+        QWidget* content = w->releaseContent();
+        m_desktop->removeWindow(w);
+        if (content) {
+            content->setParent(this);
+            content->hide();
+        }
+        updateDock();
+        return;
+    }
+    // An app's window goes when the host unloads it (onPluginWindowRemoveRequested).
+    m_host->unloadUiModule(key);
+}
+
+void MainContainer::showSpotlight()
+{
+    if (!m_spotlight)
+        return;
+    m_spotlight->setGeometry(rect());
+    m_spotlight->show();
+    m_spotlight->raise();
+    m_spotlight->setFocus();
+    if (QObject* root = m_spotlight->rootObject())
+        QMetaObject::invokeMethod(root, "focusSearch");
+}
+
+void MainContainer::hideSpotlight()
+{
+    if (!m_spotlight || !m_spotlight->isVisible())
+        return;
+    if (QObject* root = m_spotlight->rootObject())
+        QMetaObject::invokeMethod(root, "clearSearch");
+    m_spotlight->hide();
+}
+
+void MainContainer::spotlightReopen(const QString& name)
+{
+    hideSpotlight();
+    launchFromDock(name);
+}
+
+void MainContainer::spotlightOpenApp(const QString& name, const QString& repositoryUrl)
+{
+    hideSpotlight();
+    if (AppWindow* w = m_desktop->window(name))
+        m_desktop->restoreAndRaise(w);
+    else
+        invokeOpenApp(name, repositoryUrl);
+}
+
+void MainContainer::spotlightPackage(const QString& name)
+{
+    hideSpotlight();
+    QMetaObject::invokeMethod(m_host->backendObject(), "showPackageDetails", Q_ARG(QString, name));
+}
+
+void MainContainer::spotlightInstall(const QString& name)
+{
+    hideSpotlight();
+    QMetaObject::invokeMethod(m_host->backendObject(), "requestPackageInstall", Q_ARG(QString, name));
+}
+
+void MainContainer::spotlightShowAll(const QString& typeValue, const QString& query)
+{
+    hideSpotlight();
+    if (typeValue == QStringLiteral("core")) {
+        openSystemApp(QStringLiteral("sys:packages"));
+    } else {
+        openSystemApp(QStringLiteral("sys:applications"));
+        applyAppManagerSearch(query);
+    }
+}

@@ -1,3 +1,14 @@
+# Basecamp OS (experimental)
+
+This branch adds a **desktop layout** to the v2 build: full screen, wallpaper, a dock, apps in
+movable windows, a status bar with a clock, and Spotlight (Ctrl+K). Spec:
+[docs/BASECAMP-OS-SPEC.md](docs/BASECAMP-OS-SPEC.md).
+
+Try it: `env BASECAMP_LAYOUT=desktop ./result/bin/LogosBasecamp`, or pick **Desktop** in
+Settings → Appearance → Layout and restart.
+
+---
+
 # Basecamp theming v2 (experimental)
 
 This branch is the **v2 experiment**: everything in v1 (colours, corners, fonts, live switching,

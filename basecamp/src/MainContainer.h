@@ -9,6 +9,10 @@
 
 class QQuickWidget;
 class WorkspaceArea;
+class DesktopArea;
+class AppWindow;
+class ShellPrefs;
+class DesktopStatusBar;
 class ShortcutBridge;
 
 // MainContainer — the UI shell. Holds exactly one host-side pointer, an
@@ -45,6 +49,7 @@ protected:
     // Keeps the overlay sized to the full MainContainer: it floats over both
     // the sidebar and the content stack, so it can't sit in the HBoxLayout.
     void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private slots:
@@ -55,6 +60,17 @@ private slots:
     void onOverlayActiveChanged(bool active);
     void onSidebarTooltipRequested(const QString& text, qreal y);
     void onAddApplicationDialogRequested(const QVariantMap& metadata);
+    // Desktop layout: the dock's two signals.
+    void openSystemApp(const QString& key);
+    void launchFromDock(const QString& name);
+    void openSettingsRepositories();
+    void showSpotlight();
+    void hideSpotlight();
+    void spotlightReopen(const QString& name);
+    void spotlightOpenApp(const QString& name, const QString& repositoryUrl);
+    void spotlightPackage(const QString& name);
+    void spotlightInstall(const QString& name);
+    void spotlightShowAll(const QString& typeValue, const QString& query);
 
 private:
     void wireSidebar(QObject* sidebarRoot);
@@ -62,6 +78,24 @@ private:
     void applyAppManagerSearch(const QString& query);
     void invokeOpenApp(const QString& name, const QString& repositoryUrl);
     void setupUi();
+
+    // ── Desktop layout (ShellPrefs::activeLayout() == "desktop") ──
+    void setupDesktopUi();
+    void updateDock();
+    void positionDock();
+    void onDesktopCloseRequested(const QString& key);
+    QWidget* systemAppContent(const QString& key);
+    QVariantMap launcherEntry(const QString& name) const;
+
+    ShellPrefs* m_prefs = nullptr;
+    bool m_desktopLayout = false;
+    DesktopArea* m_desktop = nullptr;
+    QQuickWidget* m_dockWidget = nullptr;
+    QQuickWidget* m_settingsWidget = nullptr;
+    QQuickWidget* m_spotlight = nullptr;
+    DesktopStatusBar* m_statusBar = nullptr;
+    bool m_packagesPending = false;
+    bool m_wentFullScreen = false;
 
     QHBoxLayout* m_mainLayout;
 

@@ -44,6 +44,10 @@ set(SOURCES
     MainContainer.cpp
     WorkspaceArea.h
     WorkspaceArea.cpp
+    DesktopArea.h
+    DesktopArea.cpp
+    ShellPrefs.h
+    ShellPrefs.cpp
     ShortcutBridge.h
     ShortcutBridge.cpp
     ShellDevQml.h
@@ -171,6 +175,7 @@ qt_add_qml_module(basecamp_shell_qml
         Basecamp/Shell/IntentInstallDialog.qml
         Basecamp/Shell/UninstallDialog.qml
         Basecamp/Shell/WelcomePage.qml
+        Basecamp/Shell/DockPanel.qml
 )
 
 qt_add_qml_module(basecamp_icons_qml
@@ -190,6 +195,7 @@ qt_add_qml_module(basecamp_icons_qml
         Basecamp/Icons/module.svg
         Basecamp/Icons/settings.svg
         Basecamp/Icons/tent.png
+        Basecamp/Icons/basecamp-wallpaper.jpg
         Basecamp/Icons/workspace.svg
 )
 

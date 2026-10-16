@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
 
@@ -70,6 +71,61 @@ Item {
                 d.resultSeverity = LogosNotice.Error
                 d.resultTitle = qsTr("That file isn't a valid theme")
                 d.resultMessage = r.errors.join("; ")
+            }
+        }
+    }
+
+    // Layout and wallpaper are shell preferences (MainContainer's ShellPrefs),
+    // absent where the shell isn't the host (shell-preview, doctests).
+    readonly property var prefs: typeof shellPrefs !== "undefined" ? shellPrefs : null
+
+    FileDialog {
+        id: wallpaperDialog
+        title: qsTr("Choose a wallpaper")
+        nameFilters: [qsTr("Images (*.png *.jpg *.jpeg)")]
+        onAccepted: {
+            const err = root.prefs.setCustomWallpaper(selectedFile)
+            d.resultSeverity = err.length ? LogosNotice.Error : LogosNotice.Success
+            d.resultTitle = err.length ? qsTr("That image can't be used") : qsTr("Wallpaper set")
+            d.resultMessage = err
+        }
+    }
+
+    component WallpaperChoice: AbstractButton {
+        id: choice
+        property string wallpaperId
+        property url preview: ""
+        readonly property bool selected: root.prefs && root.prefs.wallpaper === wallpaperId
+        implicitWidth: 152
+        implicitHeight: 112
+        hoverEnabled: true
+        onClicked: root.prefs.setWallpaper(wallpaperId)
+
+        contentItem: ColumnLayout {
+            spacing: Theme.spacing.tiny
+            Rectangle {
+                Layout.preferredWidth: 152
+                Layout.preferredHeight: 86
+                radius: Theme.spacing.radiusSmall
+                color: Theme.palette.background
+                border.width: choice.selected ? 2 : 1
+                border.color: choice.selected ? Theme.palette.accentOrange
+                             : choice.hovered ? Theme.palette.borderStrong : Theme.palette.border
+                clip: true
+                Image {
+                    anchors.fill: parent
+                    anchors.margins: parent.border.width
+                    source: choice.preview
+                    visible: source.toString().length > 0
+                    fillMode: Image.PreserveAspectCrop
+                    sourceSize: Qt.size(304, 172)
+                    asynchronous: true
+                }
+            }
+            LogosText {
+                text: choice.text
+                font.pixelSize: Theme.typography.secondaryText
+                color: choice.selected ? Theme.palette.text : Theme.palette.textSecondary
             }
         }
     }
@@ -170,6 +226,86 @@ Item {
                     text: qsTr("Using: %1").arg(Theme.density)
                     font.pixelSize: Theme.typography.secondaryText
                     color: Theme.palette.textTertiary
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                visible: root.prefs !== null
+
+                LogosText {
+                    text: qsTr("Layout")
+                    font.pixelSize: Theme.typography.primaryText
+                    font.weight: Theme.typography.weightMedium
+                    color: Theme.palette.text
+                }
+
+                LogosComboBox {
+                    objectName: "appearance.layoutCombo"
+                    Layout.preferredWidth: 360
+                    readonly property var values: ["sidebar", "desktop"]
+                    model: [qsTr("Sidebar"), qsTr("Desktop (full screen, dock, windows)")]
+                    currentIndex: root.prefs ? Math.max(0, values.indexOf(root.prefs.layout)) : 0
+                    onActivated: index => root.prefs.layout = values[index]
+                }
+
+                LogosText {
+                    Layout.fillWidth: true
+                    text: root.prefs && root.prefs.layout !== root.prefs.activeLayout
+                          ? qsTr("Takes effect the next time you start Basecamp.")
+                          : qsTr("In use now.")
+                    font.pixelSize: Theme.typography.secondaryText
+                    color: root.prefs && root.prefs.layout !== root.prefs.activeLayout
+                           ? Theme.palette.warning : Theme.palette.textTertiary
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                visible: root.prefs !== null
+
+                LogosText {
+                    text: qsTr("Wallpaper")
+                    font.pixelSize: Theme.typography.primaryText
+                    font.weight: Theme.typography.weightMedium
+                    color: Theme.palette.text
+                }
+                LogosText {
+                    Layout.fillWidth: true
+                    text: qsTr("Shown behind the windows in the desktop layout.")
+                    font.pixelSize: Theme.typography.secondaryText
+                    color: Theme.palette.textTertiary
+                }
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.medium
+
+                    WallpaperChoice {
+                        objectName: "appearance.wallpaper.basecamp"
+                        wallpaperId: "basecamp"
+                        text: qsTr("Basecamp")
+                        preview: root.prefs ? root.prefs.builtinWallpaperUrl : ""
+                    }
+                    WallpaperChoice {
+                        objectName: "appearance.wallpaper.plain"
+                        wallpaperId: "plain"
+                        text: qsTr("Plain")
+                    }
+                    WallpaperChoice {
+                        objectName: "appearance.wallpaper.custom"
+                        wallpaperId: "custom"
+                        visible: root.prefs && root.prefs.customWallpaperUrl.toString().length > 0
+                        text: qsTr("Your image")
+                        preview: root.prefs ? root.prefs.customWallpaperUrl : ""
+                    }
+                    LogosButton {
+                        objectName: "appearance.wallpaper.choose"
+                        text: qsTr("Choose image…")
+                        onClicked: wallpaperDialog.open()
+                    }
                 }
             }
 

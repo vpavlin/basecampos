@@ -12,6 +12,17 @@ Item {
     // Entry point for the shell: the welcome page's search routes a result
     // here and hands over the query that produced it.
     function applyAppSearch(query) { appManagerView.applySearch(query) }
+    function showRepositories() { settingsView.showRepositories() }
+
+    // The desktop layout opens App Manager and Settings as two windows, each
+    // an instance of this file pinned to one section; -1 follows the backend.
+    property int pinnedSection: -1
+    // Only one instance may answer shell intents.
+    property bool handlesIntents: true
+    readonly property int section: pinnedSection >= 0 ? pinnedSection
+                                                      : backend.currentActiveSectionIndex
+    // Repositories live in Settings, which may be another instance.
+    signal repositoriesRequested()
 
     // Section indices come from ShellSection (src/ShellSections.h), the single
     // source of truth shared with MainContainer's C++ switch and
@@ -23,7 +34,7 @@ Item {
     // The App Manager shows the catalog, which is fetched the first time
     // something needs it rather than at launch.
     readonly property bool appManagerShown:
-        backend.currentActiveSectionIndex === root.sidebarAppManager
+        root.section === root.sidebarAppManager
     onAppManagerShownChanged: if (appManagerShown) backend.requestCatalog()
     Component.onCompleted: if (appManagerShown) backend.requestCatalog()
 
@@ -58,10 +69,13 @@ Item {
         // `unavailable` default below is not the whole story: check that list
         // before concluding an intent is unhandled.
         function onShellIntentRequested(requestId, intent, params, requesterName) {
+            if (!root.handlesIntents)
+                return
             switch (intent) {
             case "basecamp.repositories.manage":
                 backend.setCurrentActiveSectionIndex(root.sidebarSettings)
                 settingsView.showRepositories()
+                root.repositoriesRequested()
                 backend.respondToShellIntent(requestId, true, ({}), "")
                 return
             case "basecamp.settings.open":
@@ -97,7 +111,7 @@ Item {
         anchors.fill: parent
 
         // Map backend's sidebar index to this stack's two-entry layout.
-        currentIndex: backend.currentActiveSectionIndex === root.sidebarSettings ? 1 : 0
+        currentIndex: root.section === root.sidebarSettings ? 1 : 0
 
         // App Manager (sidebar sidebarAppManager -> stack index 0)
         AppManagerView {
@@ -123,6 +137,7 @@ Item {
             onNavigateToRepositories: {
                 backend.setCurrentActiveSectionIndex(root.sidebarSettings)
                 settingsView.showRepositories()
+                root.repositoriesRequested()
             }
             onRefreshRequested: backend.refreshAppCatalog()
         }
