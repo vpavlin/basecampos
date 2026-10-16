@@ -1,19 +1,57 @@
 # Basecamp OS (experimental)
 
-This branch adds a **desktop layout** to the v2 build: full screen, wallpaper, a dock, apps in
-movable windows, a status bar with a clock, and Spotlight (Ctrl+K). Spec:
-[docs/BASECAMP-OS-SPEC.md](docs/BASECAMP-OS-SPEC.md).
+<!-- VIDEO: drag the demo video onto this line in the GitHub editor -->
 
-Try it: `env BASECAMP_LAYOUT=desktop ./result/bin/LogosBasecamp`, or pick **Desktop** in
-Settings → Appearance → Layout and restart.
+Logos Basecamp as a desktop: full screen, your wallpaper, a dock, every app in its own window,
+frosted glass, tiling, and Spotlight search. Built on the default Basecamp style and the
+[v2 theme engine](#basecamp-theming-v2-experimental), so any theme still applies.
 
-To run real apps installed from the catalog (portable `linux-amd64` packages), build the portable
-bundle instead; it reads apps from the same folder as the released Basecamp:
+Spec: [docs/BASECAMP-OS-SPEC.md](docs/BASECAMP-OS-SPEC.md)
+
+## What's in it
+
+- **Desktop:** full screen (F11 toggles), wallpaper behind everything, a status bar with the λ,
+  a search hint and a clock.
+- **Dock:** Applications, Package Manager and Settings, then your installed apps; dots for running
+  apps, a wider dot for the front window, the name on hover.
+- **Windows:** title bar with minimise / maximise / close, drag to move, resize from any edge,
+  maximise between the status bar and the dock.
+- **Tiling:** the status bar toggle lays visible windows out as equal-width columns.
+- **Spotlight (Ctrl+K):** search focused, Recently Closed below, same results as the workspace
+  search.
+- **Frosted glass:** status bar, title bars, frames, dock, Spotlight and the shell's own windows show a
+  blurred wallpaper under a tint.
+- **Settings → Appearance:** Layout (Sidebar / Desktop) and Wallpaper (Basecamp, Plain, your own
+  image; Fit, Fill or Stretch).
+
+## Build and run
+
+Requires Nix with flakes enabled. The portable bundle runs real apps installed from the catalog
+(it reads them from the same folder as the released Basecamp):
 
 ```sh
 nix build "path:$PWD/basecamp#bin-bundle-dir" --override-input logos-design-system "path:$PWD/design-system"
 env BASECAMP_LAYOUT=desktop ./result/bin/LogosBasecamp
 ```
+
+Or pick **Desktop** in Settings → Appearance → Layout and restart. `./build.sh` builds the dev host
+instead (no catalog apps).
+
+**Wallpaper tip:** match your screen for a perfect fit (for example 5120 × 1440 on a 32:9 display);
+keep the important part away from the bottom ~110 px (dock) and the top 30 px (status bar).
+
+## Known limits
+
+- Apps that run in their own process take their own keys: while one has focus, use the status bar
+  hint instead of Ctrl+K.
+- Apps draw their own backgrounds, so only the shell's windows, Package Manager and the chrome are
+  frosted.
+- Window positions aren't remembered between runs.
+
+## Theme, layout, shell
+
+A **theme** changes how Basecamp looks (data only). A **layout** is a built-in arrangement of the
+default shell (`sidebar`, `desktop`). A **shell package** would replace the whole shell; see spec §7.
 
 ---
 
