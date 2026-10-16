@@ -823,8 +823,8 @@ GlassInfo::GlassInfo(DesktopRoot* root, QWidget* widget, QObject* parent)
 {
     if (root)
         connect(root, &DesktopRoot::backdropChanged, this, &GlassInfo::refresh);
-    // The widget moves when its window moves; watch every ancestor up to the root.
-    for (QWidget* w = widget; w && w != root; w = w->parentWidget())
+    // The widget moves when its window moves; watch every ancestor.
+    for (QWidget* w = widget; w; w = w->parentWidget())
         w->installEventFilter(this);
     refresh();
 }
@@ -842,7 +842,7 @@ bool GlassInfo::eventFilter(QObject* watched, QEvent* event)
     case QEvent::ParentChange:
         if (event->type() == QEvent::ParentChange && m_widget) {
             // Re-parented into a new window: watch the new ancestors.
-            for (QWidget* w = m_widget; w && w != m_root; w = w->parentWidget())
+            for (QWidget* w = m_widget; w; w = w->parentWidget())
                 w->installEventFilter(this);
         }
         refresh();
@@ -857,10 +857,8 @@ void GlassInfo::refresh()
 {
     if (!m_root || !m_widget)
         return;
-    bool inside = false;
-    for (QWidget* w = m_widget; w; w = w->parentWidget())
-        if (w == m_root) { inside = true; break; }
-    m_offset = inside ? m_widget->mapTo(m_root, QPoint(0, 0)) : QPoint();
+    // Works for widgets outside the root too (Spotlight floats over it).
+    m_offset = m_widget->mapToGlobal(QPoint(0, 0)) - m_root->mapToGlobal(QPoint(0, 0));
     emit changed();
 }
 
@@ -870,4 +868,32 @@ QImage BackdropProvider::requestImage(const QString&, QSize* size, const QSize&)
     if (size)
         *size = img.size();
     return img;
+}
+
+GlassItem::GlassItem(DesktopRoot* root, QWidget* host, const QColor& tint, QQuickItem* parent)
+    : QQuickPaintedItem(parent), m_root(root), m_host(host), m_tint(tint)
+{
+    setZ(-1000);
+    auto fit = [this]() {
+        if (parentItem())
+            setSize(parentItem()->size());
+    };
+    fit();
+    connect(parent, &QQuickItem::widthChanged, this, fit);
+    connect(parent, &QQuickItem::heightChanged, this, fit);
+    // Repaint when the window moves or the backdrop changes.
+    auto* info = new GlassInfo(root, host, this);
+    connect(info, &GlassInfo::changed, this, [this]() { update(); });
+}
+
+void GlassItem::paint(QPainter* painter)
+{
+    const QRectF r(0, 0, width(), height());
+    if (m_root && m_host && !m_root->blurredPixmap().isNull()) {
+        const QPoint at = m_host->mapToGlobal(QPoint(0, 0)) - m_root->mapToGlobal(QPoint(0, 0));
+        const QPixmap& pix = m_root->blurredPixmap();
+        const qreal dpr = pix.devicePixelRatio();
+        painter->drawPixmap(r, pix, QRectF(QPointF(at) * dpr, r.size() * dpr));
+    }
+    painter->fillRect(r, m_tint);
 }

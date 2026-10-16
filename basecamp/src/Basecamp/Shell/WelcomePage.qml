@@ -156,16 +156,51 @@ Item {
                 onClicked: root.dismissRequested()
             }
 
-            // Spotlight's panel, behind the column.
-            Rectangle {
+            // Spotlight's panel, behind the column: frosted glass (the blurred
+            // wallpaper, rounded by a mask) under a tint, like the windows.
+            Item {
+                id: spotPanel
                 visible: root.spotlight
                 x: column.x - Theme.spacing.xxlarge
                 y: column.y - Theme.spacing.xxlarge
                 width: column.width + 2 * Theme.spacing.xxlarge
                 height: column.height + 2 * Theme.spacing.xxlarge
-                radius: Theme.spacing.radiusXlarge
-                color: Theme.palette.backgroundSecondary
-                border.color: Theme.palette.border
+                readonly property var info: typeof glass !== "undefined" ? glass : null
+                readonly property point at: { x; y; return mapToItem(root, 0, 0) }
+
+                Item {
+                    anchors.fill: parent
+                    visible: spotPanel.info !== null
+                    layer.enabled: visible
+                    layer.effect: MultiEffect {
+                        maskEnabled: true
+                        maskSource: spotMask
+                        maskThresholdMin: 0.5
+                        maskSpreadAtMin: 1.0
+                    }
+                    Image {
+                        x: spotPanel.info ? -(spotPanel.info.offsetX + spotPanel.at.x) : 0
+                        y: spotPanel.info ? -(spotPanel.info.offsetY + spotPanel.at.y) : 0
+                        width: spotPanel.info ? spotPanel.info.rootWidth : 0
+                        height: spotPanel.info ? spotPanel.info.rootHeight : 0
+                        source: spotPanel.info ? "image://backdrop/blur?" + spotPanel.info.revision : ""
+                        cache: false
+                    }
+                }
+                Rectangle {
+                    id: spotMask
+                    anchors.fill: parent
+                    radius: Theme.spacing.radiusXlarge
+                    visible: false
+                    layer.enabled: true
+                }
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Theme.spacing.radiusXlarge
+                    color: spotPanel.info ? Theme.colors.getColor(Theme.palette.backgroundSecondary, 0.7)
+                                          : Theme.palette.backgroundSecondary
+                    border.color: Theme.palette.border
+                }
                 // Clicks on the panel stay on the panel.
                 MouseArea { anchors.fill: parent }
             }

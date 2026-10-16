@@ -7,6 +7,14 @@ movable windows, a status bar with a clock, and Spotlight (Ctrl+K). Spec:
 Try it: `env BASECAMP_LAYOUT=desktop ./result/bin/LogosBasecamp`, or pick **Desktop** in
 Settings → Appearance → Layout and restart.
 
+To run real apps installed from the catalog (portable `linux-amd64` packages), build the portable
+bundle instead; it reads apps from the same folder as the released Basecamp:
+
+```sh
+nix build "path:$PWD/basecamp#bin-bundle-dir" --override-input logos-design-system "path:$PWD/design-system"
+env BASECAMP_LAYOUT=desktop ./result/bin/LogosBasecamp
+```
+
 ---
 
 # Basecamp theming v2 (experimental)

@@ -6,6 +6,7 @@
 #include <QPointer>
 #include <QImage>
 #include <QQuickImageProvider>
+#include <QQuickPaintedItem>
 
 class WindowFrame;
 class WindowTitleBar;
@@ -26,6 +27,8 @@ public:
 
     // Paints the blurred backdrop under `w` (any descendant), then `tint`.
     static void paintGlass(QPainter& p, QWidget* w, const QRect& r, const QColor& tint);
+
+    const QPixmap& blurredPixmap() const { return m_blurred; }
 
     // The blurred backdrop as an image (device pixels), for QML glass.
     QImage blurredImage() const { return m_blurredImage; }
@@ -224,4 +227,20 @@ private:
     bool m_tileHover = false;
     QPixmap m_lambda;
     bool m_searchHover = false;
+};
+
+// Glass painted from C++ under an app's QML we don't own (Package Manager):
+// its sandbox refuses image:// URLs, so the backdrop is drawn directly.
+class GlassItem : public QQuickPaintedItem
+{
+    Q_OBJECT
+
+public:
+    GlassItem(DesktopRoot* root, QWidget* host, const QColor& tint, QQuickItem* parent);
+    void paint(QPainter* painter) override;
+
+private:
+    QPointer<DesktopRoot> m_root;
+    QPointer<QWidget> m_host;
+    QColor m_tint;
 };

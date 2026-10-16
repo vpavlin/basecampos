@@ -66,6 +66,7 @@ private slots:
     void launchFromDock(const QString& name);
     void openSettingsRepositories();
     void showSpotlight();
+    void toggleSpotlight();
     void hideSpotlight();
     void spotlightReopen(const QString& name);
     void spotlightOpenApp(const QString& name, const QString& repositoryUrl);
@@ -87,6 +88,7 @@ private:
     void onDesktopCloseRequested(const QString& key);
     QWidget* systemAppContent(const QString& key);
     QVariantMap launcherEntry(const QString& name) const;
+    void applyGlass(QWidget* widget);
 
     ShellPrefs* m_prefs = nullptr;
     bool m_desktopLayout = false;

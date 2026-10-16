@@ -10,6 +10,7 @@
 
 #include <QQuickWidget>
 #include <QQmlEngine>
+#include <QQmlComponent>
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <qqml.h>
@@ -27,6 +28,8 @@
 #include <QTimer>
 #include <QShortcut>
 #include <QShowEvent>
+#include <QKeyEvent>
+#include <QApplication>
 #include <QUrl>
 
 #include <ThemeColors.h>
@@ -411,6 +414,16 @@ void MainContainer::onSidebarTooltipRequested(const QString& text, qreal y)
 
 bool MainContainer::eventFilter(QObject* watched, QEvent* event)
 {
+    if (m_desktopLayout && m_spotlight && event->type() == QEvent::KeyPress) {
+        auto* ke = static_cast<QKeyEvent*>(event);
+        const auto mods = ke->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier
+                                             | Qt::AltModifier | Qt::MetaModifier);
+        auto* w = qobject_cast<QWidget*>(watched);
+        if (ke->key() == Qt::Key_K && mods == Qt::ControlModifier && w && w->window() == window()) {
+            toggleSpotlight();
+            return true;
+        }
+    }
     if (watched == m_dockWidget && event->type() == QEvent::Resize)
         QTimer::singleShot(0, this, [this]() { positionDock(); });
     if (watched == m_sidebarWidget && event->type() == QEvent::Leave) {
@@ -670,6 +683,9 @@ void MainContainer::setupDesktopUi()
     m_spotlight->setAttribute(Qt::WA_TranslucentBackground);
     m_spotlight->setClearColor(Qt::transparent);
     m_spotlight->rootContext()->setContextProperty("backend", m_host->backendObject());
+    m_spotlight->engine()->addImageProvider(QStringLiteral("backdrop"), new BackdropProvider(m_desktopRoot));
+    m_spotlight->rootContext()->setContextProperty(
+        "glass", new GlassInfo(m_desktopRoot, m_spotlight, m_spotlight));
     ShellDevQml::load(m_spotlight,
         QUrl(QStringLiteral("qrc:/qt/qml/Basecamp/Shell/Basecamp/Shell/WelcomePage.qml")),
         [this](QObject* root) {
@@ -689,13 +705,12 @@ void MainContainer::setupDesktopUi()
         m_workspaceArea->welcomePageWidget()->rootObject()->setProperty("searchShortcutEnabled", false);
     auto* search = new QShortcut(QKeySequence(QStringLiteral("Ctrl+K")), this);
     search->setContext(Qt::ApplicationShortcut);
-    auto toggleSpotlight = [this]() {
-        if (m_spotlight->isVisible())
-            hideSpotlight();
-        else
-            showSpotlight();
-    };
+    auto toggleSpotlight = [this]() { this->toggleSpotlight(); };
     connect(search, &QShortcut::activated, this, toggleSpotlight);
+    // A focused text field takes Ctrl+K first (it means "delete to end of
+    // line" in Qt text inputs), so the shortcut never sees it; catch the key
+    // for the whole window too (eventFilter).
+    qApp->installEventFilter(this);
     // Apps and the hidden Applications / Package Manager views have their
     // own Ctrl+K, which makes this one ambiguous; on the desktop the shell's wins.
     connect(search, &QShortcut::activatedAmbiguously, this, [toggleSpotlight]() {
@@ -820,8 +835,10 @@ void MainContainer::openSystemApp(const QString& key)
         }
         return;
     }
-    if (key == QStringLiteral("sys:packages"))
+    if (key == QStringLiteral("sys:packages")) {
         m_packagesPending = false;
+        applyGlass(content);
+    }
     const auto& [title, icon] = meta.value(key);
     m_desktop->openWindow(key, title, icon, content);
     if (key == QStringLiteral("sys:applications"))
@@ -923,4 +940,32 @@ void MainContainer::spotlightShowAll(const QString& typeValue, const QString& qu
         openSystemApp(QStringLiteral("sys:applications"));
         applyAppManagerSearch(query);
     }
+}
+
+
+// Frosted glass for an app we don't own the QML of (Package Manager): make
+// its root fill transparent and slide a glass layer underneath its content.
+void MainContainer::applyGlass(QWidget* widget)
+{
+    auto* qw = qobject_cast<QQuickWidget*>(widget);
+    if (!qw)
+        qw = widget ? widget->findChild<QQuickWidget*>() : nullptr;
+    if (!qw || qw->property("_bcGlass").toBool())
+        return;
+    auto* root = qobject_cast<QQuickItem*>(qw->rootObject());
+    if (!root || !root->property("color").isValid())
+        return;
+    QColor tint = Logos::themeColor(QStringLiteral("background"), QColor("#171717"));
+    tint.setAlphaF(0.72);
+    new GlassItem(m_desktopRoot, qw, tint, root);
+    root->setProperty("color", QColor(Qt::transparent));
+    qw->setProperty("_bcGlass", true);
+}
+
+void MainContainer::toggleSpotlight()
+{
+    if (m_spotlight && m_spotlight->isVisible())
+        hideSpotlight();
+    else
+        showSpotlight();
 }
