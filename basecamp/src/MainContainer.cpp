@@ -956,7 +956,7 @@ void MainContainer::applyGlass(QWidget* widget)
     if (!root || !root->property("color").isValid())
         return;
     QColor tint = Logos::themeColor(QStringLiteral("background"), QColor("#171717"));
-    tint.setAlphaF(0.72);
+    tint.setAlphaF(0.9);
     new GlassItem(m_desktopRoot, qw, tint, root);
     root->setProperty("color", QColor(Qt::transparent));
     qw->setProperty("_bcGlass", true);

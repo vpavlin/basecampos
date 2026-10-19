@@ -83,9 +83,11 @@ protected:
 
 private:
     void refresh();
+    void refreshSoon();
     QPointer<DesktopRoot> m_root;
     QPointer<QWidget> m_widget;
     QPoint m_offset;
+    bool m_pending = false;
 };
 
 class BackdropProvider : public QQuickImageProvider

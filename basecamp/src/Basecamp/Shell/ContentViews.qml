@@ -124,7 +124,7 @@ Item {
         }
         Rectangle {
             anchors.fill: parent
-            color: Theme.colors.getColor(Theme.palette.background, 0.72)
+            color: Theme.colors.getColor(Theme.palette.background, 0.9)
         }
     }
 

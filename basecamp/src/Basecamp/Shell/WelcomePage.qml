@@ -197,7 +197,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: Theme.spacing.radiusXlarge
-                    color: spotPanel.info ? Theme.colors.getColor(Theme.palette.backgroundSecondary, 0.7)
+                    color: spotPanel.info ? Theme.colors.getColor(Theme.palette.backgroundSecondary, 0.88)
                                           : Theme.palette.backgroundSecondary
                     border.color: Theme.palette.border
                 }

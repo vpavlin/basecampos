@@ -20,12 +20,12 @@ QColor tok(const char* name, const char* fallback)
     return Logos::themeColor(QString::fromLatin1(name), QColor(QString::fromLatin1(fallback)));
 }
 
-// Window chrome over the blurred wallpaper: translucent, a little more
-// opaque on the active window.
+// Window chrome over the lightly blurred wallpaper: nearly opaque, so the
+// wallpaper only tints it, and a little more opaque on the active window.
 QColor glassTint(bool active)
 {
     QColor c = active ? tok("backgroundSecondary", "#262626") : tok("background", "#171717");
-    c.setAlphaF(active ? 0.78 : 0.68);
+    c.setAlphaF(active ? 0.92 : 0.88);
     return c;
 }
 
@@ -302,7 +302,9 @@ AppWindow::AppWindow(const QString& key, const QString& title, const QString& ic
     , m_content(content)
 {
     setAttribute(Qt::WA_DeleteOnClose, false);
-    setAttribute(Qt::WA_TranslucentBackground);
+    // Opaque: the glass shows the wallpaper, never the windows beneath, so
+    // moving a window doesn't need everything under it repainted.
+    setAttribute(Qt::WA_OpaquePaintEvent);
     setAutoFillBackground(false);
     setWindowTitle(title);
 
@@ -611,7 +613,7 @@ void DesktopStatusBar::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     QColor tint = tok("backgroundSecondary", "#262626");
-    tint.setAlphaF(0.62);
+    tint.setAlphaF(0.85);
     DesktopRoot::paintGlass(p, this, rect(), tint);
     p.setPen(tok("borderHairline", "#2a2a2a"));
     p.drawLine(0, height() - 1, width(), height() - 1);
@@ -778,7 +780,7 @@ void DesktopRoot::rebuild()
     }
     m_composed = QPixmap::fromImage(out);
     m_composed.setDevicePixelRatio(dpr);
-    m_blurredImage = blurred(out, 18);
+    m_blurredImage = blurred(out, 6);
     m_blurred = QPixmap::fromImage(m_blurredImage);
     m_blurred.setDevicePixelRatio(dpr);
     ++m_revision;
@@ -845,12 +847,25 @@ bool GlassInfo::eventFilter(QObject* watched, QEvent* event)
             for (QWidget* w = m_widget; w; w = w->parentWidget())
                 w->installEventFilter(this);
         }
-        refresh();
+        refreshSoon();
         break;
     default:
         break;
     }
     return QObject::eventFilter(watched, event);
+}
+
+// A drag sends many move events per frame (one per watched ancestor, at the
+// mouse's rate); follow them once per frame.
+void GlassInfo::refreshSoon()
+{
+    if (m_pending)
+        return;
+    m_pending = true;
+    QTimer::singleShot(16, this, [this]() {
+        m_pending = false;
+        refresh();
+    });
 }
 
 void GlassInfo::refresh()

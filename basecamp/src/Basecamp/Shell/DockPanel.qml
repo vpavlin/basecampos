@@ -42,7 +42,7 @@ Item {
         width: row.width + 2 * Theme.spacing.medium
         height: root.panelHeight
         radius: Theme.spacing.radiusXlarge
-        color: Theme.colors.getColor(Theme.palette.backgroundSecondary, 0.62)
+        color: Theme.colors.getColor(Theme.palette.backgroundSecondary, 0.8)
         border.color: Theme.palette.borderHairline
         border.width: 1
 
