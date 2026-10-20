@@ -10,6 +10,8 @@ frosted glass, tiling, and Spotlight search. Built on the default Basecamp style
 
 Spec: [docs/BASECAMP-OS-SPEC.md](docs/BASECAMP-OS-SPEC.md)
 
+**Want to try it?** Download the test build and follow [TESTING.md](TESTING.md).
+
 ## What's in it
 
 - **Desktop:** full screen (F11 toggles), wallpaper behind everything, a status bar with the λ,
