@@ -274,10 +274,12 @@ Item {
                 }
             }
 
+            // Wallpaper only exists in the desktop layout; offer it once that
+            // layout is chosen (it can be set before the restart).
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
-                visible: root.prefs !== null
+                visible: root.prefs !== null && root.prefs.layout === "desktop"
 
                 LogosText {
                     text: qsTr("Wallpaper")

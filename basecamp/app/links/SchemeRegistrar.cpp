@@ -97,6 +97,14 @@ bool registerScheme()
         return true;
     }
 
+    // An instance on its own --user-dir (a test build next to the user's real
+    // Basecamp) must not take over the system's logos:// handler.
+    if (!qEnvironmentVariable("LOGOS_USER_DIR").isEmpty()) {
+        qInfo().noquote() << "SchemeRegistrar: running with --user-dir; skipping registration;"
+                          << LinkUrl::scheme() << "links keep opening the installed Basecamp.";
+        return true;
+    }
+
 #if defined(Q_OS_MACOS)
     // CFBundleURLTypes in Info.plist does this, and LaunchServices reads it
     // when the bundle is first launched. Nothing to write at runtime.
