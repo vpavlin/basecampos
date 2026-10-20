@@ -33,6 +33,7 @@ qt_add_qml_module(logos_theme_qml
         fonts/PublicSans-Bold.ttf
         fonts/PublicSans-Medium.ttf
         fonts/PublicSans-Regular.ttf
+        builtin/logos.light/theme.json
 )
 
 # ThemeRegistry parses theme.json with QJsonDocument and hands QColor values

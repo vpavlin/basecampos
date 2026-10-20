@@ -291,7 +291,9 @@ void ThemeRegistry::reload()
 
 void ThemeRegistry::rescan()
 {
-    QStringList paths;
+    // Built-in themes first: Light ships inside the library (Dark is the QML
+    // default), and a user file with the same id cannot replace it.
+    QStringList paths{ QStringLiteral(":/qt/qml/Logos/Theme/builtin") };
     const QString env = qEnvironmentVariable("LOGOS_THEME_PATH");
     for (const QString& p : env.split(QDir::listSeparator(), Qt::SkipEmptyParts))
         paths << QDir::cleanPath(p);
