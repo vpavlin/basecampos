@@ -55,23 +55,25 @@ Item {
         id: fileDialog
         title: qsTr("Choose a theme file")
         nameFilters: [qsTr("Logos theme (*.json)")]
-        onAccepted: {
-            const r = ThemeInstaller.install(selectedFile)
-            if (r.ok) {
-                ThemeRegistry.reload()
-                Theme.setTheme(r.id)
-                d.resultSeverity = LogosNotice.Success
-                d.resultTitle = r.assets
-                    ? qsTr("Installed “%1” with %2 files").arg(r.name).arg(r.assets)
-                    : qsTr("Installed “%1”").arg(r.name)
-                d.resultMessage = r.warnings.length
-                    ? qsTr("Applied with warnings: %1").arg(r.warnings.join("; "))
-                    : qsTr("It is now active. Apps pick it up the next time you start Basecamp.")
-            } else {
-                d.resultSeverity = LogosNotice.Error
-                d.resultTitle = qsTr("That file isn't a valid theme")
-                d.resultMessage = r.errors.join("; ")
-            }
+        onAccepted: root.installTheme(selectedFile)
+    }
+
+    function installTheme(file) {
+        const r = ThemeInstaller.install(file)
+        if (r.ok) {
+            ThemeRegistry.reload()
+            Theme.setTheme(r.id)
+            d.resultSeverity = LogosNotice.Success
+            d.resultTitle = r.assets
+                ? qsTr("Installed “%1” with %2 files").arg(r.name).arg(r.assets)
+                : qsTr("Installed “%1”").arg(r.name)
+            d.resultMessage = r.warnings.length
+                ? qsTr("Applied with warnings: %1").arg(r.warnings.join("; "))
+                : qsTr("It is now active. Apps pick it up the next time you start Basecamp.")
+        } else {
+            d.resultSeverity = LogosNotice.Error
+            d.resultTitle = qsTr("That file isn't a valid theme")
+            d.resultMessage = r.errors.join("; ")
         }
     }
 
@@ -83,12 +85,14 @@ Item {
         id: wallpaperDialog
         title: qsTr("Choose a wallpaper")
         nameFilters: [qsTr("Images (*.png *.jpg *.jpeg)")]
-        onAccepted: {
-            const err = root.prefs.setCustomWallpaper(selectedFile)
-            d.resultSeverity = err.length ? LogosNotice.Error : LogosNotice.Success
-            d.resultTitle = err.length ? qsTr("That image can't be used") : qsTr("Wallpaper set")
-            d.resultMessage = err
-        }
+        onAccepted: root.setWallpaperFile(selectedFile)
+    }
+
+    function setWallpaperFile(file) {
+        const err = root.prefs.setCustomWallpaper(file)
+        d.resultSeverity = err.length ? LogosNotice.Error : LogosNotice.Success
+        d.resultTitle = err.length ? qsTr("That image can't be used") : qsTr("Wallpaper set")
+        d.resultMessage = err
     }
 
     component WallpaperChoice: AbstractButton {
@@ -205,7 +209,15 @@ Item {
                         objectName: "appearance.uploadButton"
                         text: qsTr("Upload your own theme…")
                         variant: LogosButton.Variant.Primary
-                        onClicked: fileDialog.open()
+                        onClicked: {
+                            if (root.prefs) {
+                                const f = root.prefs.pickFile(fileDialog.title, qsTr("Logos theme (*.json)"))
+                                if (f.toString().length > 0)
+                                    root.installTheme(f)
+                            } else {
+                                fileDialog.open()
+                            }
+                        }
                     }
 
                     LogosText {
@@ -358,7 +370,11 @@ Item {
                     LogosButton {
                         objectName: "appearance.wallpaper.choose"
                         text: qsTr("Choose image…")
-                        onClicked: wallpaperDialog.open()
+                        onClicked: {
+                            const f = root.prefs.pickFile(wallpaperDialog.title, qsTr("Images (*.png *.jpg *.jpeg)"))
+                            if (f.toString().length > 0)
+                                root.setWallpaperFile(f)
+                        }
                     }
                 }
 

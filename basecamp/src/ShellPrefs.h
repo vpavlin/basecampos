@@ -40,6 +40,11 @@ public:
     // Quits Basecamp; main() starts it again once everything has shut down.
     Q_INVOKABLE void restart();
 
+    // Opens a file picker parented to Basecamp's window, so it stays above it
+    // (a QML FileDialog inside a QQuickWidget has no real parent window and can
+    // open behind the full-screen desktop). Returns the chosen file, or empty.
+    Q_INVOKABLE QUrl pickFile(const QString& title, const QString& filter);
+
     Q_INVOKABLE void setWallpaper(const QString& id);
     QString wallpaperFit() const;
     void setWallpaperFit(const QString& fit);

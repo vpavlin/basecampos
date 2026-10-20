@@ -1,6 +1,9 @@
 #include "ShellPrefs.h"
 
+#include <QApplication>
 #include <QCoreApplication>
+#include <QFileDialog>
+#include <QWidget>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QDir>
@@ -40,6 +43,13 @@ QString ShellPrefs::layout() const
 {
     const QString v = QSettings().value(QLatin1String(kLayoutKey)).toString();
     return v == QLatin1String("desktop") ? v : QStringLiteral("sidebar");
+}
+
+QUrl ShellPrefs::pickFile(const QString& title, const QString& filter)
+{
+    QWidget* owner = qobject_cast<QWidget*>(parent());
+    QWidget* top = owner ? owner->window() : QApplication::activeWindow();
+    return QFileDialog::getOpenFileUrl(top, title, QUrl(), filter);
 }
 
 void ShellPrefs::restart()
