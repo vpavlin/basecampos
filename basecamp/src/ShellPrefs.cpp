@@ -311,24 +311,51 @@ QVariantList ShellPrefs::checkShell(const QString& id) const
         return out;
     }
     const QByteArray bin = f.readAll();
-    auto has = [&bin](std::initializer_list<const char*> needles) {
-        QStringList found;
-        for (const char* n : needles)
-            if (bin.contains(n))
-                found << QString::fromLatin1(n);
-        return found;
+    // Needles are assembled at run time: written as one literal they would
+    // sit in every shell built from this code (this checker included) and
+    // match themselves. Types are matched in their mangled form ("<len><name>"),
+    // which is how a linked class appears in a binary, not as plain text.
+    auto cat = [](std::initializer_list<const char*> parts) {
+        QByteArray b;
+        for (const char* p : parts) b += p;
+        return b;
     };
-    const QStringList runtime = has({ "TokenManager", "LogosAPIClient", "LogosAPI" });
+    auto mangled = [](const QByteArray& name) { return QByteArray::number(name.size()) + name; };
+    auto found = [&bin](const QList<QPair<QByteArray, QString>>& needles) {
+        QStringList hits;
+        for (const auto& n : needles)
+            if (bin.contains(n.first))
+                hits << n.second;
+        return hits;
+    };
+    const QByteArray tm = cat({ "Token", "Manager" }), api = cat({ "Logos", "API" }),
+                     apic = cat({ "Logos", "API", "Client" });
+    const QStringList runtime = found({ { mangled(tm), QString::fromLatin1(tm) },
+                                        { mangled(apic), QString::fromLatin1(apic) },
+                                        { mangled(api), QString::fromLatin1(api) } });
     out << (runtime.isEmpty()
             ? row(tr("Logos runtime"), QStringLiteral("ok"), tr("No access to core modules or keys found."))
             : row(tr("Logos runtime"), QStringLiteral("fail"), tr("Links the Logos runtime (%1).").arg(runtime.join(QStringLiteral(", ")))));
-    const QStringList net = has({ "libQt6Network", "libcurl", "QNetworkAccessManager", "QTcpSocket", "QUdpSocket", "QWebSocket" });
-    out << (net.isEmpty()
-            ? row(tr("Network"), QStringLiteral("ok"), tr("No network library found."))
-            : row(tr("Network"), QStringLiteral("warn"), tr("Uses networking (%1).").arg(net.join(QStringLiteral(", ")))));
-    const QStringList qmlNet = has({ "XMLHttpRequest", "WebSocket" });
+    const QByteArray qtnet = cat({ "libQt6", "Network" }), curl = cat({ "lib", "curl" }),
+                     nam = cat({ "QNetwork", "Access", "Manager" }), tcp = cat({ "QTcp", "Socket" }),
+                     udp = cat({ "QUdp", "Socket" }), wsk = cat({ "QWeb", "Socket" });
+    const QStringList net = found({ { qtnet, QString::fromLatin1(qtnet) }, { curl, QString::fromLatin1(curl) },
+                                    { mangled(nam), QString::fromLatin1(nam) }, { mangled(tcp), QString::fromLatin1(tcp) },
+                                    { mangled(udp), QString::fromLatin1(udp) }, { mangled(wsk), QString::fromLatin1(wsk) } });
+    if (net.isEmpty())
+        out << row(tr("Network"), QStringLiteral("ok"), tr("No network library found."));
+    else if (net == QStringList{ QString::fromLatin1(qtnet) })
+        // Qt's QML engine links it for every QML app, the default shell included.
+        out << row(tr("Network"), QStringLiteral("info"),
+                   tr("Links Qt's network library, as every Qt QML app does; no network classes found in use."));
+    else
+        out << row(tr("Network"), QStringLiteral("warn"), tr("Uses networking (%1).").arg(net.join(QStringLiteral(", "))));
+    const QByteArray xhr = cat({ "XMLHttp", "Request" }), ws = cat({ "Web", "Socket", " {" });
+    const QStringList qmlNet = found({ { xhr, QString::fromLatin1(xhr) },
+                                       { ws, cat({ "Web", "Socket" }) } });
     out << (qmlNet.isEmpty()
-            ? row(tr("QML network access"), QStringLiteral("ok"), tr("No XMLHttpRequest or WebSocket in its QML."))
+            ? row(tr("QML network access"), QStringLiteral("ok"),
+                  tr("No %1 or %2 found in its QML.").arg(QString::fromLatin1(xhr), QString::fromLatin1(cat({ "Web", "Socket" }))))
             : row(tr("QML network access"), QStringLiteral("warn"), tr("Its QML mentions %1.").arg(qmlNet.join(QStringLiteral(", ")))));
     out << row(tr("Files"), QStringLiteral("info"),
                tr("Not checkable: a shell runs inside Basecamp and could write files."));
