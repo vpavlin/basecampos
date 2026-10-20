@@ -197,6 +197,46 @@ A shell must, to be selectable:
 Some of this can't be enforced in code; the shared library (§5.9) makes doing it right the easy path,
 and the warning in §5.7 covers the rest.
 
+### 5.11 Settings, Applications and Package Manager as system apps
+
+Proposed with Khushboo, 2026-10-20. Today Settings and Applications are drawn by the shell
+(`main_ui`); only Package Manager is already a separate, sandboxed package (`package_manager_ui`)
+that the shell asks the host to load. Move all three out of the shell and ship them as
+**preinstalled system apps**; a shell only provides **launch points** for them.
+
+**What it gains**
+
+- **A smaller shell.** A shell becomes the frame: navigation, how apps are shown, launch points.
+  §4's table loses Settings, Applications and the Package Manager page; the shared shell library
+  (§5.9) shrinks accordingly.
+- **Sensitive screens leave shell code.** The shell-switch warning (§6.2), theme install,
+  repositories and uninstall confirmations are Logos code in every shell. A hostile shell can no
+  longer fake or skip the warning for the next switch, or quietly add a repository through its
+  own Settings page.
+- **One Settings everywhere.** Customisation → Shell → Default is in the same place whatever shell
+  runs, so "how to go back" is reliable.
+- **Launch points already exist:** the `basecamp.settings.open`, `basecamp.apps.open` and
+  `basecamp.packages.open` intents. §5.10's checklist becomes "offer launch points for the system
+  apps".
+
+**What it doesn't change.** The shell still hosts every app's window, the system apps' included,
+and sees every keystroke. A hostile shell could hide the Settings window or overlay a fake one.
+The warning before switching, safe mode (§5.6) and the crash fallback stay essential: this
+**reduces** a shell's reach; it doesn't make shells safe.
+
+**What Basecamp needs**
+
+1. **A system capability** (e.g. `basecamp.system`): the privileged backend API Settings and
+   Applications use today (theme install, shell preferences, repositories, catalog, install /
+   uninstall), granted only to embedded, signed system apps.
+2. **Not replaceable:** system apps are preinstalled, can't be uninstalled, and a catalog package
+   can't replace them (the same class of problem as logos-basecamp#478, where a third-party catalog
+   can replace a shared core module).
+3. **Live theme across processes:** apps in their own process switch theme only after a restart
+   today; the host must broadcast theme changes so a Settings app reflects them at once.
+4. **Order:** Package Manager is already out; **Settings next** (Customisation and the shell-switch
+   warning: the biggest safety gain), then Applications.
+
 ## 6. Install and switch: user experience
 
 Agreed 2026-10-20; prototyped on the `basecampium` branch.
@@ -307,6 +347,7 @@ packages.
 |---|---|---|
 | **0. Demo** | §5.1 developer override only, §5.2, §5.3 | a second shell runs from a local folder; a bad one falls back instead of crashing |
 | **1. Package, developers only** | §5.4, §5.5, §5.6, §5.8, Settings → Shell behind a developer flag | shells install from a repository; safe mode; versioned API |
+| **1b. System apps** | §5.11: Settings, then Applications as preinstalled system apps; system capability; live theme across processes | a shell is only the frame; the warning, repositories and installs are the same Logos code in every shell |
 | **2. Public** | §5.7 (signing enforced for shells), §5.9, §5.10, template + docs | anyone can publish a signed shell; users see who built it |
 
 Phase 0 is small and local to `app/window.cpp` plus one setting. Phase 2 depends on Basecamp checking
