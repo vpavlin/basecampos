@@ -45,8 +45,9 @@ QString ShellPrefs::layout() const
 void ShellPrefs::restart()
 {
 #ifdef Q_OS_UNIX
-    // A helper waits until this process is gone, however it ends (teardown
-    // can still crash), then starts Basecamp again. The two never overlap.
+    // A helper waits until this process is gone, however it ends, then starts
+    // Basecamp again; the two never overlap. Teardown can crash or hang, so
+    // after 10 s the helper ends this process and its module hosts itself.
     QString program = QCoreApplication::applicationFilePath();
     QStringList args = QCoreApplication::arguments().mid(1);
 #if defined(Q_OS_MAC)
@@ -66,6 +67,7 @@ void ShellPrefs::restart()
         && QCoreApplication::applicationFilePath().startsWith(appDir + QLatin1Char('/')))
         program = appImage;
 #endif
+    QSettings().sync();   // the layout choice must be on disk before a forced stop
     QProcess p;
     // A forced layout would undo the choice the user just made.
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
@@ -74,7 +76,9 @@ void ShellPrefs::restart()
     p.setProgram(QStringLiteral("/bin/sh"));
     p.setArguments(QStringList{
         QStringLiteral("-c"),
-        QStringLiteral("while kill -0 \"$0\" 2>/dev/null; do sleep 0.2; done; exec \"$@\""),
+        QStringLiteral("i=0; while kill -0 \"$0\" 2>/dev/null; do"
+                       " i=$((i+1)); if [ $i -eq 50 ]; then pkill -9 -P \"$0\"; kill -9 \"$0\"; fi;"
+                       " sleep 0.2; done; exec \"$@\""),
         QString::number(QCoreApplication::applicationPid()), program } + args);
     if (!p.startDetached()) {
         qWarning("Could not start the restart helper; quitting without restart.");
