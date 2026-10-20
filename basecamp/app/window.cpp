@@ -29,6 +29,8 @@
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QSettings>
+#include <QJsonDocument>
+#include <QJsonObject>
 #ifdef Q_OS_MAC
     #include "trafficLightsTitleBar.h"
     #include "macWindowStyle.h"
@@ -168,20 +170,57 @@ void Window::setupUi(const LogosBasecamp::HostProfile& hostProfile)
     if (chosenShell.isEmpty())
         chosenShell = QSettings().value(QStringLiteral("BasecampShell/shell")).toString();
     QString shellError;
-    if (!chosenShell.isEmpty() && chosenShell != QLatin1String("default")) {
+
+    // Safe mode: Shift held at launch, --default-shell, or BASECAMP_SAFE_MODE
+    // starts the default shell whatever is chosen. The escape hatch must not
+    // depend on the chosen shell working.
+    const bool safeMode = (QGuiApplication::queryKeyboardModifiers() & Qt::ShiftModifier)
+                          || QCoreApplication::arguments().contains(QStringLiteral("--default-shell"))
+                          || qEnvironmentVariableIsSet("BASECAMP_SAFE_MODE");
+    // Crash at start: the marker is written before a chosen shell loads and
+    // cleared once it has run for a while. Still there = it didn't survive.
+    QSettings startMarker;
+    const QString lastStart = startMarker.value(QStringLiteral("BasecampShell/starting")).toString();
+    const bool chosen = !chosenShell.isEmpty() && chosenShell != QLatin1String("default");
+    if (chosen && safeMode) {
+        shellError = tr("Basecamp started in safe mode with the default shell. \"%1\" is still selected: "
+                        "choose Default in Settings → Customisation → Shell to keep this one.").arg(chosenShell);
+    } else if (chosen && lastStart == chosenShell) {
+        shellError = tr("The shell \"%1\" didn't start properly last time, so Basecamp is using the default one. "
+                        "Choose it again in Settings → Customisation → Shell to retry.").arg(chosenShell);
+        startMarker.remove(QStringLiteral("BasecampShell/starting"));
+        startMarker.setValue(QStringLiteral("BasecampShell/shell"), QString());
+    }
+    if (chosen && shellError.isEmpty()) {
         QString path;
         if (chosenShell.contains(QLatin1Char('/')) || chosenShell.contains(QLatin1Char('\\'))) {
             path = QFileInfo(chosenShell).isDir() ? chosenShell + "/main_ui" + pluginExtension : chosenShell;
         } else {
-            path = LogosBasecampPaths::embeddedPluginsDirectory()
-                 + "/shells/" + chosenShell + "/main_ui" + pluginExtension;
+            // An installed shell package (manifest type "ui_shell") in the user
+            // plugins folder, else one shipped next to the app (development).
+            const QString pkgDir = LogosBasecampPaths::pluginsDirectory() + "/" + chosenShell;
+            QFile mf(pkgDir + "/manifest.json");
+            QFile vf(pkgDir + "/variant");
+            if (mf.open(QIODevice::ReadOnly)) {
+                const QJsonObject m = QJsonDocument::fromJson(mf.readAll()).object();
+                const QString variant = vf.open(QIODevice::ReadOnly) ? QString::fromUtf8(vf.readAll()).trimmed() : QString();
+                const QString main = m.value(QStringLiteral("main")).toObject().value(variant).toString();
+                if (m.value(QStringLiteral("type")).toString() == QLatin1String("ui_shell") && !main.isEmpty())
+                    path = pkgDir + "/" + main;
+            }
+            if (path.isEmpty())
+                path = LogosBasecampPaths::embeddedPluginsDirectory()
+                     + "/shells/" + chosenShell + "/main_ui" + pluginExtension;
         }
+        startMarker.setValue(QStringLiteral("BasecampShell/starting"), chosenShell);
+        startMarker.sync();
         QString why;
         m_shellView = loadShell(path, &why);
         if (!m_shellView) {
             shellError = QStringLiteral("The shell \"%1\" couldn't start, so Basecamp is using the default one.\n\n%2")
                              .arg(chosenShell, why);
             qWarning().noquote() << "Shell fallback:" << why;
+            startMarker.remove(QStringLiteral("BasecampShell/starting"));
         }
     }
     if (!m_shellView) {
@@ -197,6 +236,10 @@ void Window::setupUi(const LogosBasecamp::HostProfile& hostProfile)
     // mismatched shell is a broken install, and the qFatal paths above say
     // which.
     setCentralWidget(m_shellView->createShell(m_hostAdapter));
+    // The chosen shell survived start-up: clear the crash marker.
+    QTimer::singleShot(8000, this, []() {
+        QSettings().remove(QStringLiteral("BasecampShell/starting"));
+    });
     if (!shellError.isEmpty()) {
         QTimer::singleShot(1500, this, [this, shellError]() {
             QMessageBox::warning(this, tr("Shell couldn't start"), shellError);

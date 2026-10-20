@@ -56,7 +56,7 @@ Rectangle {
             { label: qsTr("Dashboard") },
             { label: qsTr("Apps Inspector") },
             { label: qsTr("Module Inspector") },
-            { label: qsTr("Appearance") },
+            { label: qsTr("Customisation") },
             { label: qsTr("Package Repositories") }
         ].slice(0, root.repositoriesAvailable ? 5 : 4)   // Repositories must stay last
 

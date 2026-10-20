@@ -50,18 +50,35 @@ Rectangle {
 
     ColumnLayout {
         anchors.top: parent.top
-        anchors.topMargin: Math.max(48, parent.height * 0.16)
+        anchors.topMargin: Math.max(32, parent.height * 0.08)
         anchors.bottom: systemRow.top
         anchors.bottomMargin: Theme.spacing.xlarge
         anchors.horizontalCenter: parent.horizontalCenter
         width: Math.min(parent.width - 96, 880)
         spacing: Theme.spacing.xlarge * 2
 
+        // Who made this shell, above the search.
+        Column {
+            objectName: "newTab.brand"
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 2
+            LogosText {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Basecampium"
+                font.pixelSize: 40
+                font.weight: Font.Bold
+                color: Theme.palette.textSecondary
+            }
+        }
+
         LogosSearchBar {
             id: search
             objectName: "newTab.search"
             focus: true
-            Layout.fillWidth: true
+            // From the first icon's left edge to the last icon's right edge
+            // (icons, not their wider labels).
+            Layout.alignment: Qt.AlignHCenter
+            Layout.preferredWidth: grid.width - (root.pitch - root.tileSize)
             Layout.preferredHeight: Theme.components.search.height
             Layout.maximumHeight: Theme.components.search.height
             placeholderText: qsTr("Search apps…")
@@ -84,7 +101,11 @@ Rectangle {
         Flow {
             id: grid
             objectName: "newTab.grid"
-            width: parent.width
+            // Whole columns only, centred under the search, so no ragged gap
+            // is left on the right.
+            readonly property int columns: Math.max(1, Math.floor(parent.width / root.pitch))
+            width: Math.min(columns, Math.max(1, root.shownApps.length)) * root.pitch
+            x: (parent.width - width) / 2
             spacing: 0
 
             Repeater {
@@ -185,6 +206,14 @@ Rectangle {
                     ToolTip.text: modelData.name
                 }
             }
+        }
+
+        LogosText {
+            objectName: "newTab.credit"
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: qsTr("Shell package made by Alisher")
+            font.pixelSize: Theme.typography.secondaryText
+            color: Theme.palette.textTertiary
         }
     }
 

@@ -11,6 +11,9 @@ import Basecamp.Backend 1.0
 // Settings → Appearance. Pick an installed theme, or install your own
 // theme.json (validated as data before it is copied in).
 Item {
+    // Shells can be installed while Basecamp runs (Package Manager): look
+    // again whenever this page is shown.
+    onVisibleChanged: if (visible && root.prefs) root.prefs.rescanShells()
     id: root
 
     QtObject {
@@ -149,13 +152,13 @@ Item {
                 spacing: Theme.spacing.tiny
 
                 LogosText {
-                    text: qsTr("Appearance")
+                    text: qsTr("Customisation")
                     font.pixelSize: Theme.typography.panelTitleText
                     font.weight: Theme.typography.weightMedium
                     color: Theme.palette.text
                 }
                 LogosText {
-                    text: qsTr("Choose how Basecamp looks. Themes are plain data files; anyone can make one.")
+                    text: qsTr("Theme, density, layout and shell. Themes are plain data files; anyone can make one.")
                     font.pixelSize: Theme.typography.secondaryText
                     color: Theme.palette.textSecondary
                     wrapMode: Text.WordWrap
@@ -282,48 +285,80 @@ Item {
 
             // Shell packages (prototype): the whole UI, swapped after a restart.
             ColumnLayout {
+                objectName: "customisation.shell"
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
-                visible: root.prefs !== null && root.prefs.shells.length > 0
+                visible: root.prefs !== null
 
-                LogosText {
-                    text: qsTr("Shell")
-                    font.pixelSize: Theme.typography.primaryText
-                    font.weight: Theme.typography.weightMedium
-                    color: Theme.palette.text
+                RowLayout {
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        text: qsTr("Shell")
+                        font.pixelSize: Theme.typography.primaryText
+                        font.weight: Theme.typography.weightMedium
+                        color: Theme.palette.text
+                    }
+                    LogosBadge { text: qsTr("Experimental"); color: Theme.palette.warning }
                 }
-
-                LogosComboBox {
-                    objectName: "appearance.shellCombo"
-                    Layout.preferredWidth: 360
-                    readonly property var values: [""].concat(root.prefs ? root.prefs.shells : [])
-                    model: values.map(v => v === "" ? qsTr("Default")
-                                                    : v.charAt(0).toUpperCase() + v.slice(1))
-                    currentIndex: root.prefs ? Math.max(0, values.indexOf(root.prefs.shell)) : 0
-                    onActivated: index => root.prefs.shell = values[index]
+                LogosText {
+                    Layout.fillWidth: true
+                    text: qsTr("A shell replaces all of Basecamp's UI. Your apps, keys and theme stay the same.")
+                    font.pixelSize: Theme.typography.secondaryText
+                    color: Theme.palette.textTertiary
+                    wrapMode: Text.WordWrap
                 }
 
                 RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacing.small
+                    spacing: Theme.spacing.medium
 
-                    LogosText {
-                        text: root.prefs && root.prefs.shell !== root.prefs.activeShell
-                              ? qsTr("Takes effect the next time you start Basecamp.")
-                              : qsTr("In use now.")
-                        font.pixelSize: Theme.typography.secondaryText
-                        color: root.prefs && root.prefs.shell !== root.prefs.activeShell
-                               ? Theme.palette.warning : Theme.palette.textTertiary
+                    LogosComboBox {
+                        id: shellCombo
+                        objectName: "customisation.shellCombo"
+                        Layout.preferredWidth: 360
+                        readonly property var packages: root.prefs ? root.prefs.shellPackages : []
+                        readonly property var values: [""].concat(packages.map(p => p.id))
+                        model: [qsTr("Default (built in)")].concat(packages.map(p => p.name + (p.version ? "  " + p.version : "")))
+                        function sync() { currentIndex = Math.max(0, values.indexOf(root.prefs ? root.prefs.activeShell : "")) }
+                        Component.onCompleted: sync()
+                        onPackagesChanged: sync()
+                        onActivated: index => {
+                            const id = values[index]
+                            if (!root.prefs || id === root.prefs.activeShell)
+                                return
+                            if (id === "") {
+                                defaultShellDialog.open()
+                            } else {
+                                shellWarning.pkg = packages[index - 1]
+                                shellWarning.checks = root.prefs.checkShell(id)
+                                shellWarning.open()
+                            }
+                        }
                     }
 
                     LogosButton {
-                        objectName: "appearance.shellRestartButton"
-                        text: qsTr("Restart now")
-                        visible: root.prefs !== null && root.prefs.shell !== root.prefs.activeShell
-                        onClicked: root.prefs.restart()
+                        objectName: "customisation.addShell"
+                        text: qsTr("Add shell…")
+                        onClicked: addShellDialog.open()
                     }
+                }
 
-                    Item { Layout.fillWidth: true }
+                LogosText {
+                    objectName: "customisation.activeShell"
+                    Layout.fillWidth: true
+                    readonly property var active: {
+                        const pk = root.prefs ? root.prefs.shellPackages : []
+                        for (let i = 0; i < pk.length; ++i)
+                            if (pk[i].id === (root.prefs ? root.prefs.activeShell : "")) return pk[i]
+                        return null
+                    }
+                    text: active
+                          ? qsTr("In use: %1 %2 by %3%4").arg(active.name).arg(active.version || "")
+                                .arg(active.signer || active.author || qsTr("unknown builder"))
+                                .arg(active.signed ? qsTr(" (signed, not verified by Logos)") : qsTr(" (unsigned)"))
+                          : qsTr("In use: the default shell, built into Basecamp.")
+                    font.pixelSize: Theme.typography.secondaryText
+                    color: Theme.palette.textTertiary
+                    wrapMode: Text.WordWrap
                 }
             }
 
@@ -436,5 +471,145 @@ Item {
                 }
             }
         }
+    }
+
+    // ── Shell switching ─────────────────────────────────────────────────────
+    LogosDialog {
+        id: shellWarning
+        objectName: "customisation.shellWarning"
+        property var pkg: ({})
+        property var checks: []
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(600, parent ? parent.width - 48 : 600)
+        modal: true
+        title: qsTr("Use “%1” by %2 as your Basecamp?").arg(pkg.name || "")
+                   .arg(pkg.signer || pkg.author || qsTr("an unknown builder"))
+        onOpened: trust.checked = false
+        onClosed: shellCombo.sync()
+
+        contentItem: ColumnLayout {
+            spacing: Theme.spacing.medium
+
+            LogosText {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: Theme.palette.text
+                font.pixelSize: Theme.typography.secondaryText
+                text: qsTr("A shell draws all of Basecamp. It can see everything shown in Basecamp and everything you type into it, including passwords and recovery phrases you enter in apps. Logos has not reviewed it.")
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: checkCol.implicitHeight + 2 * Theme.spacing.medium
+                radius: Theme.spacing.radiusMedium
+                color: Theme.palette.backgroundTertiary
+                ColumnLayout {
+                    id: checkCol
+                    anchors.fill: parent
+                    anchors.margins: Theme.spacing.medium
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        text: qsTr("What Basecamp checked (hints, not guarantees)")
+                        font.pixelSize: Theme.typography.secondaryText
+                        font.weight: Theme.typography.weightMedium
+                        color: Theme.palette.text
+                    }
+                    Repeater {
+                        model: shellWarning.checks
+                        delegate: RowLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            spacing: Theme.spacing.small
+                            Rectangle {
+                                Layout.alignment: Qt.AlignTop
+                                Layout.topMargin: 5
+                                width: 8; height: 8; radius: 4
+                                color: modelData.status === "ok" ? Theme.palette.success
+                                     : modelData.status === "fail" ? Theme.palette.error
+                                     : modelData.status === "warn" ? Theme.palette.warning
+                                     : Theme.palette.textTertiary
+                            }
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                font.pixelSize: Theme.typography.secondaryText
+                                color: Theme.palette.textSecondary
+                                text: "<b>" + modelData.title + ":</b> " + modelData.detail
+                                textFormat: Text.StyledText
+                            }
+                        }
+                    }
+                }
+            }
+
+            LogosText {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: Theme.palette.textSecondary
+                font.pixelSize: Theme.typography.secondaryText
+                text: qsTr("To go back: Settings → Customisation → Shell → Default, or hold Shift while starting Basecamp (or start it with --default-shell). Uninstalling the shell in Package Manager and restarting also returns you to the default.")
+            }
+
+            LogosCheckbox {
+                id: trust
+                objectName: "customisation.trustShell"
+                text: qsTr("I trust this builder and use this shell at my own risk")
+            }
+        }
+
+        rightActions: [
+            LogosButton {
+                text: qsTr("Cancel")
+                onClicked: shellWarning.close()
+            },
+            LogosButton {
+                objectName: "customisation.switchShell"
+                text: qsTr("Switch and restart")
+                variant: LogosButton.Variant.Primary
+                enabled: trust.checked
+                onClicked: {
+                    shellWarning.close()
+                    root.prefs.switchShell(shellWarning.pkg.id)
+                }
+            }
+        ]
+    }
+
+    LogosDialog {
+        id: defaultShellDialog
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: 460
+        modal: true
+        title: qsTr("Switch to the default shell?")
+        message: qsTr("Basecamp restarts with its built-in shell. The other shell stays installed.")
+        onClosed: shellCombo.sync()
+        rightActions: [
+            LogosButton { text: qsTr("Cancel"); onClicked: defaultShellDialog.close() },
+            LogosButton {
+                text: qsTr("Switch and restart")
+                variant: LogosButton.Variant.Primary
+                onClicked: { defaultShellDialog.close(); root.prefs.switchShell("default") }
+            }
+        ]
+    }
+
+    LogosDialog {
+        id: addShellDialog
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: 480
+        modal: true
+        title: qsTr("Add a shell")
+        message: qsTr("Shells are packages (.lgx), installed like apps. In Package Manager, choose Install Local Package and pick the shell's .lgx file. It then appears in this list; installing doesn't switch to it.")
+        rightActions: [
+            LogosButton { text: qsTr("Cancel"); onClicked: addShellDialog.close() },
+            LogosButton {
+                text: qsTr("Open Package Manager")
+                variant: LogosButton.Variant.Primary
+                onClicked: { addShellDialog.close(); backend.setCurrentActiveSectionIndex(2) }
+            }
+        ]
     }
 }

@@ -433,7 +433,7 @@ Dialog {
 
         Rectangle {
             Layout.fillWidth: true
-            color: "#1e1e1e"
+            color: Theme.palette.backgroundTertiary
             radius: 4
             border.color: "#3d3d3d"
             border.width: 1
@@ -455,7 +455,7 @@ Dialog {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(150, Math.max(30, root.items.length * 24))
-            color: "#1e1e1e"
+            color: Theme.palette.backgroundTertiary
             radius: 4
             border.color: "#3d3d3d"
             border.width: 1
@@ -506,7 +506,7 @@ Dialog {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.min(120, Math.max(30, root.loadedItems.length * 24))
-                color: "#1e1e1e"
+                color: Theme.palette.backgroundTertiary
                 radius: 4
                 border.color: "#3d3d3d"
                 border.width: 1
@@ -548,7 +548,7 @@ Dialog {
 
             Rectangle {
                 Layout.fillWidth: true
-                color: "#1e1e1e"
+                color: Theme.palette.backgroundTertiary
                 radius: 4
                 border.color: "#3d3d3d"
                 border.width: 1

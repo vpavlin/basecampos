@@ -89,15 +89,16 @@ pkgs.stdenv.mkDerivation {
     fi
     echo "Installed $_found"
 
-    # Extra shells live under plugins/shells/<name>/; Basecamp loads one when
-    # BASECAMP_SHELL or Settings asks for it (app/window.cpp).
-    mkdir -p $out/plugins/shells/basecampium
+    # Basecampium is NOT part of Basecamp: it ships as its own shell package
+    # (tools/make-shell-lgx.sh turns this into basecampium.lgx). Kept outside
+    # plugins/ so the app bundle doesn't pick it up.
+    mkdir -p $out/shell-packages/basecampium
     for _ext in dylib dll so; do
       if [ -f "build-basecampium/main_ui.$_ext" ]; then
-        cp "build-basecampium/main_ui.$_ext" "$out/plugins/shells/basecampium/"
+        cp "build-basecampium/main_ui.$_ext" "$out/shell-packages/basecampium/"
       fi
     done
-    ls $out/plugins/shells/basecampium/main_ui.* >/dev/null
+    ls $out/shell-packages/basecampium/main_ui.* >/dev/null
 
     runHook postInstall
   '';

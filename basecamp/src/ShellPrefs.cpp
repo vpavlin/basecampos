@@ -7,6 +7,8 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QFile>
 #include <QFileInfo>
 #include <QImageReader>
@@ -204,14 +206,141 @@ void ShellPrefs::setWallpaperFit(const QString& fit)
     emit wallpaperChanged();
 }
 
+namespace {
+// Basecamp's user plugins folder, where the package manager installs shells.
+QString userPluginsDir()
+{
+    const QString userDir = qEnvironmentVariable("LOGOS_USER_DIR");
+    const QString base = userDir.isEmpty()
+        ? QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        : userDir;
+    return base + QStringLiteral("/plugins");
+}
+
+QJsonObject readJson(const QString& path)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return {};
+    return QJsonDocument::fromJson(f.readAll()).object();
+}
+} // namespace
+
+QVariantList ShellPrefs::shellPackages() const
+{
+    QVariantList out;
+    const QDir plugins(userPluginsDir());
+    for (const QFileInfo& fi : plugins.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+        const QJsonObject m = readJson(fi.absoluteFilePath() + QStringLiteral("/manifest.json"));
+        if (m.value(QStringLiteral("type")).toString() != QLatin1String("ui_shell"))
+            continue;
+        QFile vf(fi.absoluteFilePath() + QStringLiteral("/variant"));
+        QString variant;
+        if (vf.open(QIODevice::ReadOnly))
+            variant = QString::fromUtf8(vf.readAll()).trimmed();
+        const QString main = m.value(QStringLiteral("main")).toObject().value(variant).toString();
+        const QJsonObject sig = readJson(fi.absoluteFilePath() + QStringLiteral("/manifest.sig"));
+        const QJsonObject signer = sig.value(QStringLiteral("signer")).toObject();
+        QVariantMap e;
+        e[QStringLiteral("id")] = m.value(QStringLiteral("name")).toString();
+        e[QStringLiteral("name")] = m.value(QStringLiteral("display_name")).toString(m.value(QStringLiteral("name")).toString());
+        e[QStringLiteral("version")] = m.value(QStringLiteral("version")).toString();
+        e[QStringLiteral("author")] = m.value(QStringLiteral("author")).toString();
+        e[QStringLiteral("description")] = m.value(QStringLiteral("description")).toString();
+        e[QStringLiteral("signed")] = !sig.isEmpty();
+        e[QStringLiteral("signer")] = signer.value(QStringLiteral("name")).toString();
+        e[QStringLiteral("signerUrl")] = signer.value(QStringLiteral("url")).toString();
+        e[QStringLiteral("did")] = sig.value(QStringLiteral("did")).toString();
+        e[QStringLiteral("file")] = main.isEmpty() ? QString() : fi.absoluteFilePath() + QLatin1Char('/') + main;
+        out << e;
+    }
+    // Shells shipped next to the app (development builds only).
+    const QDir bundled(QCoreApplication::applicationDirPath() + QStringLiteral("/../plugins/shells"));
+    for (const QFileInfo& fi : bundled.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+        bool dup = false;
+        for (const QVariant& v : out)
+            dup = dup || v.toMap().value(QStringLiteral("id")).toString() == fi.fileName();
+        if (dup)
+            continue;
+        QVariantMap e;
+        e[QStringLiteral("id")] = fi.fileName();
+        QString n = fi.fileName();
+        if (!n.isEmpty()) n[0] = n[0].toUpper();
+        e[QStringLiteral("name")] = n;
+        e[QStringLiteral("author")] = tr("bundled for development");
+        e[QStringLiteral("signed")] = false;
+        const QDir d(fi.absoluteFilePath());
+        const QStringList libs = d.entryList({ QStringLiteral("main_ui.*") }, QDir::Files);
+        e[QStringLiteral("file")] = libs.isEmpty() ? QString() : d.absoluteFilePath(libs.first());
+        out << e;
+    }
+    return out;
+}
+
 QStringList ShellPrefs::shells() const
 {
-    // Next to the embedded default shell: <app>/../plugins/shells/<name>/.
-    const QDir dir(QCoreApplication::applicationDirPath() + QStringLiteral("/../plugins/shells"));
     QStringList out;
-    for (const QFileInfo& fi : dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name))
-        out << fi.fileName();
+    for (const QVariant& v : shellPackages())
+        out << v.toMap().value(QStringLiteral("id")).toString();
     return out;
+}
+
+QVariantList ShellPrefs::checkShell(const QString& id) const
+{
+    QVariantMap pkg;
+    for (const QVariant& v : shellPackages())
+        if (v.toMap().value(QStringLiteral("id")).toString() == id)
+            pkg = v.toMap();
+    auto row = [](const QString& title, const QString& status, const QString& detail) {
+        return QVariantMap{ { QStringLiteral("title"), title },
+                            { QStringLiteral("status"), status },
+                            { QStringLiteral("detail"), detail } };
+    };
+    QVariantList out;
+    if (pkg.value(QStringLiteral("signed")).toBool()) {
+        const QString who = pkg.value(QStringLiteral("signer")).toString();
+        out << row(tr("Signature"), QStringLiteral("warn"),
+                   tr("Signed by %1 (name given by the signer). Basecamp doesn't verify signatures yet.")
+                       .arg(who.isEmpty() ? tr("an unnamed key") : who));
+    } else {
+        out << row(tr("Signature"), QStringLiteral("fail"), tr("Not signed: nobody vouches for this package."));
+    }
+    QFile f(pkg.value(QStringLiteral("file")).toString());
+    if (!f.open(QIODevice::ReadOnly)) {
+        out << row(tr("Binary"), QStringLiteral("fail"), tr("The shell's library is missing."));
+        return out;
+    }
+    const QByteArray bin = f.readAll();
+    auto has = [&bin](std::initializer_list<const char*> needles) {
+        QStringList found;
+        for (const char* n : needles)
+            if (bin.contains(n))
+                found << QString::fromLatin1(n);
+        return found;
+    };
+    const QStringList runtime = has({ "TokenManager", "LogosAPIClient", "LogosAPI" });
+    out << (runtime.isEmpty()
+            ? row(tr("Logos runtime"), QStringLiteral("ok"), tr("No access to core modules or keys found."))
+            : row(tr("Logos runtime"), QStringLiteral("fail"), tr("Links the Logos runtime (%1).").arg(runtime.join(QStringLiteral(", ")))));
+    const QStringList net = has({ "libQt6Network", "libcurl", "QNetworkAccessManager", "QTcpSocket", "QUdpSocket", "QWebSocket" });
+    out << (net.isEmpty()
+            ? row(tr("Network"), QStringLiteral("ok"), tr("No network library found."))
+            : row(tr("Network"), QStringLiteral("warn"), tr("Uses networking (%1).").arg(net.join(QStringLiteral(", ")))));
+    const QStringList qmlNet = has({ "XMLHttpRequest", "WebSocket" });
+    out << (qmlNet.isEmpty()
+            ? row(tr("QML network access"), QStringLiteral("ok"), tr("No XMLHttpRequest or WebSocket in its QML."))
+            : row(tr("QML network access"), QStringLiteral("warn"), tr("Its QML mentions %1.").arg(qmlNet.join(QStringLiteral(", ")))));
+    out << row(tr("Files"), QStringLiteral("info"),
+               tr("Not checkable: a shell runs inside Basecamp and could write files."));
+    return out;
+}
+
+void ShellPrefs::switchShell(const QString& id)
+{
+    QSettings().setValue(QLatin1String(kShellKey), id == QLatin1String("default") ? QString() : id);
+    QSettings().sync();
+    emit shellChanged();
+    restart();
 }
 
 QString ShellPrefs::shell() const
