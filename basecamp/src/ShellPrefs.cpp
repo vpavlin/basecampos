@@ -17,6 +17,7 @@ namespace {
 const char* kLayoutKey = "BasecampShell/layout";
 const char* kWallpaperKey = "BasecampShell/wallpaper";
 const char* kFitKey = "BasecampShell/wallpaperFit";
+const char* kShellKey = "BasecampShell/shell";
 const char* kBuiltin = ":/qt/qml/Basecamp/Icons/Basecamp/Icons/glowing-tents.jpg";
 
 QString customPath()
@@ -82,6 +83,7 @@ void ShellPrefs::restart()
     // A forced layout would undo the choice the user just made.
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.remove(QStringLiteral("BASECAMP_LAYOUT"));
+    env.remove(QStringLiteral("BASECAMP_SHELL"));
     p.setProcessEnvironment(env);
     // Never hand our stdio down: stdout/stderr are LogSink's pipe, whose only
     // reader is this process. The new copy would mirror its log into a pipe
@@ -200,4 +202,50 @@ void ShellPrefs::setWallpaperFit(const QString& fit)
         return;
     QSettings().setValue(QLatin1String(kFitKey), fit);
     emit wallpaperChanged();
+}
+
+QStringList ShellPrefs::shells() const
+{
+    // Next to the embedded default shell: <app>/../plugins/shells/<name>/.
+    const QDir dir(QCoreApplication::applicationDirPath() + QStringLiteral("/../plugins/shells"));
+    QStringList out;
+    for (const QFileInfo& fi : dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name))
+        out << fi.fileName();
+    return out;
+}
+
+QString ShellPrefs::shell() const
+{
+    QSettings s;
+    if (!s.contains(QLatin1String(kShellKey)))
+        return activeShell();
+    const QString v = s.value(QLatin1String(kShellKey)).toString();
+    return v == QLatin1String("default") ? QString() : v;
+}
+
+void ShellPrefs::setShell(const QString& name)
+{
+    const QString v = name == QLatin1String("default") ? QString() : name;
+    if (v == shell() && QSettings().contains(QLatin1String(kShellKey)))
+        return;
+    QSettings().setValue(QLatin1String(kShellKey), v);
+    emit shellChanged();
+}
+
+QString ShellPrefs::activeShell() const
+{
+#ifdef BASECAMPIUM
+    return QStringLiteral("basecampium");
+#else
+    return QString();
+#endif
+}
+
+bool ShellPrefs::tabsShell() const
+{
+#ifdef BASECAMPIUM
+    return true;
+#else
+    return false;
+#endif
 }

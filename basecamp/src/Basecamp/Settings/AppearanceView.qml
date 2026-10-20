@@ -280,10 +280,57 @@ Item {
                 }
             }
 
+            // Shell packages (prototype): the whole UI, swapped after a restart.
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
-                visible: root.prefs !== null
+                visible: root.prefs !== null && root.prefs.shells.length > 0
+
+                LogosText {
+                    text: qsTr("Shell")
+                    font.pixelSize: Theme.typography.primaryText
+                    font.weight: Theme.typography.weightMedium
+                    color: Theme.palette.text
+                }
+
+                LogosComboBox {
+                    objectName: "appearance.shellCombo"
+                    Layout.preferredWidth: 360
+                    readonly property var values: [""].concat(root.prefs ? root.prefs.shells : [])
+                    model: values.map(v => v === "" ? qsTr("Default")
+                                                    : v.charAt(0).toUpperCase() + v.slice(1))
+                    currentIndex: root.prefs ? Math.max(0, values.indexOf(root.prefs.shell)) : 0
+                    onActivated: index => root.prefs.shell = values[index]
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+
+                    LogosText {
+                        text: root.prefs && root.prefs.shell !== root.prefs.activeShell
+                              ? qsTr("Takes effect the next time you start Basecamp.")
+                              : qsTr("In use now.")
+                        font.pixelSize: Theme.typography.secondaryText
+                        color: root.prefs && root.prefs.shell !== root.prefs.activeShell
+                               ? Theme.palette.warning : Theme.palette.textTertiary
+                    }
+
+                    LogosButton {
+                        objectName: "appearance.shellRestartButton"
+                        text: qsTr("Restart now")
+                        visible: root.prefs !== null && root.prefs.shell !== root.prefs.activeShell
+                        onClicked: root.prefs.restart()
+                    }
+
+                    Item { Layout.fillWidth: true }
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                visible: root.prefs !== null && !root.prefs.tabsShell
 
                 LogosText {
                     text: qsTr("Layout")
@@ -330,7 +377,7 @@ Item {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
-                visible: root.prefs !== null && root.prefs.activeLayout === "desktop"
+                visible: root.prefs !== null && !root.prefs.tabsShell && root.prefs.activeLayout === "desktop"
 
                 LogosText {
                     text: qsTr("Wallpaper")

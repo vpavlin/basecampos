@@ -46,6 +46,8 @@ set(SOURCES
     WorkspaceArea.cpp
     DesktopArea.h
     DesktopArea.cpp
+    TabArea.h
+    TabArea.cpp
     ShellPrefs.h
     ShellPrefs.cpp
     ShortcutBridge.h
@@ -61,6 +63,12 @@ set(SOURCES
 # PREFIX/SUFFIX block below SHARED produces exactly the artefact names
 # app/window.cpp and the bundler look for.
 add_library(main_ui SHARED ${SOURCES})
+
+# Basecampium: the same shell with a browser-like tab frame (see TabArea).
+option(BASECAMPIUM "Build the Basecampium (tabs) shell" OFF)
+if(BASECAMPIUM)
+    target_compile_definitions(main_ui PRIVATE BASECAMPIUM)
+endif()
 
 # ── QML modules ─────────────────────────────────────────────────────────────
 # QML_FILES/RESOURCES resolve against CMAKE_CURRENT_SOURCE_DIR, and a `../`
@@ -176,6 +184,7 @@ qt_add_qml_module(basecamp_shell_qml
         Basecamp/Shell/UninstallDialog.qml
         Basecamp/Shell/WelcomePage.qml
         Basecamp/Shell/DockPanel.qml
+        Basecamp/Shell/NewTabPage.qml
 )
 
 qt_add_qml_module(basecamp_icons_qml
@@ -194,6 +203,7 @@ qt_add_qml_module(basecamp_icons_qml
         Basecamp/Icons/filter.svg
         Basecamp/Icons/module.svg
         Basecamp/Icons/settings.svg
+        Basecamp/Icons/close.svg
         Basecamp/Icons/tent.png
         Basecamp/Icons/glowing-tents.jpg
         Basecamp/Icons/workspace.svg

@@ -643,6 +643,7 @@ int main(int argc, char *argv[])
         QProcess p;
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
         env.remove(QStringLiteral("BASECAMP_LAYOUT"));
+        env.remove(QStringLiteral("BASECAMP_SHELL"));
         p.setProcessEnvironment(env);
         p.setStandardInputFile(QProcess::nullDevice());
         p.setStandardOutputFile(QProcess::nullDevice());
