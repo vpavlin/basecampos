@@ -458,9 +458,13 @@ bool MainContainer::eventFilter(QObject* watched, QEvent* event)
 {
     if (m_tabsLayout && tabsEdgeResize(watched, event))
         return true;
-    if (m_tabsLayout && event->type() == QEvent::KeyPress
-        && tabsKey(static_cast<QKeyEvent*>(event)))
-        return true;
+    if (m_tabsLayout && event->type() == QEvent::KeyPress) {
+        // Only keys meant for the main window: torn-off windows handle their own.
+        auto* w = qobject_cast<QWidget*>(watched);
+        QWidget* target = w ? w->window() : QApplication::activeWindow();
+        if (target == window() && tabsKey(static_cast<QKeyEvent*>(event)))
+            return true;
+    }
     if (m_desktopLayout && m_spotlight && event->type() == QEvent::KeyPress) {
         auto* ke = static_cast<QKeyEvent*>(event);
         const auto mods = ke->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier

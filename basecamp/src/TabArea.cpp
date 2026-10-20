@@ -7,6 +7,8 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QMenu>
+#include <QKeyEvent>
+#include <functional>
 #include <QCursor>
 #include <QMouseEvent>
 #include <QStackedWidget>
@@ -72,6 +74,78 @@ protected:
             top->showMaximized();
     }
 };
+
+// The bar's look, shared by the main window and torn-off windows.
+QString barStyleSheet()
+{
+    const QColor bar = tok("backgroundSecondary", "#262626");
+    const QColor page = tok("background", "#171717");
+    const QColor hover = tok("backgroundTertiary", "#2E2E2E");
+    const QColor text = tok("text", "#FFFFFF");
+    const QColor muted = tok("textSecondary", "#A3A3A3");
+    const QColor border = tok("border", "#333333");
+    const QColor danger = tok("error", "#E5484D");
+    return QString(
+        "#basecampium\\.bar { background: %1; border-bottom: 1px solid %6; }"
+        "QToolButton { background: transparent; border: none; color: %4; font-size: 16px; border-radius: 6px; }"
+        "QToolButton:hover { background: %3; color: %5; }"
+        "QToolButton#basecampium\\.newTab { font-size: 22px; border-radius: 8px; }"
+        "QToolButton#basecampium\\.close { border-radius: 0; }"
+        "QToolButton#basecampium\\.close:hover { background: %7; color: white; }"
+        "QToolButton#basecampium\\.minimize, QToolButton#basecampium\\.maximize { border-radius: 0; }"
+        "QTabBar { background: transparent; }"
+        "QTabBar::tab { background: transparent; color: %4; padding: 0 8px; margin-right: 2px;"
+        "  border-top-left-radius: 8px; border-top-right-radius: 8px; text-align: left; }"
+        "QTabBar::tab:hover { background: %3; color: %5; }"
+        "QTabBar::tab:selected { background: %2; color: %5; }"
+        "QTabBar::close-button { image: url(:/qt/qml/Basecamp/Icons/Basecamp/Icons/close.svg); subcontrol-position: right;"
+        "  border-radius: 4px; margin: 2px; }"
+        "QTabBar::close-button:hover { background: %3; }"
+        "QLabel#basecampium\\.tabTitle { color: %4; background: transparent; }"
+        "QLabel#basecampium\\.tabTitle[active=\"true\"] { color: %5; }"
+        "QTabBar::scroller { width: 24px; }"
+        "QTabBar QToolButton { background: %1; }"
+        "QToolButton#basecampium\\.dock { border-radius: 0; }")
+        .arg(css(bar), css(page), css(hover), css(muted), css(text), css(border), css(danger));
+}
+
+// Frameless windows resize from their edges: start a system resize when a
+// press lands within a few pixels of `top`'s border; show the matching cursor.
+bool edgeResize(QWidget* top, QObject* watched, QEvent* event, int& cursorState)
+{
+    const auto type = event->type();
+    if (type != QEvent::MouseMove && type != QEvent::MouseButtonPress)
+        return false;
+    auto* w = qobject_cast<QWidget*>(watched);
+    if (!w || w->window() != top || top->isMaximized() || top->isFullScreen())
+        return false;
+    auto* me = static_cast<QMouseEvent*>(event);
+    const QPoint p = top->mapFromGlobal(me->globalPosition().toPoint());
+    constexpr int m = 6;
+    Qt::Edges edges;
+    if (p.x() <= m) edges |= Qt::LeftEdge;
+    if (p.x() >= top->width() - m) edges |= Qt::RightEdge;
+    if (p.y() <= m) edges |= Qt::TopEdge;
+    if (p.y() >= top->height() - m) edges |= Qt::BottomEdge;
+    if (type == QEvent::MouseMove && me->buttons() == Qt::NoButton) {
+        if (int(edges) != cursorState) {
+            cursorState = int(edges);
+            if (!edges) top->unsetCursor();
+            else if (edges == (Qt::LeftEdge | Qt::TopEdge) || edges == (Qt::RightEdge | Qt::BottomEdge)) top->setCursor(Qt::SizeFDiagCursor);
+            else if (edges == (Qt::RightEdge | Qt::TopEdge) || edges == (Qt::LeftEdge | Qt::BottomEdge)) top->setCursor(Qt::SizeBDiagCursor);
+            else if (edges & (Qt::LeftEdge | Qt::RightEdge)) top->setCursor(Qt::SizeHorCursor);
+            else top->setCursor(Qt::SizeVerCursor);
+        }
+        return false;
+    }
+    if (type == QEvent::MouseButtonPress && me->button() == Qt::LeftButton && edges) {
+        if (QWindow* handle = top->windowHandle()) {
+            handle->startSystemResize(edges);
+            return true;
+        }
+    }
+    return false;
+}
 } // namespace
 
 // Icon + title, left-aligned and elided, as the tab's left-side widget (Qt
@@ -138,6 +212,128 @@ void setLabel(TabStrip* bar, int i, const QIcon& icon, const QString& text)
     if (TabLabel* l = labelAt(bar, i))
         l->setFixedWidth(qMax(24, bar->tabWidth() - 44));
 }
+
+// A torn-off tab: its own bar (icon, title, drag area, "back to tabs",
+// window buttons) over the app's content.
+class DetachedWindow : public QWidget
+{
+public:
+    DetachedWindow(const QString& key, const QString& title, const QIcon& icon,
+                   QWidget* content, QWidget* parent, std::function<void()> onDock)
+        : QWidget(parent, Qt::Window), m_content(content), m_onDock(std::move(onDock))
+    {
+#ifndef Q_OS_MAC
+        setWindowFlag(Qt::FramelessWindowHint, true);
+#endif
+        setObjectName(QStringLiteral("basecampium.detached"));
+        setProperty(kKeyProp, key);
+        setWindowTitle(title);
+        setWindowIcon(icon);
+        auto* col = new QVBoxLayout(this);
+        col->setContentsMargins(0, 0, 0, 0);
+        col->setSpacing(0);
+
+        m_bar = new QWidget(this);
+        m_bar->setObjectName(QStringLiteral("basecampium.bar"));
+        m_bar->setAttribute(Qt::WA_StyledBackground);
+        m_bar->setFixedHeight(kBarHeight);
+        // Same layout as the main bar: a tab strip holding this app's tab.
+        auto* row = new QHBoxLayout(m_bar);
+        row->setContentsMargins(8, 6, 0, 0);
+        row->setSpacing(4);
+#ifdef Q_OS_MAC
+        row->addSpacing(70);
+#endif
+        m_tabs = new TabStrip(m_bar);
+        m_tabs->setObjectName(QStringLiteral("basecampium.tabs"));
+        m_tabs->setMovable(false);
+        m_tabs->setAvailableWidth(kTabMax);
+        const int t = m_tabs->addTab(QString());
+        m_tabs->setTabData(t, key);
+        setLabel(m_tabs, t, icon, title);
+        if (TabLabel* l = labelAt(m_tabs, t))
+            l->setActive(true);
+        connect(m_tabs, &QTabBar::tabCloseRequested, this, [this](int) { close(); });
+        row->addWidget(m_tabs, 0, Qt::AlignBottom);
+        row->addWidget(new DragArea(m_bar), 1);
+
+        auto* dock = new QToolButton(m_bar);
+        dock->setObjectName(QStringLiteral("basecampium.dock"));
+        dock->setIcon(QIcon(QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/to-tab.svg")));
+        dock->setIconSize(QSize(16, 16));
+        // Same size and look as the window buttons beside it.
+        dock->setFixedSize(46, kBarHeight - 8);
+        dock->setFocusPolicy(Qt::NoFocus);
+        dock->setToolTip(QObject::tr("Back to tabs (Ctrl+Shift+D)"));
+        connect(dock, &QToolButton::clicked, this, [this]() { m_onDock(); });
+        row->addWidget(dock, 0, Qt::AlignTop);
+
+#ifndef Q_OS_MAC
+        auto makeButton = [this, row](const QString& text, const QString& name) {
+            auto* b = new QToolButton(m_bar);
+            b->setObjectName(name);
+            b->setText(text);
+            b->setFixedSize(46, kBarHeight - 8);
+            b->setFocusPolicy(Qt::NoFocus);
+            row->addWidget(b, 0, Qt::AlignTop);
+            return b;
+        };
+        auto* minB = makeButton(QStringLiteral("\u2013"), QStringLiteral("basecampium.minimize"));
+        auto* maxB = makeButton(QStringLiteral("\u25A1"), QStringLiteral("basecampium.maximize"));
+        auto* closeB = makeButton(QStringLiteral("\u2715"), QStringLiteral("basecampium.close"));
+        connect(minB, &QToolButton::clicked, this, [this]() { showMinimized(); });
+        connect(maxB, &QToolButton::clicked, this, [this]() { if (isMaximized()) showNormal(); else showMaximized(); });
+        connect(closeB, &QToolButton::clicked, this, [this]() { close(); });
+        qApp->installEventFilter(this);
+#endif
+        col->addWidget(m_bar);
+        col->addWidget(content, 1);
+        content->show();
+        applyStyle();
+    }
+
+    ~DetachedWindow() override { qApp->removeEventFilter(this); }
+
+    QWidget* content() const { return m_content; }
+
+    void applyStyle()
+    {
+        m_bar->setStyleSheet(barStyleSheet());
+        QPalette p = palette();
+        p.setColor(QPalette::Window, tok("background", "#171717"));
+        setPalette(p);
+        setAutoFillBackground(true);
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (event->type() == QEvent::KeyPress) {
+            auto* w = qobject_cast<QWidget*>(watched);
+            if (w && w->window() == this) {
+                auto* ke = static_cast<QKeyEvent*>(event);
+                const auto mods = ke->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier);
+                if (mods == (Qt::ControlModifier | Qt::ShiftModifier) && ke->key() == Qt::Key_D) {
+                    m_onDock();
+                    return true;
+                }
+                if (mods == Qt::ControlModifier && ke->key() == Qt::Key_W) {
+                    close();
+                    return true;
+                }
+            }
+        }
+        return edgeResize(this, watched, event, m_edgeCursor);
+    }
+
+private:
+    QWidget* m_bar = nullptr;
+    TabStrip* m_tabs = nullptr;
+    QWidget* m_content = nullptr;
+    std::function<void()> m_onDock;
+    int m_edgeCursor = 0;
+};
+
 
 // ── TabStrip ────────────────────────────────────────────────────────────────
 
@@ -334,27 +530,9 @@ void TabArea::applyTheme()
     const QColor border = tok("border", "#333333");
     const QColor danger = tok("error", "#E5484D");
 
-    m_bar->setStyleSheet(QStringLiteral(
-        "#basecampium\\.bar { background: %1; border-bottom: 1px solid %6; }"
-        "QToolButton { background: transparent; border: none; color: %4; font-size: 16px; border-radius: 6px; }"
-        "QToolButton:hover { background: %3; color: %5; }"
-        "QToolButton#basecampium\\.newTab { font-size: 22px; border-radius: 8px; }"
-        "QToolButton#basecampium\\.close { border-radius: 0; }"
-        "QToolButton#basecampium\\.close:hover { background: %7; color: white; }"
-        "QToolButton#basecampium\\.minimize, QToolButton#basecampium\\.maximize { border-radius: 0; }"
-        "QTabBar { background: transparent; }"
-        "QTabBar::tab { background: transparent; color: %4; padding: 0 8px; margin-right: 2px;"
-        "  border-top-left-radius: 8px; border-top-right-radius: 8px; text-align: left; }"
-        "QTabBar::tab:hover { background: %3; color: %5; }"
-        "QTabBar::tab:selected { background: %2; color: %5; }"
-        "QTabBar::close-button { image: url(:/qt/qml/Basecamp/Icons/Basecamp/Icons/close.svg); subcontrol-position: right;"
-        "  border-radius: 4px; margin: 2px; }"
-        "QTabBar::close-button:hover { background: %3; }"
-        "QLabel#basecampium\\.tabTitle { color: %4; background: transparent; }"
-        "QLabel#basecampium\\.tabTitle[active=\"true\"] { color: %5; }"
-        "QTabBar::scroller { width: 24px; }"
-        "QTabBar QToolButton { background: %1; }")
-        .arg(css(bar), css(page), css(hover), css(muted), css(text), css(border), css(danger)));
+    m_bar->setStyleSheet(barStyleSheet());
+    for (QWidget* w : std::as_const(m_detached))
+        static_cast<DetachedWindow*>(w)->applyStyle();
     QPalette p = m_stack->palette();
     p.setColor(QPalette::Window, page);
     m_stack->setPalette(p);
@@ -493,21 +671,9 @@ void TabArea::detachTab(int index, const QPoint& globalPos)
     updateStripWidth();
     onCurrentChanged(m_tabs->currentIndex());
 
-    // A plain top-level window (system title bar) owned by this area, so it
-    // goes when Basecamp's window goes.
-    auto* win = new QWidget(this, Qt::Window);
-    win->setObjectName(QStringLiteral("basecampium.detached"));
-    win->setProperty(kKeyProp, key);
-    win->setWindowTitle(m_titles.value(key, key));
-    win->setWindowIcon(iconFor(m_icons.value(key)));
-    auto* lay = new QVBoxLayout(win);
-    lay->setContentsMargins(0, 0, 0, 0);
-    lay->addWidget(content);
-    content->show();
-    QPalette p = win->palette();
-    p.setColor(QPalette::Window, tok("background", "#171717"));
-    win->setPalette(p);
-    win->setAutoFillBackground(true);
+    // Owned by this area, so it goes when Basecamp's window goes.
+    auto* win = new DetachedWindow(key, m_titles.value(key, key), iconFor(m_icons.value(key)),
+                                   content, this, [this, key]() { attachTab(key); });
     const QSize size = window()->size() * 0.7;
     win->resize(size.expandedTo(QSize(720, 480)));
     win->move(globalPos - QPoint(win->width() / 3, 16));
@@ -517,12 +683,34 @@ void TabArea::detachTab(int index, const QPoint& globalPos)
     emit currentKeyChanged(currentKey());
 }
 
+void TabArea::attachTab(const QString& key)
+{
+    auto* win = static_cast<DetachedWindow*>(m_detached.take(key));
+    if (!win)
+        return;
+    QWidget* content = win->content();
+    win->removeEventFilter(this);
+    win->hide();
+    if (content) {
+        content->setParent(nullptr);
+        content->setProperty(kKeyProp, key);
+        m_stack->addWidget(content);
+    }
+    win->deleteLater();
+    const int i = m_tabs->addTab(QString());
+    m_tabs->setTabData(i, key);
+    setLabel(m_tabs, i, iconFor(m_icons.value(key)), m_titles.value(key, key));
+    updateStripWidth();
+    m_tabs->setCurrentIndex(i);
+    onCurrentChanged(i);
+    window()->raise();
+    window()->activateWindow();
+}
+
 QWidget* TabArea::takeTab(const QString& key)
 {
     if (QWidget* win = m_detached.take(key)) {
-        QWidget* content = contentFor(key);
-        if (!content)
-            content = win->findChild<QWidget*>(QString(), Qt::FindDirectChildrenOnly);
+        QWidget* content = static_cast<DetachedWindow*>(win)->content();
         if (content) {
             content->setParent(nullptr);
             content->setProperty(kKeyProp, QVariant());
@@ -558,11 +746,8 @@ QWidget* TabArea::contentFor(const QString& key) const
 {
     if (isNewTabKey(key))
         return m_newTabPage;
-    if (QWidget* win = m_detached.value(key)) {
-        for (QWidget* c : win->findChildren<QWidget*>(QString(), Qt::FindDirectChildrenOnly))
-            if (c->property(kKeyProp).toString() == key)
-                return c;
-    }
+    if (QWidget* win = m_detached.value(key))
+        return static_cast<DetachedWindow*>(win)->content();
     for (int i = 0; i < m_stack->count(); ++i) {
         QWidget* w = m_stack->widget(i);
         if (w != m_newTabPage && w->property(kKeyProp).toString() == key)

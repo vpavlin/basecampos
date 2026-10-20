@@ -61,6 +61,8 @@ public:
 
     // Moves a tab's content into its own window (drag out, or the tab menu).
     void detachTab(int index, const QPoint& globalPos);
+    // Puts a torn-off window's app back as a tab ("Back to tabs").
+    void attachTab(const QString& key);
 
     void nextTab(int delta);
     void goToTab(int index);  // -1 = last

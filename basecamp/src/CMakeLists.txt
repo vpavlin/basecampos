@@ -204,6 +204,7 @@ qt_add_qml_module(basecamp_icons_qml
         Basecamp/Icons/module.svg
         Basecamp/Icons/settings.svg
         Basecamp/Icons/close.svg
+        Basecamp/Icons/to-tab.svg
         Basecamp/Icons/tent.png
         Basecamp/Icons/glowing-tents.jpg
         Basecamp/Icons/workspace.svg
