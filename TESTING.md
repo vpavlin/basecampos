@@ -74,7 +74,9 @@ about 10 seconds).
 
 - open apps from the dock; drag windows by the title bar, resize from any edge, minimise,
   maximise, close;
-- the **tiling** toggle in the status bar (top right) lays windows out as equal columns;
+- **tiling:** the toggle in the status bar (top right) lays out every visible window as an
+  equal-width, full-height column, in the order the windows were opened. Open, close or minimise
+  a window and the columns re-arrange by themselves. Try it with two, three and four apps;
 - **Ctrl+K** opens Spotlight: type an app name and click the result;
 - **F11** toggles full screen.
 
@@ -92,6 +94,14 @@ Share what you make: attach it to an issue (see below).
 ## 7. Known limits
 
 - Window positions are not remembered between runs (Desktop).
+- Tiling is simple on purpose:
+  - columns only, all the same width (no rows, no grid, no custom split), so many windows on
+    a small screen get narrow;
+  - you can't reorder columns by dragging; the order is the order windows were opened;
+  - a tiled window you move or resize snaps back the next time a window opens, closes or is
+    minimised;
+  - turning tiling off leaves windows where they are (it doesn't restore earlier positions);
+  - tiling is off again after a restart.
 - In Desktop, while an app window has focus, Ctrl+K goes to that app; click the search hint in the
   status bar instead.
 - Apps draw their own backgrounds, so only Basecamp's own windows and the frames around apps are

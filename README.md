@@ -51,6 +51,8 @@ keep the important part away from the bottom ~110 px (dock) and the top 30 px (s
 - Apps draw their own backgrounds, so only the shell's windows, Package Manager and the chrome are
   frosted.
 - Window positions aren't remembered between runs.
+- Tiling is columns only: equal widths in opening order, no reordering or custom splits; a moved
+  window snaps back on the next re-layout; off again after a restart.
 
 ## Theme, layout, shell
 
