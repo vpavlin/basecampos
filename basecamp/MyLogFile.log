@@ -1,0 +1,58 @@
+Tue Oct 20 12:45:01 2026  [TRACE]: Start Multiexp A
+Tue Oct 20 12:45:01 2026  [TRACE]: Start Multiexp B1
+Tue Oct 20 12:45:01 2026  [TRACE]: Start Multiexp B2
+Tue Oct 20 12:45:01 2026  [TRACE]: Start Multiexp C
+Tue Oct 20 12:45:01 2026  [TRACE]: Start Initializing a b c A
+Tue Oct 20 12:45:01 2026  [TRACE]: Processing coefs
+Tue Oct 20 12:45:01 2026  [TRACE]: Calculating c
+Tue Oct 20 12:45:01 2026  [TRACE]: Initializing fft
+Tue Oct 20 12:45:01 2026  [TRACE]: Start iFFT A
+Tue Oct 20 12:45:01 2026  [TRACE]: a After ifft:
+Tue Oct 20 12:45:01 2026  [TRACE]: Start Shift A
+Tue Oct 20 12:45:01 2026  [TRACE]: a After shift:
+Tue Oct 20 12:45:01 2026  [TRACE]: Start FFT A
+Tue Oct 20 12:45:01 2026  [TRACE]: a After fft:
+Tue Oct 20 12:45:01 2026  [TRACE]: Start iFFT B
+Tue Oct 20 12:45:01 2026  [TRACE]: b After ifft:
+Tue Oct 20 12:45:01 2026  [TRACE]: Start Shift B
+Tue Oct 20 12:45:01 2026  [TRACE]: b After shift:
+Tue Oct 20 12:45:01 2026  [TRACE]: Start FFT B
+Tue Oct 20 12:45:01 2026  [TRACE]: b After fft:
+Tue Oct 20 12:45:01 2026  [TRACE]: Start iFFT C
+Tue Oct 20 12:45:01 2026  [TRACE]: c After ifft:
+Tue Oct 20 12:45:01 2026  [TRACE]: Start Shift C
+Tue Oct 20 12:45:01 2026  [TRACE]: c After shift:
+Tue Oct 20 12:45:01 2026  [TRACE]: Start FFT C
+Tue Oct 20 12:45:01 2026  [TRACE]: c After fft:
+Tue Oct 20 12:45:01 2026  [TRACE]: Start ABC
+Tue Oct 20 12:45:01 2026  [TRACE]: abc:
+Tue Oct 20 12:45:01 2026  [TRACE]: Start Multiexp H
+Tue Oct 20 12:45:06 2026  [TRACE]: Start Multiexp A
+Tue Oct 20 12:45:06 2026  [TRACE]: Start Multiexp B1
+Tue Oct 20 12:45:06 2026  [TRACE]: Start Multiexp B2
+Tue Oct 20 12:45:06 2026  [TRACE]: Start Multiexp C
+Tue Oct 20 12:45:06 2026  [TRACE]: Start Initializing a b c A
+Tue Oct 20 12:45:06 2026  [TRACE]: Processing coefs
+Tue Oct 20 12:45:06 2026  [TRACE]: Calculating c
+Tue Oct 20 12:45:06 2026  [TRACE]: Initializing fft
+Tue Oct 20 12:45:06 2026  [TRACE]: Start iFFT A
+Tue Oct 20 12:45:06 2026  [TRACE]: a After ifft:
+Tue Oct 20 12:45:06 2026  [TRACE]: Start Shift A
+Tue Oct 20 12:45:06 2026  [TRACE]: a After shift:
+Tue Oct 20 12:45:06 2026  [TRACE]: Start FFT A
+Tue Oct 20 12:45:06 2026  [TRACE]: a After fft:
+Tue Oct 20 12:45:06 2026  [TRACE]: Start iFFT B
+Tue Oct 20 12:45:06 2026  [TRACE]: b After ifft:
+Tue Oct 20 12:45:06 2026  [TRACE]: Start Shift B
+Tue Oct 20 12:45:06 2026  [TRACE]: b After shift:
+Tue Oct 20 12:45:06 2026  [TRACE]: Start FFT B
+Tue Oct 20 12:45:06 2026  [TRACE]: b After fft:
+Tue Oct 20 12:45:06 2026  [TRACE]: Start iFFT C
+Tue Oct 20 12:45:06 2026  [TRACE]: c After ifft:
+Tue Oct 20 12:45:06 2026  [TRACE]: Start Shift C
+Tue Oct 20 12:45:06 2026  [TRACE]: c After shift:
+Tue Oct 20 12:45:06 2026  [TRACE]: Start FFT C
+Tue Oct 20 12:45:06 2026  [TRACE]: c After fft:
+Tue Oct 20 12:45:06 2026  [TRACE]: Start ABC
+Tue Oct 20 12:45:06 2026  [TRACE]: abc:
+Tue Oct 20 12:45:06 2026  [TRACE]: Start Multiexp H

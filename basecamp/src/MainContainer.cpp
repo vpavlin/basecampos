@@ -258,6 +258,12 @@ void MainContainer::setupUi()
             m_sidebarWidget->setClearColor(bg);
         if (m_contentWidget && !m_desktopLayout)
             m_contentWidget->setClearColor(bg);
+        // Settings (desktop window / Basecampium tab) and the New tab page are
+        // separate views; their clear colour shows wherever QML draws nothing.
+        if (m_settingsWidget && !m_desktopLayout)
+            m_settingsWidget->setClearColor(bg);
+        if (m_newTabWidget)
+            m_newTabWidget->setClearColor(bg);
         QWidget* top = window();
         if (top && top != this) {
             QPalette tp = top->palette();
