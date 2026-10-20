@@ -83,6 +83,12 @@ void ShellPrefs::restart()
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.remove(QStringLiteral("BASECAMP_LAYOUT"));
     p.setProcessEnvironment(env);
+    // Never hand our stdio down: stdout/stderr are LogSink's pipe, whose only
+    // reader is this process. The new copy would mirror its log into a pipe
+    // nobody drains and freeze once 64 KB had piled up.
+    p.setStandardInputFile(QProcess::nullDevice());
+    p.setStandardOutputFile(QProcess::nullDevice());
+    p.setStandardErrorFile(QProcess::nullDevice());
     p.setProgram(QStringLiteral("/bin/sh"));
     p.setArguments(QStringList{
         QStringLiteral("-c"),

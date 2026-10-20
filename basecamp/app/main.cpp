@@ -644,6 +644,9 @@ int main(int argc, char *argv[])
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
         env.remove(QStringLiteral("BASECAMP_LAYOUT"));
         p.setProcessEnvironment(env);
+        p.setStandardInputFile(QProcess::nullDevice());
+        p.setStandardOutputFile(QProcess::nullDevice());
+        p.setStandardErrorFile(QProcess::nullDevice());
         p.setProgram(QCoreApplication::applicationFilePath());
         p.setArguments(QCoreApplication::arguments().mid(1));
         if (!p.startDetached())
