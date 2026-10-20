@@ -9,7 +9,7 @@ Basecampium feel right to use?**
 
 ## 1. Download
 
-From the [Basecampium test release](https://github.com/xAlisher/basecamp-theming/releases/tag/basecampium-2):
+From the [Basecampium test release](https://github.com/xAlisher/basecamp-theming/releases/tag/basecampium-3):
 
 | File | What |
 |---|---|
@@ -61,7 +61,8 @@ Tick **I trust this builder and use this shell at my own risk**, then **Switch a
 - Drag the empty part of the bar to move the window, double-click it to maximise, resize from the
   edges. Drag tabs to reorder; middle-click or right-click a tab to close.
 - **Tear a tab off:** drag it well out of the bar (or right-click → **Move to new window**) and the
-  app opens in its own window. Closing that window closes the app.
+  app opens in its own window, with the same bar as the main one. **Back to tabs** (the button left
+  of minimise, or Ctrl+Shift+D) puts it back as a tab. Closing that window closes the app.
 
 | Keys | Action |
 |---|---|
