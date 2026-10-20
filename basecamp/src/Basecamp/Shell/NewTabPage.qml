@@ -40,10 +40,10 @@ Rectangle {
     readonly property var shownApps: apps.filter(a => matches(a.displayName || a.name))
 
     function openFirst() {
-        if (shownSystem.length > 0)
-            root.openSystemApp(shownSystem[0].key)
-        else if (shownApps.length > 0)
+        if (shownApps.length > 0)
             root.launchApp(shownApps[0].name)
+        else if (shownSystem.length > 0)
+            root.openSystemApp(shownSystem[0].key)
     }
 
     color: Theme.palette.background
@@ -51,6 +51,8 @@ Rectangle {
     ColumnLayout {
         anchors.top: parent.top
         anchors.topMargin: Math.max(48, parent.height * 0.16)
+        anchors.bottom: systemRow.top
+        anchors.bottomMargin: Theme.spacing.xlarge
         anchors.horizontalCenter: parent.horizontalCenter
         width: Math.min(parent.width - 96, 880)
         spacing: Theme.spacing.xlarge * 2
@@ -69,35 +71,21 @@ Rectangle {
             Keys.onEnterPressed: root.openFirst()
         }
 
+        // Apps scroll inside the space above the system row.
+        Flickable {
+            objectName: "newTab.scroll"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            contentHeight: grid.height
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
         Flow {
             id: grid
             objectName: "newTab.grid"
-            Layout.fillWidth: true
+            width: parent.width
             spacing: 0
-
-            Repeater {
-                model: root.shownSystem
-                delegate: Tile {
-                    required property var modelData
-                    objectName: "newTab." + modelData.key
-                    label: modelData.name
-                    glyph: modelData.icon
-                    onActivated: root.openSystemApp(modelData.key)
-                }
-            }
-
-            Item {
-                visible: root.shownSystem.length > 0 && root.shownApps.length > 0
-                width: 25
-                height: root.tileSize + 40
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    y: 6
-                    width: 1
-                    height: root.tileSize - 4
-                    color: Theme.palette.border
-                }
-            }
 
             Repeater {
                 model: root.shownApps
@@ -113,6 +101,7 @@ Rectangle {
                 }
             }
         }
+        }
 
         LogosText {
             visible: root.apps.length === 0 && root.query.length === 0
@@ -122,10 +111,80 @@ Rectangle {
         }
 
         LogosText {
-            visible: root.query.length > 0 && root.shownSystem.length === 0 && root.shownApps.length === 0
+            visible: root.query.length > 0 && root.shownApps.length === 0
             text: qsTr("Nothing matches “%1”.").arg(search.text)
             color: Theme.palette.textSecondary
             font.pixelSize: Theme.typography.secondaryText
+        }
+    }
+
+    // The shell's own apps: small round buttons under a subtle divider,
+    // pinned to the bottom and centred. Search still finds them by name.
+    Column {
+        id: systemRow
+        objectName: "newTab.systemRow"
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.spacing.xlarge * 1.5
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: Theme.spacing.large
+
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(root.width - 96, 480)
+            height: 1
+            color: Theme.palette.borderHairline
+        }
+
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: Theme.spacing.large
+
+            Repeater {
+                model: root.systemApps
+                delegate: AbstractButton {
+                    id: sys
+                    required property var modelData
+                    objectName: "newTab." + modelData.key
+                    readonly property bool matched: root.query.length === 0 || root.matches(modelData.name)
+                    width: 40
+                    height: 40
+                    hoverEnabled: true
+                    opacity: matched ? 1.0 : 0.35
+                    onClicked: root.openSystemApp(modelData.key)
+                    Accessible.name: modelData.name
+
+                    LogosGlow {
+                        anchors.fill: parent
+                        radius: width / 2
+                        active: sys.hovered
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        color: sys.pressed ? Theme.palette.accentOrange
+                             : sys.hovered ? Theme.palette.backgroundTertiary
+                             : Theme.palette.backgroundSecondary
+                        border.color: sys.hovered ? Theme.palette.border : Theme.palette.borderHairline
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        LogosIcon {
+                            anchors.centerIn: parent
+                            width: 18
+                            height: 18
+                            source: sys.modelData.icon
+                            color: sys.pressed ? Theme.palette.accentForeground
+                                 : sys.hovered ? Theme.palette.text : Theme.palette.textSecondary
+                            brightness: 1.0
+                        }
+                    }
+
+                    ToolTip.visible: sys.hovered
+                    ToolTip.delay: 300
+                    ToolTip.text: modelData.name
+                }
+            }
         }
     }
 
@@ -142,16 +201,25 @@ Rectangle {
         signal activated()
 
         width: root.pitch
-        height: root.tileSize + 40
+        height: root.tileSize + 48
         hoverEnabled: true
         onClicked: tile.activated()
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 4
+            radius: Theme.spacing.radiusLarge
+            color: tile.pressed ? Theme.palette.backgroundTertiary : Theme.palette.backgroundSecondary
+            opacity: tile.hovered ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+        }
 
         Item {
             id: art
             width: root.tileSize
             height: root.tileSize
             anchors.horizontalCenter: parent.horizontalCenter
-            y: tile.hovered ? 2 : 6
+            y: tile.hovered ? 8 : 12
             Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
             LogosGlow {

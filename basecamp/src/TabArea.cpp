@@ -1,6 +1,7 @@
 #include "TabArea.h"
 
 #include <QApplication>
+#include <QTimer>
 #include <QLabel>
 #include <QStyle>
 #include <QHBoxLayout>
@@ -220,7 +221,7 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     m_plus->setObjectName(QStringLiteral("basecampium.newTab"));
     m_plus->setText(QStringLiteral("+"));
     m_plus->setToolTip(tr("New tab (Ctrl+T)"));
-    m_plus->setFixedSize(30, 30);
+    m_plus->setFixedSize(36, 32);
     m_plus->setFocusPolicy(Qt::NoFocus);
     connect(m_plus, &QToolButton::clicked, this, [this]() { addNewTab(); });
 
@@ -310,7 +311,7 @@ void TabArea::applyTheme()
         "#basecampium\\.bar { background: %1; border-bottom: 1px solid %6; }"
         "QToolButton { background: transparent; border: none; color: %4; font-size: 16px; border-radius: 6px; }"
         "QToolButton:hover { background: %3; color: %5; }"
-        "QToolButton#basecampium\\.newTab { font-size: 20px; }"
+        "QToolButton#basecampium\\.newTab { font-size: 22px; border-radius: 8px; }"
         "QToolButton#basecampium\\.close { border-radius: 0; }"
         "QToolButton#basecampium\\.close:hover { background: %7; color: white; }"
         "QToolButton#basecampium\\.minimize, QToolButton#basecampium\\.maximize { border-radius: 0; }"
@@ -357,6 +358,15 @@ void TabArea::updateStripWidth()
 
 bool TabArea::eventFilter(QObject* watched, QEvent* event)
 {
+    if (event->type() == QEvent::Show && watched != window()) {
+        auto* w = qobject_cast<QWidget*>(watched);
+        if (w && w->parentWidget() == m_stack && m_stack->currentWidget() != w) {
+            QTimer::singleShot(0, w, [this, w]() {
+                if (m_stack->currentWidget() != w)
+                    w->hide();
+            });
+        }
+    }
     if (watched == window() && event->type() == QEvent::WindowStateChange && m_maxButton)
         m_maxButton->setText(window()->isMaximized() ? QStringLiteral("❒") : QStringLiteral("□"));
     return QWidget::eventFilter(watched, event);
@@ -392,9 +402,12 @@ void TabArea::openContent(const QString& key, const QString& title, const QStrin
     }
     if (content) {
         content->setProperty(kKeyProp, key);
-        if (m_stack->indexOf(content) < 0)
+        if (m_stack->indexOf(content) < 0) {
             m_stack->addWidget(content);
-        content->show();
+            // An app's view can show itself when it finishes loading, after
+            // the user has moved to another tab; keep it hidden unless current.
+            content->installEventFilter(this);
+        }
     }
     int i = isNewTabKey(replaceKey) ? indexOf(replaceKey) : -1;
     if (i < 0)
@@ -487,6 +500,9 @@ void TabArea::onCurrentChanged(int index)
     const QString key = m_tabs->tabData(index).toString();
     if (QWidget* w = contentFor(key)) {
         m_stack->setCurrentWidget(w);
+        for (int i = 0; i < m_stack->count(); ++i)
+            if (QWidget* other = m_stack->widget(i); other != w && other->isVisible())
+                other->hide();
         if (w == m_newTabPage)
             emit newTabShown();
     }
