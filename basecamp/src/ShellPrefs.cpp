@@ -1,5 +1,6 @@
 #include "ShellPrefs.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -37,6 +38,13 @@ QString ShellPrefs::layout() const
 {
     const QString v = QSettings().value(QLatin1String(kLayoutKey)).toString();
     return v == QLatin1String("desktop") ? v : QStringLiteral("sidebar");
+}
+
+void ShellPrefs::restart()
+{
+    // Read by main() after teardown, so the new instance never overlaps this one.
+    qApp->setProperty("basecampRestart", true);
+    QCoreApplication::quit();
 }
 
 void ShellPrefs::setLayout(const QString& layout)

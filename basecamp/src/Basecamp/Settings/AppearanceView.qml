@@ -250,14 +250,27 @@ Item {
                     onActivated: index => root.prefs.layout = values[index]
                 }
 
-                LogosText {
+                RowLayout {
                     Layout.fillWidth: true
-                    text: root.prefs && root.prefs.layout !== root.prefs.activeLayout
-                          ? qsTr("Takes effect the next time you start Basecamp.")
-                          : qsTr("In use now.")
-                    font.pixelSize: Theme.typography.secondaryText
-                    color: root.prefs && root.prefs.layout !== root.prefs.activeLayout
-                           ? Theme.palette.warning : Theme.palette.textTertiary
+                    spacing: Theme.spacing.small
+
+                    LogosText {
+                        text: root.prefs && root.prefs.layout !== root.prefs.activeLayout
+                              ? qsTr("Takes effect the next time you start Basecamp.")
+                              : qsTr("In use now.")
+                        font.pixelSize: Theme.typography.secondaryText
+                        color: root.prefs && root.prefs.layout !== root.prefs.activeLayout
+                               ? Theme.palette.warning : Theme.palette.textTertiary
+                    }
+
+                    LogosButton {
+                        objectName: "appearance.restartButton"
+                        text: qsTr("Restart now")
+                        visible: root.prefs !== null && root.prefs.layout !== root.prefs.activeLayout
+                        onClicked: root.prefs.restart()
+                    }
+
+                    Item { Layout.fillWidth: true }
                 }
             }
 

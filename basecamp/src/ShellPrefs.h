@@ -37,6 +37,9 @@ public:
     QUrl builtinWallpaperUrl() const;
     QUrl customWallpaperUrl() const;
 
+    // Quits Basecamp; main() starts it again once everything has shut down.
+    Q_INVOKABLE void restart();
+
     Q_INVOKABLE void setWallpaper(const QString& id);
     QString wallpaperFit() const;
     void setWallpaperFit(const QString& fit);

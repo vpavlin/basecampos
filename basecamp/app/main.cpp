@@ -31,6 +31,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QFile>
+#include <QProcess>
+#include <QProcessEnvironment>
 #ifdef Q_OS_MAC
     #include "macWindowStyle.h"
 #endif
@@ -632,6 +634,40 @@ int main(int argc, char *argv[])
 
     // Flush final output, restore original stdout/stderr, and close the log file.
     LogosBasecampLog::LogSink::instance().stop();
+
+    // Settings → Appearance "Restart now": start a fresh copy once this one has
+    // released everything, including the single-instance socket.
+    if (app.property("basecampRestart").toBool()) {
+        guard.reset();
+        QProcess p;
+        // A forced layout would undo the choice the user just made.
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        env.remove(QStringLiteral("BASECAMP_LAYOUT"));
+        p.setProcessEnvironment(env);
+        QString program = QCoreApplication::applicationFilePath();
+        QStringList args = QCoreApplication::arguments().mid(1);
+#if defined(Q_OS_MAC)
+        // Relaunch the .app bundle so macOS treats it as a normal app start.
+        QDir bundle(QCoreApplication::applicationDirPath());
+        if (bundle.cdUp() && bundle.cdUp() && bundle.path().endsWith(QStringLiteral(".app"))) {
+            args = QStringList{ QStringLiteral("-n"), bundle.path(), QStringLiteral("--args") } + args;
+            program = QStringLiteral("/usr/bin/open");
+        }
+#elif defined(Q_OS_LINUX)
+        // Inside an AppImage the binary's mount goes away when we exit. Trust
+        // APPIMAGE only when we run from its mount (APPDIR): another AppImage
+        // can leak the variable into the environment we were started from.
+        const QString appImage = qEnvironmentVariable("APPIMAGE");
+        const QString appDir = qEnvironmentVariable("APPDIR");
+        if (!appImage.isEmpty() && QFile::exists(appImage) && !appDir.isEmpty()
+            && QCoreApplication::applicationFilePath().startsWith(appDir + QLatin1Char('/')))
+            program = appImage;
+#endif
+        p.setProgram(program);
+        p.setArguments(args);
+        if (!p.startDetached())
+            std::cerr << "Could not restart Basecamp: " << program.toStdString() << std::endl;
+    }
 
     return result;
 }
