@@ -18,18 +18,55 @@ From the [test release](https://github.com/xAlisher/basecamp-theming/releases):
 
 ## 2. Run it
 
-**Quit your regular Basecamp first** (both use the same storage folder). The test build keeps its
-apps, keys and logs in a folder you choose, so your regular install is not changed.
-
-Linux:
+**Quit your regular Basecamp first.** Never run it and the test build at the same time.
 
 ```sh
 chmod +x basecamp-os-x86_64.AppImage
+```
+
+Then pick one of two ways:
+
+### A. Separate (recommended)
+
+The test build keeps its apps, keys and logs in a folder of its own. Your regular Basecamp is not
+changed.
+
+```sh
 ./basecamp-os-x86_64.AppImage --user-dir ~/basecamp-test
 ```
 
-The first start is a fresh Basecamp with no apps. Open **Applications** and install a few official
-apps (for example Blockchain, Docs, Chat) so you have something to look at.
+It starts as a fresh Basecamp with no apps: open **Applications** and install a few official apps
+(for example Blockchain, Docs, Chat). To bring over the apps you already have (without their data
+or keys), run this once before starting:
+
+```sh
+mkdir -p ~/basecamp-test
+cp -a ~/.local/share/Logos/LogosBasecamp/plugins ~/.local/share/Logos/LogosBasecamp/modules ~/.local/share/Logos/LogosBasecamp/lib ~/basecamp-test/
+```
+
+### B. On your real data
+
+The test build opens your real Basecamp: your apps, node, wallets and keys, as they are. Use this
+if you want to see themes and layouts on your own setup.
+
+- **Back up first.** The test build is newer than the released Basecamp (0.3.2), and going back
+  to 0.3.2 after it has used your data is not tested:
+
+  ```sh
+  cp -a ~/.local/share/Logos/LogosBasecamp ~/LogosBasecamp-backup
+  ```
+
+  (This copies everything, including any large chain data; check you have the space.)
+- Start it without `--user-dir`:
+
+  ```sh
+  ./basecamp-os-x86_64.AppImage
+  ```
+
+- `logos://` links open the test build while you use it; your regular Basecamp takes them back
+  the next time it starts.
+- To undo: quit the test build, delete `~/.local/share/Logos/LogosBasecamp` and rename
+  `~/LogosBasecamp-backup` back to it.
 
 ## 3. Themes
 
@@ -37,8 +74,8 @@ Basecamp comes with two themes: **Dark** (default) and **Light**.
 
 - Switch in **Settings → Appearance → Theme**. Basecamp changes right away; installed apps change
   the next time you start Basecamp.
-- Install more: download a theme file from the release, then **Settings → Appearance → Upload your
-  own theme…**, and pick it from the Theme list.
+- Install more: download a theme file from the release, then **Upload your own theme…** (right
+  under the Theme list), and pick it from the list.
 
 | Theme file | What it shows |
 |---|---|
@@ -67,8 +104,8 @@ the size of controls and spacing. **Try:** each setting on your screen; which wo
 Pick one, then **Restart now**. Basecamp closes and opens in the new layout (this can take up to
 about 10 seconds).
 
-**Wallpaper** is part of the Desktop layout: once Desktop is chosen, Settings → Appearance shows
-**Wallpaper** (Basecamp, Plain, or your own image; Fit, Fill or Stretch).
+**Wallpaper** is part of the Desktop layout: after Basecamp restarts in Desktop, Settings →
+Appearance shows **Wallpaper** (Basecamp, Plain, or your own image; Fit, Fill or Stretch).
 
 **Try in Desktop:**
 
@@ -120,5 +157,5 @@ Short answers to "what feels right, what is missing" are the most useful thing y
 
 ## Remove it
 
-Delete the AppImage and the `~/basecamp-test` folder. Themes you uploaded are in
+Delete the AppImage. With option A, also delete `~/basecamp-test`. Themes you uploaded are in
 `~/.local/share/Logos/LogosBasecamp/themes`.
