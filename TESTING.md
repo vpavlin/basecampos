@@ -13,15 +13,33 @@ From the [test release](https://github.com/xAlisher/basecamp-theming/releases):
 | What | File |
 |---|---|
 | Basecamp, Linux x86_64 | `basecamp-os-x86_64.AppImage` |
-| Basecamp, macOS (Apple Silicon) | coming in a later test build |
+| Basecamp, macOS (Apple Silicon) | `basecamp-os-macos-arm64.zip` |
 | Extra themes (optional) | the `.theme.json` files in the same release |
 
 ## 2. Run it
 
 **Quit your regular Basecamp first.** Never run it and the test build at the same time.
 
+**Linux:**
+
 ```sh
 chmod +x basecamp-os-x86_64.AppImage
+```
+
+**macOS:** unzip `basecamp-os-macos-arm64.zip` and leave `LogosBasecamp.app` in Downloads.
+**Don't move it to Applications:** it has the same name as your regular Basecamp and would
+replace it.
+
+The build is **not signed by an Apple developer**, so the first time macOS says it can't verify
+the app. This is expected for a test build. To open it anyway:
+
+- **macOS 15 or later:** try to open it once, then go to **System Settings → Privacy & Security**,
+  scroll down and click **Open Anyway**.
+- **macOS 14 or earlier:** right-click `LogosBasecamp.app` → **Open** → **Open**.
+- **Any version, from Terminal:**
+
+```sh
+xattr -dr com.apple.quarantine ~/Downloads/LogosBasecamp.app
 ```
 
 Then pick one of two ways:
@@ -35,6 +53,12 @@ changed.
 ./basecamp-os-x86_64.AppImage --user-dir ~/basecamp-test
 ```
 
+macOS:
+
+```sh
+open -n ~/Downloads/LogosBasecamp.app --args --user-dir ~/basecamp-test
+```
+
 It starts as a fresh Basecamp with no apps: open **Applications** and install a few official apps
 (for example Blockchain, Docs, Chat). To bring over the apps you already have (without their data
 or keys), run this once before starting:
@@ -43,6 +67,9 @@ or keys), run this once before starting:
 mkdir -p ~/basecamp-test
 cp -a ~/.local/share/Logos/LogosBasecamp/plugins ~/.local/share/Logos/LogosBasecamp/modules ~/.local/share/Logos/LogosBasecamp/lib ~/basecamp-test/
 ```
+
+(macOS: the same with `~/Library/Application\ Support/Logos/LogosBasecamp` in place of
+`~/.local/share/Logos/LogosBasecamp`.)
 
 ### B. On your real data
 
@@ -56,17 +83,20 @@ if you want to see themes and layouts on your own setup.
   cp -a ~/.local/share/Logos/LogosBasecamp ~/LogosBasecamp-backup
   ```
 
-  (This copies everything, including any large chain data; check you have the space.)
-- Start it without `--user-dir`:
+  macOS:
 
   ```sh
-  ./basecamp-os-x86_64.AppImage
+  cp -a ~/Library/Application\ Support/Logos/LogosBasecamp ~/LogosBasecamp-backup
   ```
+
+  (This copies everything, including any large chain data; check you have the space.)
+- Start it without `--user-dir`: `./basecamp-os-x86_64.AppImage` on Linux, or
+  `open -n ~/Downloads/LogosBasecamp.app` on macOS.
 
 - `logos://` links open the test build while you use it; your regular Basecamp takes them back
   the next time it starts.
-- To undo: quit the test build, delete `~/.local/share/Logos/LogosBasecamp` and rename
-  `~/LogosBasecamp-backup` back to it.
+- To undo: quit the test build, delete the Basecamp data folder (above) and put
+  `~/LogosBasecamp-backup` back in its place.
 
 ## 3. Themes
 
@@ -162,5 +192,7 @@ Short answers to "what feels right, what is missing" are the most useful thing y
 
 ## Remove it
 
-Delete the AppImage. With option A, also delete `~/basecamp-test`. Themes you uploaded are in
-`~/.local/share/Logos/LogosBasecamp/themes`.
+Delete the AppImage (Linux) or `LogosBasecamp.app` from Downloads (macOS). With option A, also
+delete `~/basecamp-test`. Themes you uploaded are in the `themes` folder inside the Basecamp data
+folder (`~/.local/share/Logos/LogosBasecamp` on Linux, `~/Library/Application Support/Logos/LogosBasecamp`
+on macOS).
