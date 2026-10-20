@@ -83,7 +83,7 @@ Basecamp comes with two themes: **Dark** (default) and **Light**.
 | `aurora-lucide.theme.json` | Aurora with its own icon set |
 | `aurora-night.theme.json` | a background image, icons, gradients |
 | `catppuccin-mocha.theme.json` | a community colour palette |
-| `hacker.theme.json` | a monospace font |
+| `hacker.theme.json` | a monospace font (JetBrains Mono if installed; Settings says when it falls back) |
 | `paper-serif.theme.json` | a light theme with a serif font |
 
 **Try:** open the same official apps under two or three themes. Is text always readable? Does

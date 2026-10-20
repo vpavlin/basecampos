@@ -10,7 +10,8 @@ frosted glass, tiling, and Spotlight search. Built on the default Basecamp style
 
 Spec: [docs/BASECAMP-OS-SPEC.md](docs/BASECAMP-OS-SPEC.md)
 
-**Want to try it?** Download the test build and follow [TESTING.md](TESTING.md).
+**Want to try it?** Download the [latest test build](https://github.com/xAlisher/basecamp-theming/releases)
+(Linux AppImage, no Nix needed) and follow [TESTING.md](TESTING.md).
 
 ## What's in it
 
@@ -25,21 +26,23 @@ Spec: [docs/BASECAMP-OS-SPEC.md](docs/BASECAMP-OS-SPEC.md)
   search.
 - **Frosted glass:** status bar, title bars, frames, dock, Spotlight and the shell's own windows show a
   blurred wallpaper under a tint.
-- **Settings → Appearance:** Layout (Window (default) / Desktop) and Wallpaper (Basecamp, Plain, your own
-  image; Fit, Fill or Stretch).
+- **Settings → Appearance:** Layout (Window (default) / Desktop, then **Restart now**) and, once
+  running in Desktop, Wallpaper (Basecamp, Plain, your own image; Fit, Fill or Stretch).
 
 ## Build and run
 
-Requires Nix with flakes enabled. The portable bundle runs real apps installed from the catalog
-(it reads them from the same folder as the released Basecamp):
+Requires Nix with flakes enabled. The portable bundle runs real apps installed from the catalog.
+It reads them from the same folder as the released Basecamp, so quit that first, or add
+`--user-dir <folder>` to keep this build's data separate (see [TESTING.md](TESTING.md)):
 
 ```sh
 nix build "path:$PWD/basecamp#bin-bundle-dir" --override-input logos-design-system "path:$PWD/design-system"
 env BASECAMP_LAYOUT=desktop ./result/bin/LogosBasecamp
 ```
 
-Or pick **Desktop** in Settings → Appearance → Layout and restart. `./build.sh` builds the dev host
-instead (no catalog apps).
+Or pick **Desktop** in Settings → Appearance → Layout and **Restart now**. Other targets:
+`basecamp#bin-appimage` (the Linux AppImage in the test releases), `basecamp#bin-macos-app`
+(macOS). `./build.sh` builds the dev host (no catalog apps).
 
 **Wallpaper tip:** match your screen for a perfect fit (for example 5120 × 1440 on a 32:9 display);
 keep the important part away from the bottom ~110 px (dock) and the top 30 px (status bar).
@@ -51,13 +54,15 @@ keep the important part away from the bottom ~110 px (dock) and the top 30 px (s
 - Apps draw their own backgrounds, so only the shell's windows, Package Manager and the chrome are
   frosted.
 - Window positions aren't remembered between runs.
+- Restart now can take up to about 10 seconds (Basecamp can stall while quitting; the restart
+  waits, then continues).
 - Tiling is columns only: equal widths in opening order, no reordering or custom splits; a moved
   window snaps back on the next re-layout; off again after a restart.
 
 ## Theme, layout, shell
 
 A **theme** changes how Basecamp looks (data only). A **layout** is a built-in arrangement of the
-default shell (`sidebar`, `desktop`). A **shell package** would replace the whole shell; see spec §7.
+default shell: Window (default, the sidebar) and Desktop. A **shell package** would replace the whole shell; see spec §7.
 
 ---
 
@@ -67,8 +72,8 @@ This branch is the **v2 experiment**: everything in v1 (colours, corners, fonts,
 Settings → Appearance) plus gradients, backgrounds, icon packs, hover glow, slow background motion,
 per-control styles and density. The v1 build is on `main`.
 
-- `design-system/`: logos-design-system `master` @ `a4f3014` + 33 commits
-- `basecamp/`: logos-basecamp `master` @ `5f8cca8` + 24 commits (includes the welcome page
+- `design-system/`: logos-design-system `master` @ `a4f3014` + 34 commits
+- `basecamp/`: logos-basecamp `master` @ `5f8cca8` + 37 commits (includes the welcome page
   changes in logos-co/logos-basecamp#510)
 
 Spec: [docs/THEME-V2-SPEC.md](docs/THEME-V2-SPEC.md) (§11 covers per-control styles and density).
@@ -84,7 +89,7 @@ Requires Nix with flakes enabled.
 
 ## Try a theme
 
-Upload one in **Settings → Appearance**:
+Dark and Light are built in. Upload more in **Settings → Appearance → Upload your own theme…**:
 
 - `themes/aurora.theme.json`: gradients, pill controls, card shadows, per-control colours
 - `themes/aurora-lucide.theme.json`: Aurora + a Lucide icon pack (bundle, icons inline)
