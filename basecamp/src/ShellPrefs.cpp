@@ -14,7 +14,7 @@ namespace {
 const char* kLayoutKey = "BasecampShell/layout";
 const char* kWallpaperKey = "BasecampShell/wallpaper";
 const char* kFitKey = "BasecampShell/wallpaperFit";
-const char* kBuiltin = ":/qt/qml/Basecamp/Icons/Basecamp/Icons/basecamp-wallpaper.jpg";
+const char* kBuiltin = ":/qt/qml/Basecamp/Icons/Basecamp/Icons/glowing-tents.jpg";
 
 QString customPath()
 {
