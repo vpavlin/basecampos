@@ -14,18 +14,29 @@ From the [Basecampium test release](https://github.com/xAlisher/basecamp-theming
 | File | What |
 |---|---|
 | `basecamp-shells-x86_64.AppImage` | Basecamp that can use shell packages (Linux x86_64) |
-| `basecampium.lgx` | the Basecampium shell package |
-
-macOS: not yet.
+| `basecamp-shells-macos-arm64.zip` | the same for macOS (Apple Silicon) |
+| `basecampium.lgx` | the Basecampium shell package (one file for Linux and macOS) |
 
 ## 2. Start Basecamp
 
 Quit your regular Basecamp first. Then run the test build in its own folder (your regular
 Basecamp is not changed):
 
+Linux:
+
 ```sh
 chmod +x basecamp-shells-x86_64.AppImage
 ./basecamp-shells-x86_64.AppImage --user-dir ~/basecamp-shells-test
+```
+
+macOS: unzip `basecamp-shells-macos-arm64.zip` and keep `LogosBasecamp.app` in Downloads (not in
+Applications: it has the same name as your regular Basecamp). It isn't signed by an Apple developer,
+so the first time macOS warns: on macOS 15 or later open it once, then **System Settings → Privacy &
+Security → Open Anyway**; on macOS 14 or earlier right-click → **Open**; or run
+`xattr -dr com.apple.quarantine ~/Downloads/LogosBasecamp.app`. Then start it with:
+
+```sh
+open -n ~/Downloads/LogosBasecamp.app --args --user-dir ~/basecamp-shells-test
 ```
 
 It starts with the **default shell**: the Basecamp you know. Install a couple of apps from
@@ -97,7 +108,8 @@ says why.
   does. Only running shells in their own sandboxed process would.
 - Package Manager doesn't label shell packages as "Shell" yet.
 - Holding Shift at start may not be seen on some Wayland desktops; `--default-shell` always works.
-- Linux only for now.
+- macOS: Basecamp draws its own traffic lights over the top-left corner; check they don't cover
+  Basecampium's tabs (not yet verified on a Mac screen).
 
 ## 8. Make your own shell
 
