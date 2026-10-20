@@ -196,6 +196,45 @@ Item {
                     color: Theme.typography.familyAvailable ? Theme.palette.textTertiary : Theme.palette.warning
                     wrapMode: Text.WordWrap
                 }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.medium
+
+                    LogosButton {
+                        objectName: "appearance.uploadButton"
+                        text: qsTr("Upload your own theme…")
+                        variant: LogosButton.Variant.Primary
+                        onClicked: fileDialog.open()
+                    }
+
+                    LogosText {
+                        Layout.fillWidth: true
+                        text: qsTr("A Logos theme file (.json), or a bundle with its icons inside. Installed to %1").arg(ThemeInstaller.themesDir)
+                        font.pixelSize: Theme.typography.secondaryText
+                        color: Theme.palette.textTertiary
+                        wrapMode: Text.WrapAnywhere
+                    }
+                }
+
+                LogosNotice {
+                    objectName: "appearance.resultNotice"
+                    Layout.fillWidth: true
+                    shown: d.resultTitle.length > 0
+                    closable: true
+                    severity: d.resultSeverity
+                    title: d.resultTitle
+                    message: d.resultMessage
+                    onDismissed: d.resultTitle = ""
+                }
+
+                LogosNotice {
+                    objectName: "appearance.restartNotice"
+                    Layout.fillWidth: true
+                    severity: LogosNotice.Info
+                    title: qsTr("Apps switch after a restart")
+                    message: qsTr("Basecamp switches right away. Apps that support themes run in their own process and switch the next time you start Basecamp.")
+                }
             }
 
             ColumnLayout {
@@ -274,12 +313,12 @@ Item {
                 }
             }
 
-            // Wallpaper only exists in the desktop layout; offer it once that
-            // layout is chosen (it can be set before the restart).
+            // Wallpaper only exists in the desktop layout; offered once Basecamp
+            // is running in it.
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
-                visible: root.prefs !== null && root.prefs.layout === "desktop"
+                visible: root.prefs !== null && root.prefs.activeLayout === "desktop"
 
                 LogosText {
                     text: qsTr("Wallpaper")
@@ -332,45 +371,6 @@ Item {
                     currentIndex: root.prefs ? Math.max(0, values.indexOf(root.prefs.wallpaperFit)) : 0
                     onActivated: index => root.prefs.wallpaperFit = values[index]
                 }
-            }
-
-            LogosNotice {
-                objectName: "appearance.restartNotice"
-                Layout.fillWidth: true
-                severity: LogosNotice.Info
-                title: qsTr("Apps switch after a restart")
-                message: qsTr("Basecamp switches right away. Apps that support themes run in their own process and switch the next time you start Basecamp.")
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacing.medium
-
-                LogosButton {
-                    objectName: "appearance.uploadButton"
-                    text: qsTr("Upload your own theme…")
-                    variant: LogosButton.Variant.Primary
-                    onClicked: fileDialog.open()
-                }
-
-                LogosText {
-                    Layout.fillWidth: true
-                    text: qsTr("A Logos theme file (.json), or a bundle with its icons inside. Installed to %1").arg(ThemeInstaller.themesDir)
-                    font.pixelSize: Theme.typography.secondaryText
-                    color: Theme.palette.textTertiary
-                    wrapMode: Text.WrapAnywhere
-                }
-            }
-
-            LogosNotice {
-                objectName: "appearance.resultNotice"
-                Layout.fillWidth: true
-                shown: d.resultTitle.length > 0
-                closable: true
-                severity: d.resultSeverity
-                title: d.resultTitle
-                message: d.resultMessage
-                onDismissed: d.resultTitle = ""
             }
         }
     }
