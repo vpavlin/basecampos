@@ -9,7 +9,7 @@ Basecampium feel right to use?**
 
 ## 1. Download
 
-From the [Basecampium test release](https://github.com/xAlisher/basecamp-theming/releases/tag/basecampium-1):
+From the [Basecampium test release](https://github.com/xAlisher/basecamp-theming/releases/tag/basecampium-2):
 
 | File | What |
 |---|---|
@@ -41,8 +41,9 @@ Shell → Add shell…**.
 
 ## 4. Switch to it
 
-**Settings → Customisation → Shell** → choose **Basecampium**. Before anything changes, Basecamp
-shows:
+**Settings → Customisation → Shell** lists *Default by Logos*, *Desktop by Logos* and, once
+installed, *Basecampium by Alisher*. The two built-ins switch without any dialog (just **Restart
+now**). Choose **Basecampium**: before anything changes, Basecamp shows:
 
 - what a shell can see: everything shown in Basecamp and everything you type into it;
 - what it checked (signature, access to the Logos runtime, network libraries, QML network access),
@@ -59,6 +60,8 @@ Tick **I trust this builder and use this shell at my own risk**, then **Switch a
 - Apps, Settings, Applications and Package Manager all open as tabs.
 - Drag the empty part of the bar to move the window, double-click it to maximise, resize from the
   edges. Drag tabs to reorder; middle-click or right-click a tab to close.
+- **Tear a tab off:** drag it well out of the bar (or right-click → **Move to new window**) and the
+  app opens in its own window. Closing that window closes the app.
 
 | Keys | Action |
 |---|---|
@@ -79,7 +82,7 @@ Your tabs come back the next time Basecamp starts.
 
 Any of these:
 
-- **Settings → Customisation → Shell → Default** → Switch and restart;
+- **Settings → Customisation → Shell → Default by Logos** → Restart now;
 - **safe mode:** hold **Shift** while Basecamp starts, or start it with `--default-shell`;
 - uninstall Basecampium in **Package Manager** and restart.
 
