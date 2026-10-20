@@ -23,7 +23,7 @@ Spec: [docs/BASECAMP-OS-SPEC.md](docs/BASECAMP-OS-SPEC.md)
   search.
 - **Frosted glass:** status bar, title bars, frames, dock, Spotlight and the shell's own windows show a
   blurred wallpaper under a tint.
-- **Settings → Appearance:** Layout (Sidebar / Desktop) and Wallpaper (Basecamp, Plain, your own
+- **Settings → Appearance:** Layout (Window (default) / Desktop) and Wallpaper (Basecamp, Plain, your own
   image; Fit, Fill or Stretch).
 
 ## Build and run
