@@ -245,7 +245,7 @@ Item {
                     objectName: "appearance.layoutCombo"
                     Layout.preferredWidth: 360
                     readonly property var values: ["sidebar", "desktop"]
-                    model: [qsTr("Sidebar"), qsTr("Desktop (full screen, dock, windows)")]
+                    model: [qsTr("Window (default)"), qsTr("Desktop")]
                     currentIndex: root.prefs ? Math.max(0, values.indexOf(root.prefs.layout)) : 0
                     onActivated: index => root.prefs.layout = values[index]
                 }
