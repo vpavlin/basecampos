@@ -509,6 +509,12 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     applyTheme();
     connect(Logos::ThemeNotifier::instance(), &Logos::ThemeNotifier::currentChanged,
             this, &TabArea::applyTheme);
+    // Quitting can stall (and Restart now waits for it): don't leave torn-off
+    // windows on screen meanwhile.
+    connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
+        for (QWidget* w : std::as_const(m_detached))
+            w->hide();
+    });
 }
 
 void TabArea::showEvent(QShowEvent* event)
@@ -563,6 +569,14 @@ void TabArea::updateStripWidth()
 
 bool TabArea::eventFilter(QObject* watched, QEvent* event)
 {
+    // Torn-off windows follow the main window: hidden with it (closed to the
+    // tray, quitting), shown again with it.
+    if (watched == window() && watched != this
+        && (event->type() == QEvent::Hide || event->type() == QEvent::Show)) {
+        const bool show = event->type() == QEvent::Show;
+        for (QWidget* w : std::as_const(m_detached))
+            w->setVisible(show);
+    }
     if (event->type() == QEvent::Close) {
         const QString key = watched->property(kKeyProp).toString();
         if (!key.isEmpty() && m_detached.value(key) == watched) {

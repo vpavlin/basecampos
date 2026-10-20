@@ -107,6 +107,10 @@ void ShellPrefs::restart()
     // Read by main() after teardown.
     qApp->setProperty("basecampRestart", true);
 #endif
+    // Every Basecamp window goes at once, so the restart looks immediate even
+    // while the old process is still shutting down.
+    for (QWidget* w : QApplication::topLevelWidgets())
+        w->hide();
     QCoreApplication::quit();
 }
 
