@@ -107,6 +107,11 @@ about 10 seconds).
 **Wallpaper** is part of the Desktop layout: after Basecamp restarts in Desktop, Settings →
 Appearance shows **Wallpaper** (Basecamp, Plain, or your own image; Fit, Fill or Stretch).
 
+**Tip:** Desktop takes the whole screen. Move Basecamp to a workspace (virtual desktop) of its
+own, so it can stay full screen while you switch to other apps with your system's workspace
+shortcut. On GNOME, for example, Super+Shift+Page Down moves the focused window to the next
+workspace; most desktops have a similar shortcut or let you drag the window in the overview.
+
 **Try in Desktop:**
 
 - open apps from the dock; drag windows by the title bar, resize from any edge, minimise,
