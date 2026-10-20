@@ -1,6 +1,8 @@
 #include "ShellPrefs.h"
 
 #include <QCoreApplication>
+#include <QProcess>
+#include <QProcessEnvironment>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -42,8 +44,45 @@ QString ShellPrefs::layout() const
 
 void ShellPrefs::restart()
 {
-    // Read by main() after teardown, so the new instance never overlaps this one.
+#ifdef Q_OS_UNIX
+    // A helper waits until this process is gone, however it ends (teardown
+    // can still crash), then starts Basecamp again. The two never overlap.
+    QString program = QCoreApplication::applicationFilePath();
+    QStringList args = QCoreApplication::arguments().mid(1);
+#if defined(Q_OS_MAC)
+    // Relaunch the .app bundle so macOS treats it as a normal app start.
+    QDir bundle(QCoreApplication::applicationDirPath());
+    if (bundle.cdUp() && bundle.cdUp() && bundle.path().endsWith(QStringLiteral(".app"))) {
+        args = QStringList{ QStringLiteral("-n"), bundle.path(), QStringLiteral("--args") } + args;
+        program = QStringLiteral("/usr/bin/open");
+    }
+#else
+    // Inside an AppImage the binary's mount goes away when we exit. Trust
+    // APPIMAGE only when we run from its mount (APPDIR): another AppImage
+    // can leak the variable into the environment we were started from.
+    const QString appImage = qEnvironmentVariable("APPIMAGE");
+    const QString appDir = qEnvironmentVariable("APPDIR");
+    if (!appImage.isEmpty() && QFile::exists(appImage) && !appDir.isEmpty()
+        && QCoreApplication::applicationFilePath().startsWith(appDir + QLatin1Char('/')))
+        program = appImage;
+#endif
+    QProcess p;
+    // A forced layout would undo the choice the user just made.
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.remove(QStringLiteral("BASECAMP_LAYOUT"));
+    p.setProcessEnvironment(env);
+    p.setProgram(QStringLiteral("/bin/sh"));
+    p.setArguments(QStringList{
+        QStringLiteral("-c"),
+        QStringLiteral("while kill -0 \"$0\" 2>/dev/null; do sleep 0.2; done; exec \"$@\""),
+        QString::number(QCoreApplication::applicationPid()), program } + args);
+    if (!p.startDetached()) {
+        qWarning("Could not start the restart helper; quitting without restart.");
+    }
+#else
+    // Read by main() after teardown.
     qApp->setProperty("basecampRestart", true);
+#endif
     QCoreApplication::quit();
 }
 
