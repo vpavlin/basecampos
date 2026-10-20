@@ -226,6 +226,10 @@ int main(int argc, char *argv[])
         QCommandLineOption heightOption(QStringLiteral("height"),
             QStringLiteral("Initial window height."), QStringLiteral("px"));
         parser.addOption(heightOption);
+        // Safe mode for shell packages: read by Window when it picks the shell.
+        QCommandLineOption defaultShellOption(QStringLiteral("default-shell"),
+            QStringLiteral("Start with the default shell (safe mode), whatever shell is chosen in Settings."));
+        parser.addOption(defaultShellOption);
         // Acted on below rather than by process(): parse() is what keeps an
         // unrecognised flag from aborting startup, and it does not handle
         // --help itself.
