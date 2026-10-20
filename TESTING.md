@@ -104,8 +104,9 @@ Basecamp comes with two themes: **Dark** (default) and **Light**.
 
 - Switch in **Settings → Appearance → Theme**. Basecamp changes right away; installed apps change
   the next time you start Basecamp.
-- Install more: download a theme file from the release, then **Upload your own theme…** (right
-  under the Theme list), and pick it from the list.
+- Install more: download a theme file from the release or from the
+  [themes folder](https://github.com/xAlisher/basecamp-theming/tree/basecamp-os-theme/themes),
+  then **Upload your own theme…** (right under the Theme list), and pick it from the list.
 
 | Theme file | What it shows |
 |---|---|
@@ -155,7 +156,9 @@ workspace; most desktops have a similar shortcut or let you drag the window in t
 ## 6. Make your own theme
 
 A theme is a single JSON file: colours, fonts, corner radius, and optionally gradients, a
-background image and icons. Start from one of the files above, change it, and upload it.
+background image and icons. Start from one of the files in the
+[themes folder](https://github.com/xAlisher/basecamp-theming/tree/basecamp-os-theme/themes), change
+it, and upload it.
 
 - Theme file format: [THEME-V2-SPEC.md](docs/THEME-V2-SPEC.md)
 - Basecamp checks every file on upload and explains what it rejected; it also raises contrast if a
