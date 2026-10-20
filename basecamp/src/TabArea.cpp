@@ -7,6 +7,7 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QMenu>
+#include <QCursor>
 #include <QMouseEvent>
 #include <QStackedWidget>
 #include <QToolButton>
@@ -181,8 +182,33 @@ QSize TabStrip::minimumTabSizeHint(int index) const
     return tabSizeHint(index);
 }
 
+void TabStrip::mousePressEvent(QMouseEvent* event)
+{
+    m_dragging = event->button() == Qt::LeftButton && tabAt(event->position().toPoint()) >= 0;
+    QTabBar::mousePressEvent(event);
+}
+
+void TabStrip::mouseMoveEvent(QMouseEvent* event)
+{
+    // Well outside the strip (above or below, or past the ends): tear the tab off.
+    const QPoint p = event->position().toPoint();
+    if (m_dragging && (event->buttons() & Qt::LeftButton)
+        && !rect().adjusted(-60, -50, 60, 50).contains(p)) {
+        m_dragging = false;
+        const int index = currentIndex();
+        // End QTabBar's own move-drag first, so the strip is left consistent.
+        QMouseEvent release(QEvent::MouseButtonRelease, event->position(), event->globalPosition(),
+                            Qt::LeftButton, Qt::NoButton, event->modifiers());
+        QTabBar::mouseReleaseEvent(&release);
+        emit detachRequested(index, event->globalPosition().toPoint());
+        return;
+    }
+    QTabBar::mouseMoveEvent(event);
+}
+
 void TabStrip::mouseReleaseEvent(QMouseEvent* event)
 {
+    m_dragging = false;
     // Middle-click closes, as in a browser.
     if (event->button() == Qt::MiddleButton) {
         const int i = tabAt(event->position().toPoint());
@@ -277,6 +303,7 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
         }
         emit closeRequested(key);
     });
+    connect(m_tabs, &TabStrip::detachRequested, this, &TabArea::detachTab);
     connect(m_tabs, &QWidget::customContextMenuRequested, this, [this](const QPoint& p) {
         const int i = m_tabs->tabAt(p);
         if (i >= 0)
@@ -358,6 +385,14 @@ void TabArea::updateStripWidth()
 
 bool TabArea::eventFilter(QObject* watched, QEvent* event)
 {
+    if (event->type() == QEvent::Close) {
+        const QString key = watched->property(kKeyProp).toString();
+        if (!key.isEmpty() && m_detached.value(key) == watched) {
+            event->ignore();
+            emit closeRequested(key);
+            return true;
+        }
+    }
     if (event->type() == QEvent::Show && watched != window()) {
         auto* w = qobject_cast<QWidget*>(watched);
         if (w && w->parentWidget() == m_stack && m_stack->currentWidget() != w) {
@@ -400,6 +435,11 @@ void TabArea::openContent(const QString& key, const QString& title, const QStrin
         m_tabs->setCurrentIndex(existing);
         return;
     }
+    if (QWidget* w = m_detached.value(key)) {
+        w->raise();
+        w->activateWindow();
+        return;
+    }
     if (content) {
         content->setProperty(kKeyProp, key);
         if (m_stack->indexOf(content) < 0) {
@@ -414,6 +454,8 @@ void TabArea::openContent(const QString& key, const QString& title, const QStrin
         i = m_tabs->addTab(QString());
     m_tabs->setTabData(i, key);
     setLabel(m_tabs, i, iconFor(iconPath), title);
+    m_titles[key] = title;
+    m_icons[key] = iconPath;
     m_tabs->setTabToolTip(i, title);
     updateStripWidth();
     m_tabs->setCurrentIndex(i);
@@ -425,15 +467,71 @@ void TabArea::activate(const QString& key)
     const int i = indexOf(key);
     if (i >= 0)
         m_tabs->setCurrentIndex(i);
+    else if (QWidget* w = m_detached.value(key)) {
+        w->raise();
+        w->activateWindow();
+    }
 }
 
 bool TabArea::hasKey(const QString& key) const
 {
-    return indexOf(key) >= 0;
+    return indexOf(key) >= 0 || m_detached.contains(key);
+}
+
+void TabArea::detachTab(int index, const QPoint& globalPos)
+{
+    if (index < 0 || index >= m_tabs->count() || m_tabs->count() < 2)
+        return;  // the last tab stays: that is the main window
+    const QString key = m_tabs->tabData(index).toString();
+    if (isNewTabKey(key))
+        return;
+    QWidget* content = contentFor(key);
+    if (!content)
+        return;
+    m_stack->removeWidget(content);
+    m_tabs->removeTab(index);
+    updateStripWidth();
+    onCurrentChanged(m_tabs->currentIndex());
+
+    // A plain top-level window (system title bar) owned by this area, so it
+    // goes when Basecamp's window goes.
+    auto* win = new QWidget(this, Qt::Window);
+    win->setObjectName(QStringLiteral("basecampium.detached"));
+    win->setProperty(kKeyProp, key);
+    win->setWindowTitle(m_titles.value(key, key));
+    win->setWindowIcon(iconFor(m_icons.value(key)));
+    auto* lay = new QVBoxLayout(win);
+    lay->setContentsMargins(0, 0, 0, 0);
+    lay->addWidget(content);
+    content->show();
+    QPalette p = win->palette();
+    p.setColor(QPalette::Window, tok("background", "#171717"));
+    win->setPalette(p);
+    win->setAutoFillBackground(true);
+    const QSize size = window()->size() * 0.7;
+    win->resize(size.expandedTo(QSize(720, 480)));
+    win->move(globalPos - QPoint(win->width() / 3, 16));
+    win->installEventFilter(this);
+    m_detached.insert(key, win);
+    win->show();
+    emit currentKeyChanged(currentKey());
 }
 
 QWidget* TabArea::takeTab(const QString& key)
 {
+    if (QWidget* win = m_detached.take(key)) {
+        QWidget* content = contentFor(key);
+        if (!content)
+            content = win->findChild<QWidget*>(QString(), Qt::FindDirectChildrenOnly);
+        if (content) {
+            content->setParent(nullptr);
+            content->setProperty(kKeyProp, QVariant());
+        }
+        win->removeEventFilter(this);
+        win->hide();
+        win->deleteLater();
+        return content;
+    }
     const int i = indexOf(key);
     if (i < 0)
         return nullptr;
@@ -460,6 +558,11 @@ QWidget* TabArea::contentFor(const QString& key) const
 {
     if (isNewTabKey(key))
         return m_newTabPage;
+    if (QWidget* win = m_detached.value(key)) {
+        for (QWidget* c : win->findChildren<QWidget*>(QString(), Qt::FindDirectChildrenOnly))
+            if (c->property(kKeyProp).toString() == key)
+                return c;
+    }
     for (int i = 0; i < m_stack->count(); ++i) {
         QWidget* w = m_stack->widget(i);
         if (w != m_newTabPage && w->property(kKeyProp).toString() == key)
@@ -532,11 +635,18 @@ void TabArea::showMenu(int index, const QPoint& globalPos)
     QAction* close = menu.addAction(tr("Close"));
     QAction* others = menu.addAction(tr("Close other tabs"));
     QAction* right = menu.addAction(tr("Close tabs to the right"));
+    menu.addSeparator();
+    QAction* undock = menu.addAction(tr("Move to new window"));
+    undock->setEnabled(!isNewTabKey(key) && m_tabs->count() > 1);
     others->setEnabled(m_tabs->count() > 1);
     right->setEnabled(index < m_tabs->count() - 1);
     QAction* chosen = menu.exec(globalPos);
     if (!chosen)
         return;
+    if (chosen == undock) {
+        detachTab(index, QCursor::pos());
+        return;
+    }
     QStringList victims;
     if (chosen == close) {
         victims << key;

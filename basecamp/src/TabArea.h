@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QStringList>
 #include <QTabBar>
 #include <QWidget>
@@ -19,13 +20,20 @@ public:
     void setAvailableWidth(int px);
     int tabWidth() const;
 
+signals:
+    // A tab was dragged well outside the strip: open it in its own window.
+    void detachRequested(int index, const QPoint& globalPos);
+
 protected:
     QSize tabSizeHint(int index) const override;
     QSize minimumTabSizeHint(int index) const override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
     int m_available = 1000;
+    bool m_dragging = false;
 };
 
 class TabArea : public QWidget
@@ -50,6 +58,9 @@ public:
     void setTitle(const QString& key, const QString& title);
 
     static bool isNewTabKey(const QString& key) { return key.startsWith(QStringLiteral("new:")); }
+
+    // Moves a tab's content into its own window (drag out, or the tab menu).
+    void detachTab(int index, const QPoint& globalPos);
 
     void nextTab(int delta);
     void goToTab(int index);  // -1 = last
@@ -80,5 +91,8 @@ private:
     QStackedWidget* m_stack = nullptr;
     QWidget* m_newTabPage = nullptr;
     int m_newCounter = 0;
+    QHash<QString, QWidget*> m_detached;    // key -> its own window
+    QHash<QString, QString> m_titles;       // key -> tab title
+    QHash<QString, QString> m_icons;        // key -> icon path
     bool m_watchingWindow = false;
 };

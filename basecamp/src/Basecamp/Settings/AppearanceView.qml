@@ -311,24 +311,35 @@ Item {
                 RowLayout {
                     spacing: Theme.spacing.medium
 
+                    // One list: the built-in arrangements of Basecamp's own shell
+                    // (by Logos, no warning) and installed shell packages (warning).
                     LogosComboBox {
                         id: shellCombo
                         objectName: "customisation.shellCombo"
                         Layout.preferredWidth: 360
                         readonly property var packages: root.prefs ? root.prefs.shellPackages : []
-                        readonly property var values: [""].concat(packages.map(p => p.id))
-                        model: [qsTr("Default (built in)")].concat(packages.map(p => p.name + (p.version ? "  " + p.version : "")))
-                        function sync() { currentIndex = Math.max(0, values.indexOf(root.prefs ? root.prefs.activeShell : "")) }
+                        readonly property var values: ["builtin:sidebar", "builtin:desktop"].concat(packages.map(p => p.id))
+                        model: [qsTr("Default  by Logos"), qsTr("Desktop  by Logos")].concat(
+                                   packages.map(p => p.name + "  " + qsTr("by %1").arg(p.signer || p.author || qsTr("unknown"))))
+                        readonly property string active: root.prefs
+                            ? (root.prefs.activeShell !== "" ? root.prefs.activeShell : "builtin:" + root.prefs.activeLayout) : ""
+                        readonly property string chosen: root.prefs
+                            ? (root.prefs.shell !== "" ? root.prefs.shell : "builtin:" + root.prefs.layout) : ""
+                        function sync() { currentIndex = Math.max(0, values.indexOf(chosen)) }
                         Component.onCompleted: sync()
                         onPackagesChanged: sync()
+                        onChosenChanged: sync()
                         onActivated: index => {
                             const id = values[index]
-                            if (!root.prefs || id === root.prefs.activeShell)
+                            if (!root.prefs)
                                 return
-                            if (id === "") {
-                                defaultShellDialog.open()
-                            } else {
-                                shellWarning.pkg = packages[index - 1]
+                            if (id.startsWith("builtin:")) {
+                                // Built in, by Logos: no warning, applies on restart.
+                                root.prefs.shell = ""
+                                root.prefs.layout = id.slice(8)
+                                sync()
+                            } else if (id !== chosen) {
+                                shellWarning.pkg = packages[index - 2]
                                 shellWarning.checks = root.prefs.checkShell(id)
                                 shellWarning.open()
                             }
@@ -339,6 +350,22 @@ Item {
                         objectName: "customisation.addShell"
                         text: qsTr("Add shell…")
                         onClicked: addShellDialog.open()
+                    }
+                }
+
+                RowLayout {
+                    spacing: Theme.spacing.small
+                    visible: shellCombo.chosen !== shellCombo.active
+
+                    LogosText {
+                        text: qsTr("Takes effect the next time you start Basecamp.")
+                        font.pixelSize: Theme.typography.secondaryText
+                        color: Theme.palette.warning
+                    }
+                    LogosButton {
+                        objectName: "customisation.shellRestart"
+                        text: qsTr("Restart now")
+                        onClicked: root.prefs.restart()
                     }
                 }
 
@@ -355,7 +382,9 @@ Item {
                           ? qsTr("In use: %1 %2 by %3%4").arg(active.name).arg(active.version || "")
                                 .arg(active.signer || active.author || qsTr("unknown builder"))
                                 .arg(active.signed ? qsTr(" (signed, not verified by Logos)") : qsTr(" (unsigned)"))
-                          : qsTr("In use: the default shell, built into Basecamp.")
+                          : root.prefs && root.prefs.activeLayout === "desktop"
+                            ? qsTr("In use: Desktop, built into Basecamp.")
+                            : qsTr("In use: Default, built into Basecamp.")
                     font.pixelSize: Theme.typography.secondaryText
                     color: Theme.palette.textTertiary
                     wrapMode: Text.WordWrap
@@ -365,7 +394,7 @@ Item {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
-                visible: root.prefs !== null && !root.prefs.tabsShell
+                visible: false   // folded into the Shell list (Default / Desktop by Logos)
 
                 LogosText {
                     text: qsTr("Layout")
@@ -572,25 +601,6 @@ Item {
                     shellWarning.close()
                     root.prefs.switchShell(shellWarning.pkg.id)
                 }
-            }
-        ]
-    }
-
-    LogosDialog {
-        id: defaultShellDialog
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        width: 460
-        modal: true
-        title: qsTr("Switch to the default shell?")
-        message: qsTr("Basecamp restarts with its built-in shell. The other shell stays installed.")
-        onClosed: shellCombo.sync()
-        rightActions: [
-            LogosButton { text: qsTr("Cancel"); onClicked: defaultShellDialog.close() },
-            LogosButton {
-                text: qsTr("Switch and restart")
-                variant: LogosButton.Variant.Primary
-                onClicked: { defaultShellDialog.close(); root.prefs.switchShell("default") }
             }
         ]
     }
