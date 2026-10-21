@@ -95,6 +95,8 @@ class MainUIBackend : public QObject {
 
     // App Launcher
     Q_PROPERTY(QVariantList launcherApps READ launcherApps NOTIFY launcherAppsChanged)
+    // Notifications from apps and Basecamp (NotificationCenter); any shell can show them.
+    Q_PROPERTY(QObject* notifications READ notifications CONSTANT)
     // Most-recently-closed apps, persisted across restarts.
     Q_PROPERTY(QVariantList recentlyClosedApps READ recentlyClosedApps NOTIFY recentlyClosedAppsChanged)
     Q_PROPERTY(QString currentVisibleApp READ currentVisibleApp NOTIFY currentVisibleAppChanged)
@@ -185,6 +187,7 @@ public:
     // slots/signals.
     CoreModuleManager* coreModuleManager() const { return m_coreModuleManager; }
     UIPluginManager*   uiPluginManager()   const { return m_uiPluginManager; }
+    QObject* notifications() const;
     PackageCoordinator*    packageCoordinator()    const { return m_packageCoordinator; }
     // Base-typed on purpose — see the Q_PROPERTY comments above. Internal
     // code uses the concrete members directly and does not go through these.
@@ -530,6 +533,7 @@ private:
     QVariantList       m_requiredPackages;
     CoreModuleManager* m_coreModuleManager;
     UIPluginManager*   m_uiPluginManager;
+    class NotificationCenter* m_notifications = nullptr;
     PackageCoordinator*    m_packageCoordinator;
     ModuleInstanceModel* m_uiModulesModel;
     ModuleInstanceModel* m_coreModulesModel;

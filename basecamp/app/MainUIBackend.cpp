@@ -9,6 +9,7 @@
 #include "ShellIntentInstaller.h"
 #include "ShellIntentEndpoint.h"
 #include "ShellIntents.h"
+#include "NotificationCenter.h"
 #include "links/LinkRequestCoordinator.h"
 #include "UIPluginPresenter.h"
 #include "AppsModel.h"
@@ -84,6 +85,30 @@ MainUIBackend::MainUIBackend(LogosAPI* logosAPI, ICoreRuntime* core,
     // Bridges become intent-capable from here on. PluginLoader attaches each
     // ui_qml app's bridge as it loads, before its QML runs.
     m_uiPluginManager->setIntentAdapter(m_intentAdapter);
+
+    // Notifications (NOTIFICATIONS-SPEC.md). Clicking one opens its sender, or
+    // runs its action (Reopen after a crash) — both through the launcher path.
+    m_notifications = new NotificationCenter(this);
+    connect(m_notifications, &NotificationCenter::activated, this,
+            [this](const QString& app, const QString& launch) {
+                const QString target = launch.isEmpty() ? app : launch;
+                if (!target.isEmpty() && target != NotificationCenter::kBasecampApp)
+                    m_uiPluginManager->onAppLauncherClicked(target);
+            });
+    // An app's process went away while it was open. Say so, offer Reopen, and
+    // unload it: the view left behind is dead, and Reopen must start it fresh.
+    connect(m_uiPluginManager, &UIPluginManager::appProcessCrashed, this,
+            [this](const QString& name, int exitCode) {
+                const QString display = displayNameFor(name);
+                qWarning() << "App process stopped unexpectedly:" << name << "exit code" << exitCode;
+                m_notifications->postSystem(
+                    tr("%1 stopped unexpectedly").arg(display.isEmpty() ? name : display),
+                    tr("Its process exited. Reopen it to continue."),
+                    QStringLiteral("error"),
+                    QVariantMap{ { QStringLiteral("label"), tr("Reopen") },
+                                 { QStringLiteral("launch"), name } });
+                m_uiPluginManager->unloadUiModule(name);
+            });
 
     m_intentPresenter = new UIPluginPresenter(
         m_uiPluginManager,
@@ -454,6 +479,19 @@ void MainUIBackend::wireIntents()
             // could do none of that.
             if (intent == kAppLaunchIntent)
                 return beginAppLaunch(dispatchId, params);
+
+            // Notifications: answered here, never through a dialog. Deferred
+            // a turn so the broker has finished dispatching before it hears
+            // back. Muted apps are answered ok as well (NotificationCenter).
+            if (intent == kNotificationsPostIntent) {
+                QString error;
+                const QString id = m_notifications->post(requesterName, params, &error);
+                QTimer::singleShot(0, this, [this, dispatchId, id, error]() {
+                    respondToShellIntent(dispatchId, !id.isEmpty(),
+                                         QVariantMap{ { QStringLiteral("id"), id } }, error);
+                });
+                return 1;
+            }
 
             if (kPackageConfirmIntents.contains(intent)) {
                 return m_packageCoordinator
@@ -974,4 +1012,9 @@ void MainUIBackend::setLinkRaiseHandler(std::function<void()> raise)
 {
     if (m_linkRequests)
         m_linkRequests->setRaiseHandler(std::move(raise));
+}
+
+QObject* MainUIBackend::notifications() const
+{
+    return m_notifications;
 }

@@ -17,6 +17,7 @@ void registerWith(IntentRegistry* registry,
 
     QStringList provides = kNavigationIntents;
     provides += kPackageConfirmIntents;
+    provides << kNotificationsPostIntent;
 
     registry->registerShellProvider(shellModuleName, provides,
                                     kNavigationIntents, displayName, iconSource);

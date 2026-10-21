@@ -30,6 +30,11 @@ inline const QStringList kNavigationIntents = {
     QStringLiteral("basecamp.packages.open"),
 };
 
+// Post a notification: `{ title, body?, level?, tag? }` (NOTIFICATIONS-SPEC.md).
+// Not navigation: it answers with `{ id }` and takes the user nowhere.
+inline const QString kNotificationsPostIntent =
+    QStringLiteral("basecamp.notifications.post");
+
 // Bring a named app forward: `{ "app": "wallet_ui" }`.
 inline const QString kAppLaunchIntent = QStringLiteral("basecamp.apps.launch");
 inline const QString kPackageManagerAppName =

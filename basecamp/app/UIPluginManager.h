@@ -165,6 +165,9 @@ public slots:
     void setCurrentVisibleApp(const QString& pluginName);
 
 signals:
+    // A view module's process exited while its app was open: not closed by
+    // the user, not uninstalled, not Basecamp quitting.
+    void appProcessCrashed(const QString& name, int exitCode);
     // QML-visible property-change signals. MainUIBackend re-emits each into
     // its own matching signal via a signal-to-signal connect.
     void uiModulesChanged();

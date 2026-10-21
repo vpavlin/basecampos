@@ -1,5 +1,13 @@
 #include "UIPluginManager.h"
 
+#include <QPointer>
+
+namespace {
+// Set on a ViewModuleHost just before Basecamp stops it on purpose, so its
+// processExited is not reported as a crash.
+constexpr const char* kStoppingProp = "basecampStopping";
+}
+
 #include "IntentBridgeAdapter.h"
 #include "AppsModel.h"
 #include "CoreModuleManager.h"
@@ -370,8 +378,20 @@ void UIPluginManager::onPluginLoaded(const QString& name, QWidget* widget,
             m_qmlPluginWidgets[name] = qobject_cast<QQuickWidget*>(widget);
         }
     }
-    if (viewHost)
+    if (viewHost) {
         m_viewModuleHosts[name] = viewHost;
+        // Keep watching after load: until now a process that died while its
+        // app was open left a dead tab and no word (logos-basecamp#10). Every
+        // intentional stop() marks the host first (kStoppingProp).
+        QPointer<ViewModuleHost> host(viewHost);
+        connect(viewHost, &ViewModuleHost::processExited, this, [this, name, host](int exitCode) {
+            if (!host || m_shuttingDown || host->property(kStoppingProp).toBool())
+                return;
+            if (m_viewModuleHosts.value(name) != host)
+                return;
+            emit appProcessCrashed(name, exitCode);
+        });
+    }
     m_uiModuleWidgets[name] = widget;
     m_loadedApps.insert(name);
 
@@ -535,6 +555,7 @@ void UIPluginManager::unloadUiModuleImpl(const QString& moduleName)
 
     // Stop view module host process if this was a view module
     if (m_viewModuleHosts.contains(moduleName)) {
+        m_viewModuleHosts[moduleName]->setProperty(kStoppingProp, true);
         m_viewModuleHosts[moduleName]->stop();
         delete m_viewModuleHosts.take(moduleName);
     }
@@ -1156,6 +1177,7 @@ void UIPluginManager::teardownUiPluginWidgetNow(const QString& moduleName)
     if (m_qmlPluginWidgets.contains(moduleName) && widget) widget->deleteLater();
 
     if (m_viewModuleHosts.contains(moduleName)) {
+        m_viewModuleHosts[moduleName]->setProperty(kStoppingProp, true);
         m_viewModuleHosts[moduleName]->stop();
         delete m_viewModuleHosts.take(moduleName);
     }

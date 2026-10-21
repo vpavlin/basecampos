@@ -305,6 +305,7 @@ set(PROJECT_SOURCES
     ShellHostAdapter.cpp
 
     MainUIBackend.cpp
+    NotificationCenter.cpp
     ShellIntents.cpp
 
     # Deep links: basecamp:// from a browser. LinkUrl.cpp is the parser and is

@@ -13,6 +13,8 @@
 #include <QMouseEvent>
 #include <QStackedWidget>
 #include <QToolButton>
+#include <QFontMetrics>
+#include <QPainter>
 #include <QUrl>
 #include <QShowEvent>
 #include <QVBoxLayout>
@@ -48,6 +50,50 @@ QIcon iconFor(const QString& path)
         p = p.mid(3);
     return QIcon(p);
 }
+
+// The bar's notification bell: a tinted bell, and the unread count as a badge.
+class BellButton : public QToolButton
+{
+public:
+    using QToolButton::QToolButton;
+    void setCount(int n) { if (n != m_count) { m_count = n; update(); } }
+
+protected:
+    void paintEvent(QPaintEvent* e) override
+    {
+        QToolButton::paintEvent(e);   // hover background from the style sheet
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        const qreal dpr = devicePixelRatioF();
+        QPixmap bell = QIcon(QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/bell.svg"))
+                           .pixmap(QSize(18, 18), dpr);
+        if (!bell.isNull()) {
+            QPainter tp(&bell);
+            tp.setCompositionMode(QPainter::CompositionMode_SourceIn);
+            tp.fillRect(bell.rect(), underMouse() ? tok("text", "#FFFFFF")
+                                                  : tok("textSecondary", "#A3A3A3"));
+        }
+        const QRect r((width() - 18) / 2, (height() - 18) / 2, 18, 18);
+        p.drawPixmap(r, bell);
+        if (m_count > 0) {
+            const QString t = m_count > 9 ? QStringLiteral("9+") : QString::number(m_count);
+            QFont f = font();
+            f.setPixelSize(10);
+            f.setBold(true);
+            p.setFont(f);
+            const int w = qMax(16, QFontMetrics(f).horizontalAdvance(t) + 8);
+            const QRect badge(r.right() - 6, r.top() - 6, w, 16);
+            p.setPen(Qt::NoPen);
+            p.setBrush(tok("primary", "#ED7B58"));
+            p.drawRoundedRect(badge, 8, 8);
+            p.setPen(tok("background", "#171717"));
+            p.drawText(badge, Qt::AlignCenter, t);
+        }
+    }
+
+private:
+    int m_count = 0;
+};
 
 // The empty part of the bar: drag to move the window, double-click to maximise.
 class DragArea : public QWidget
@@ -457,6 +503,15 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     m_drag = new DragArea(m_bar);
     m_drag->setObjectName(QStringLiteral("basecampium.dragArea"));
     row->addWidget(m_drag, 1);
+
+    auto* bell = new BellButton(m_bar);
+    bell->setObjectName(QStringLiteral("basecampium.notifications"));
+    bell->setToolTip(tr("Notifications"));
+    bell->setFixedSize(40, 32);
+    bell->setFocusPolicy(Qt::NoFocus);
+    m_bell = bell;
+    connect(bell, &QToolButton::clicked, this, &TabArea::notificationsClicked);
+    row->addWidget(bell, 0, Qt::AlignTop);
 
 #ifndef Q_OS_MAC
     m_buttons = new QWidget(m_bar);
@@ -869,4 +924,10 @@ void TabArea::showMenu(int index, const QPoint& globalPos)
         else
             emit closeRequested(k);
     }
+}
+
+void TabArea::setNotificationCount(int count)
+{
+    if (m_bell)
+        static_cast<BellButton*>(m_bell)->setCount(count);
 }

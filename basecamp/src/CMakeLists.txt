@@ -185,6 +185,7 @@ qt_add_qml_module(basecamp_shell_qml
         Basecamp/Shell/WelcomePage.qml
         Basecamp/Shell/DockPanel.qml
         Basecamp/Shell/NewTabPage.qml
+        Basecamp/Shell/NotificationLayer.qml
 )
 
 qt_add_qml_module(basecamp_icons_qml
@@ -208,6 +209,7 @@ qt_add_qml_module(basecamp_icons_qml
         Basecamp/Icons/tent.png
         Basecamp/Icons/glowing-tents.jpg
         Basecamp/Icons/workspace.svg
+        Basecamp/Icons/bell.svg
 )
 
 

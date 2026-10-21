@@ -79,6 +79,8 @@ private slots:
     // Basecampium (tabs): the New tab page's two signals.
     void tabOpenSystem(const QString& key);
     void tabLaunchApp(const QString& name);
+    void onNotificationsChanged();
+    void onNotifyLayerResized();
 
 private:
     void wireSidebar(QObject* sidebarRoot);
@@ -107,6 +109,9 @@ private:
     void restoreTabs();
     bool tabsEdgeResize(QObject* watched, QEvent* event);
     bool tabsKey(QKeyEvent* event);
+    // Notifications (NOTIFICATIONS-SPEC.md): toasts + list over the tabs.
+    void setupNotifications();
+    void positionNotifications();
 
     ShellPrefs* m_prefs = nullptr;
     bool m_desktopLayout = false;
@@ -122,6 +127,7 @@ private:
     bool m_tabsLayout = false;
     TabArea* m_tabArea = nullptr;
     QQuickWidget* m_newTabWidget = nullptr;
+    QQuickWidget* m_notifyWidget = nullptr;
     QString m_pendingNewTab;      // the New tab an app was picked from
     QStringList m_closedKeys;     // for Ctrl+Shift+T
     bool m_restoringTabs = false;

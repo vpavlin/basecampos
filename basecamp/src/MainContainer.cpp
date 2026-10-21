@@ -419,6 +419,7 @@ void MainContainer::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
     positionDock();
+    positionNotifications();
     if (m_spotlight && m_spotlight->isVisible())
         m_spotlight->setGeometry(rect());
     if (m_overlayWidget) {
@@ -1074,10 +1075,13 @@ bool MainContainer::event(QEvent* event)
 
 void MainContainer::setupTabsUi()
 {
+    setupNotifications();
     connect(m_tabArea, &TabArea::closeRequested, this, &MainContainer::closeTab);
     connect(m_tabArea, &TabArea::currentKeyChanged, this, [this](const QString& key) {
         if (!key.isEmpty() && !key.startsWith(QStringLiteral("sys:")) && !TabArea::isNewTabKey(key))
             m_host->setCurrentVisibleApp(key);
+        if (m_notifyWidget && m_notifyWidget->rootObject())
+            m_notifyWidget->rootObject()->setProperty("currentApp", key);
         if (m_shortcutBridge)
             m_shortcutBridge->rebindDeferred();
         saveTabs();
@@ -1335,4 +1339,72 @@ bool MainContainer::tabsKey(QKeyEvent* e)
     if (ctrl && key == Qt::Key_Comma) { openSystemApp(QStringLiteral("sys:settings")); return true; }
     if (ctrlShift && key == Qt::Key_T) { reopenClosedTab(); return true; }
     return false;
+}
+
+// ── Notifications ───────────────────────────────────────────────────────────
+
+void MainContainer::setupNotifications()
+{
+    QObject* center = m_host->backendObject()
+                    ? m_host->backendObject()->property("notifications").value<QObject*>()
+                    : nullptr;
+    if (!center || !m_tabArea)
+        return;   // a host without NotificationCenter: no bell, no toasts
+
+    // Like the dock: a translucent view sized to its content, over the page.
+    // Zero height (hidden) when there is nothing to show.
+    m_notifyWidget = new QQuickWidget(this);
+    m_notifyWidget->setResizeMode(QQuickWidget::SizeViewToRootObject);
+    m_notifyWidget->setAttribute(Qt::WA_AlwaysStackOnTop);
+    m_notifyWidget->setAttribute(Qt::WA_TranslucentBackground);
+    m_notifyWidget->setClearColor(Qt::transparent);
+    m_notifyWidget->rootContext()->setContextProperty("backend", m_host->backendObject());
+    ShellDevQml::load(m_notifyWidget,
+        QUrl(QStringLiteral("qrc:/qt/qml/Basecamp/Shell/Basecamp/Shell/NotificationLayer.qml")),
+        [this](QObject* root) {
+            connect(root, SIGNAL(heightChanged()), this, SLOT(onNotifyLayerResized()));
+        });
+    positionNotifications();
+
+    auto updateBell = [this, center]() {
+        m_tabArea->setNotificationCount(center->property("unreadCount").toInt());
+    };
+    connect(center, SIGNAL(itemsChanged()), this, SLOT(onNotificationsChanged()));
+    updateBell();
+    connect(m_tabArea, &TabArea::notificationsClicked, this, [this]() {
+        if (QObject* root = m_notifyWidget->rootObject())
+            QMetaObject::invokeMethod(root, "togglePanel");
+    });
+}
+
+void MainContainer::onNotificationsChanged()
+{
+    QObject* center = m_host->backendObject()
+                    ? m_host->backendObject()->property("notifications").value<QObject*>()
+                    : nullptr;
+    if (center && m_tabArea)
+        m_tabArea->setNotificationCount(center->property("unreadCount").toInt());
+}
+
+void MainContainer::onNotifyLayerResized()
+{
+    positionNotifications();
+}
+
+void MainContainer::positionNotifications()
+{
+    if (!m_notifyWidget || !m_notifyWidget->rootObject())
+        return;
+    QObject* root = m_notifyWidget->rootObject();
+    // Never hidden: a hidden view does no layout, so a list that just opened
+    // would report zero height forever. Empty, it is a 1px transparent strip.
+    const int h = qMax(1, qRound(root->property("height").toReal()));
+    const int w = qRound(root->property("width").toReal());
+    // Under the bar, at the right edge.
+    const int top = m_tabArea && m_tabArea->bellButton()
+                  ? m_tabArea->bellButton()->mapTo(this, QPoint(0, m_tabArea->bellButton()->height())).y() + 8
+                  : 52;
+    m_notifyWidget->setGeometry(width() - w - 12, top, w, h);
+    m_notifyWidget->show();
+    m_notifyWidget->raise();
 }

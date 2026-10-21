@@ -66,11 +66,15 @@ public:
 
     void nextTab(int delta);
     void goToTab(int index);  // -1 = last
+    // The bar's notification bell (NOTIFICATIONS-SPEC.md).
+    void setNotificationCount(int count);
+    QWidget* bellButton() const { return m_bell; }
 
 signals:
     void closeRequested(const QString& key);
     void currentKeyChanged(const QString& key);
     void newTabShown();
+    void notificationsClicked();
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -86,6 +90,7 @@ private:
 
     QWidget* m_bar = nullptr;
     QToolButton* m_plus = nullptr;
+    QWidget* m_bell = nullptr;
     TabStrip* m_tabs = nullptr;
     QWidget* m_drag = nullptr;
     QWidget* m_buttons = nullptr;
