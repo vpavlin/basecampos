@@ -17,10 +17,6 @@
 #include <QShowEvent>
 #include <QVBoxLayout>
 #include <QWindow>
-#include <QQuickWidget>
-#include <QQuickWindow>
-#include <QQuickItem>
-#include <QImage>
 
 #include <ThemeColors.h>
 
@@ -741,7 +737,9 @@ QWidget* TabArea::takeTab(const QString& key)
     const int i = indexOf(key);
     if (i < 0)
         return nullptr;
-    QWidget* content = contentFor(key);
+    // Every New tab shows the same page: closing one must not take it out of
+    // the stack, or the other New tabs (and the page shown next) go blank.
+    QWidget* content = isNewTabKey(key) ? nullptr : contentFor(key);
     if (content) {
         m_stack->removeWidget(content);
         content->setProperty(kKeyProp, QVariant());
@@ -805,69 +803,17 @@ void TabArea::onCurrentChanged(int index)
         return;
     const QString key = m_tabs->tabData(index).toString();
     if (QWidget* w = contentFor(key)) {
+        if (m_stack->indexOf(w) < 0)
+            m_stack->addWidget(w);
         m_stack->setCurrentWidget(w);
+        // The stack only shows a page when its index changes; a page hidden
+        // while it stayed current (below) would otherwise stay blank.
+        w->show();
         for (int i = 0; i < m_stack->count(); ++i)
             if (QWidget* other = m_stack->widget(i); other != w && other->isVisible())
                 other->hide();
         if (w == m_newTabPage)
             emit newTabShown();
-        // A page shown again can stay blank (or keep a stale size) until
-        // something else in the window repaints; seen on a real GPU, not
-        // headless. Once it is on screen, fit it and have its Qt Quick
-        // views render a fresh frame.
-        QTimer::singleShot(0, w, [this, w]() {
-            if (m_stack->currentWidget() != w)
-                return;
-            if (w->size() != m_stack->size())
-                w->resize(m_stack->size());
-            auto views = w->findChildren<QQuickWidget*>();
-            if (auto* q = qobject_cast<QQuickWidget*>(w))
-                views.append(q);
-            for (QQuickWidget* q : std::as_const(views))
-                if (q->quickWindow())
-                    q->quickWindow()->update();
-            w->update();
-        });
-        // Diagnostics for blank pages (basecamp-theming#21): one line per switch,
-        // after the page has had time to draw. "frame" says whether the page's
-        // own rendered image has content; if it does while the screen shows a
-        // blank page, the window's compositing lost it.
-        QTimer::singleShot(400, w, [this, w, key]() {
-            if (m_stack->currentWidget() != w)
-                return;
-            auto views = w->findChildren<QQuickWidget*>();
-            if (auto* q = qobject_cast<QQuickWidget*>(w))
-                views.prepend(q);
-            QStringList parts;
-            for (QQuickWidget* q : std::as_const(views)) {
-                if (!q->isVisible())
-                    continue;
-                const QImage img = q->grabFramebuffer();
-                int distinct = 0;
-                QRgb first = 0;
-                for (int y = 0; y < img.height() && distinct < 2; y += 17)
-                    for (int x = 0; x < img.width(); x += 17) {
-                        const QRgb c = img.pixel(x, y);
-                        if (x == 0 && y == 0) first = c;
-                        else if (c != first) { distinct = 2; break; }
-                    }
-                QQuickItem* root = q->rootObject();
-                parts << QStringLiteral("view %1x%2 status=%3 root=%4 frame=%5")
-                             .arg(q->width()).arg(q->height()).arg(int(q->status()))
-                             .arg(root ? QStringLiteral("%1x%2").arg(root->width()).arg(root->height())
-                                       : QStringLiteral("none"))
-                             .arg(img.isNull() ? QStringLiteral("null")
-                                               : distinct ? QStringLiteral("content")
-                                                          : QStringLiteral("flat"));
-            }
-            qInfo().noquote() << QStringLiteral("Basecampium tab %1: page %2 %3x%4 in %5x%6 visible=%7 | %8")
-                                     .arg(key, QString::fromLatin1(w->metaObject()->className()))
-                                     .arg(w->width()).arg(w->height())
-                                     .arg(m_stack->width()).arg(m_stack->height())
-                                     .arg(w->isVisible())
-                                     .arg(parts.isEmpty() ? QStringLiteral("no visible Qt Quick view")
-                                                          : parts.join(QStringLiteral("; ")));
-        });
     }
     emit currentKeyChanged(key);
 }
