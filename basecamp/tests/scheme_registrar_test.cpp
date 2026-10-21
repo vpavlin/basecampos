@@ -21,6 +21,7 @@
 #include "links/SchemeRegistrar.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -82,9 +83,17 @@ void TestSchemeRegistrar::testDesktopEntryPassesTheUrlAsTheUriOption()
 
     // The suite may well be running under the same flag the doc-tests set.
     qunsetenv("LOGOS_NO_SCHEME_REGISTER");
-    // launcherPath() prefers $APPIMAGE, which would make the Exec below name
-    // something other than this test binary.
-    qunsetenv("APPIMAGE");
+    // An APPIMAGE inherited from another AppImage (here: a terminal) must not
+    // be registered as Basecamp: this binary is not inside its APPDIR.
+    QTemporaryDir otherAppDir;
+    QVERIFY(otherAppDir.isValid());
+    const QString otherAppImage = otherAppDir.filePath(QStringLiteral("terminal.AppImage"));
+    {
+        QFile f(otherAppImage);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+    }
+    qputenv("APPIMAGE", otherAppImage.toUtf8());
+    qputenv("APPDIR", otherAppDir.path().toUtf8());
 
     const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
                        + QStringLiteral("/applications/logos-basecamp.desktop");
@@ -111,6 +120,19 @@ void TestSchemeRegistrar::testDesktopEntryPassesTheUrlAsTheUriOption()
     // against the bug.
     QCOMPARE(exec, QStringLiteral("Exec=\"%1\" --uri=%u")
                        .arg(QCoreApplication::applicationFilePath()));
+
+    // Inside its own AppImage mount, the AppImage file is what to launch.
+    qputenv("APPDIR", QFileInfo(QCoreApplication::applicationFilePath()).absolutePath().toUtf8());
+    QVERIFY(SchemeRegistrar::registerScheme());
+    {
+        QFile again(path);
+        QVERIFY(again.open(QIODevice::ReadOnly | QIODevice::Text));
+        QVERIFY2(QString::fromUtf8(again.readAll())
+                     .contains(QStringLiteral("Exec=\"%1\" --uri=%u").arg(otherAppImage)),
+                 "an AppImage run from its own mount registers the AppImage");
+    }
+    qunsetenv("APPIMAGE");
+    qunsetenv("APPDIR");
 
     // Without this the entry is not a scheme handler at all, whatever Exec says.
     QVERIFY2(text.contains(QLatin1String("MimeType=x-scheme-handler/basecamp;")),
