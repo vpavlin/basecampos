@@ -114,7 +114,8 @@ Rectangle {
             // From the first icon's left edge to the last icon's right edge
             // (icons, not their wider labels).
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: grid.width - (root.pitch - root.tileSize)
+            // Never narrower than a few tiles: with no apps the grid is empty.
+            Layout.preferredWidth: Math.max(grid.width - (root.pitch - root.tileSize), 4 * root.pitch)
             Layout.preferredHeight: Theme.components.search.height
             Layout.maximumHeight: Theme.components.search.height
             placeholderText: qsTr("Search apps…")
