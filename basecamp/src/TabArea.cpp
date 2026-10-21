@@ -17,6 +17,8 @@
 #include <QShowEvent>
 #include <QVBoxLayout>
 #include <QWindow>
+#include <QQuickWidget>
+#include <QQuickWindow>
 
 #include <ThemeColors.h>
 
@@ -807,6 +809,23 @@ void TabArea::onCurrentChanged(int index)
                 other->hide();
         if (w == m_newTabPage)
             emit newTabShown();
+        // A page shown again can stay blank (or keep a stale size) until
+        // something else in the window repaints; seen on a real GPU, not
+        // headless. Once it is on screen, fit it and have its Qt Quick
+        // views render a fresh frame.
+        QTimer::singleShot(0, w, [this, w]() {
+            if (m_stack->currentWidget() != w)
+                return;
+            if (w->size() != m_stack->size())
+                w->resize(m_stack->size());
+            auto views = w->findChildren<QQuickWidget*>();
+            if (auto* q = qobject_cast<QQuickWidget*>(w))
+                views.append(q);
+            for (QQuickWidget* q : std::as_const(views))
+                if (q->quickWindow())
+                    q->quickWindow()->update();
+            w->update();
+        });
     }
     emit currentKeyChanged(key);
 }
