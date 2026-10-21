@@ -89,6 +89,13 @@ MainUIBackend::MainUIBackend(LogosAPI* logosAPI, ICoreRuntime* core,
     // Notifications (NOTIFICATIONS-SPEC.md). Clicking one opens its sender, or
     // runs its action (Reopen after a crash) — both through the launcher path.
     m_notifications = new NotificationCenter(this);
+    m_notifications->setIconResolver([this](const QString& app) {
+        if (app == NotificationCenter::kBasecampApp)
+            return QStringLiteral("qrc:/qt/qml/Basecamp/Icons/Basecamp/Icons/logos-lambda.svg");
+        return m_uiPluginManager->pluginIconUrl(app);
+    });
+    connect(m_notifications, &NotificationCenter::mutedAppsChanged,
+            this, &MainUIBackend::notificationAppsChanged);
     connect(m_notifications, &NotificationCenter::activated, this,
             [this](const QString& app, const QString& launch) {
                 const QString target = launch.isEmpty() ? app : launch;
@@ -572,6 +579,7 @@ void MainUIBackend::rebuildIntentRegistry()
     const QStringList problems = m_intentRegistry->diagnostics();
     for (const QString& problem : problems)
         qWarning().noquote() << "IntentRegistry:" << problem;
+    emit notificationAppsChanged();
 
     // THE COLD-START GATE, and it must skip the bootstrap call above.
     //
@@ -1017,4 +1025,28 @@ void MainUIBackend::setLinkRaiseHandler(std::function<void()> raise)
 QObject* MainUIBackend::notifications() const
 {
     return m_notifications;
+}
+
+QVariantList MainUIBackend::notificationApps() const
+{
+    QVariantList out;
+    if (!m_intentRegistry || !m_notifications)
+        return out;
+    const QStringList muted = m_notifications->mutedApps();
+    for (const QString& name : m_intentRegistry->modulesUsing(kNotificationsPostIntent)) {
+        const QString display = displayNameFor(name);
+        out << QVariantMap{
+            { QStringLiteral("name"), name },
+            { QStringLiteral("displayName"), display.isEmpty() ? name : display },
+            { QStringLiteral("icon"), m_uiPluginManager->pluginIconUrl(name) },
+            { QStringLiteral("enabled"), !muted.contains(name) },
+        };
+    }
+    return out;
+}
+
+void MainUIBackend::setNotificationsEnabled(const QString& app, bool enabled)
+{
+    if (m_notifications)
+        m_notifications->setMuted(app, !enabled);
 }

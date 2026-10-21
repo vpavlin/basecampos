@@ -97,6 +97,9 @@ class MainUIBackend : public QObject {
     Q_PROPERTY(QVariantList launcherApps READ launcherApps NOTIFY launcherAppsChanged)
     // Notifications from apps and Basecamp (NotificationCenter); any shell can show them.
     Q_PROPERTY(QObject* notifications READ notifications CONSTANT)
+    // Apps whose manifest declares basecamp.notifications.post, for Settings:
+    // { name, displayName, icon, enabled }.
+    Q_PROPERTY(QVariantList notificationApps READ notificationApps NOTIFY notificationAppsChanged)
     // Most-recently-closed apps, persisted across restarts.
     Q_PROPERTY(QVariantList recentlyClosedApps READ recentlyClosedApps NOTIFY recentlyClosedAppsChanged)
     Q_PROPERTY(QString currentVisibleApp READ currentVisibleApp NOTIFY currentVisibleAppChanged)
@@ -188,6 +191,8 @@ public:
     CoreModuleManager* coreModuleManager() const { return m_coreModuleManager; }
     UIPluginManager*   uiPluginManager()   const { return m_uiPluginManager; }
     QObject* notifications() const;
+    QVariantList notificationApps() const;
+    Q_INVOKABLE void setNotificationsEnabled(const QString& app, bool enabled);
     PackageCoordinator*    packageCoordinator()    const { return m_packageCoordinator; }
     // Base-typed on purpose — see the Q_PROPERTY comments above. Internal
     // code uses the concrete members directly and does not go through these.
@@ -331,6 +336,7 @@ public slots:
     Q_INVOKABLE void setDownloadSource(const QString& source);
 
 signals:
+    void notificationAppsChanged();
     void currentActiveSectionIndexChanged();
 
     // App-Manager dialog + install lifecycle. See PackageCoordinator for

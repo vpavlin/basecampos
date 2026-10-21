@@ -32,17 +32,9 @@ Item {
     function selfTest() {
         toasts.insert(0, { nid: "selftest", app: "basecamp", title: "Notifications self-test",
                            body: "If you can read this, toasts render on this display.",
-                           level: "warning", tag: "", actionLabel: "" })
+                           level: "warning", tag: "", icon: "", actionLabel: "" })
     }
 
-    function levelColor(level) {
-        switch (level) {
-        case "error":   return Theme.palette.error
-        case "warning": return Theme.palette.warning
-        case "success": return Theme.palette.success
-        default:        return Theme.palette.primary
-        }
-    }
     function appLabel(app) {
         if (app === "basecamp") return "Basecamp"
         const name = backend && backend.displayNameFor ? backend.displayNameFor(app) : ""
@@ -75,7 +67,7 @@ Item {
                 if (n.tag !== "" && t.app === n.app && t.tag === n.tag) { toasts.remove(i); break }
             }
             toasts.insert(0, { nid: n.id, app: n.app, title: n.title, body: n.body,
-                               level: n.level, tag: n.tag,
+                               level: n.level, tag: n.tag, icon: n.icon || "",
                                actionLabel: n.action ? n.action.label : "" })
             while (toasts.count > 3) toasts.remove(toasts.count - 1)
         }
@@ -106,8 +98,10 @@ Item {
                 required property string body
                 required property string level
                 required property string actionLabel
+                required property string icon
 
                 notificationId: nid
+                iconUrl: icon
                 appName: app
                 titleText: title
                 bodyText: body
@@ -187,6 +181,7 @@ Item {
                         titleText: modelData.title
                         bodyText: modelData.body
                         levelName: modelData.level
+                        iconUrl: modelData.icon || ""
                         action: modelData.action ? modelData.action.label : ""
                         timeText: root.timeLabel(modelData.time)
                         flat: true
@@ -206,6 +201,7 @@ Item {
         property string titleText
         property string bodyText
         property string levelName: "info"
+        property string iconUrl: ""
         property string action: ""
         property string timeText: ""
         property bool flat: false
@@ -230,22 +226,23 @@ Item {
             }
         }
 
-        Rectangle {   // level stripe
-            width: 3
-            radius: 1.5
-            anchors { left: parent.left; top: parent.top; bottom: parent.bottom
-                      leftMargin: 6; topMargin: 10; bottomMargin: 10 }
-            color: root.levelColor(card.levelName)
-        }
-
         ColumnLayout {
             id: content
             anchors { left: parent.left; right: parent.right; top: parent.top
-                      leftMargin: 18; rightMargin: 34; topMargin: 10 }
+                      leftMargin: 14; rightMargin: 34; topMargin: 10 }
             spacing: 3
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 6
+                Image {
+                    Layout.preferredWidth: 16
+                    Layout.preferredHeight: 16
+                    source: card.iconUrl
+                    sourceSize: Qt.size(32, 32)
+                    fillMode: Image.PreserveAspectFit
+                    visible: card.iconUrl !== "" && status === Image.Ready
+                }
                 LogosText {
                     Layout.fillWidth: true
                     text: root.appLabel(card.appName)

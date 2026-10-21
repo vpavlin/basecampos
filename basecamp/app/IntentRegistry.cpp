@@ -569,6 +569,16 @@ bool IntentRegistry::declaresUse(const QString& moduleName, const QString& inten
     return m_uses.value(moduleName).contains(intent);
 }
 
+QStringList IntentRegistry::modulesUsing(const QString& intent) const
+{
+    QStringList out;
+    for (auto it = m_uses.cbegin(); it != m_uses.cend(); ++it)
+        if (it.value().contains(intent))
+            out << it.key();
+    out.sort();
+    return out;
+}
+
 bool IntentRegistry::declaresProvide(const QString& moduleName, const QString& intent) const
 {
     return m_provides.value(moduleName).contains(intent);

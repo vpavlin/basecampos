@@ -166,6 +166,8 @@ public:
     bool isShellProvider(const QString& moduleName) const;
 
     bool declaresUse(const QString& moduleName, const QString& intent) const;
+    // Every module whose manifest declares `uses` of this intent, sorted.
+    QStringList modulesUsing(const QString& intent) const;
     bool declaresProvide(const QString& moduleName, const QString& intent) const;
 
     // Everything skipped or refused during the last rebuild. Never fatal, never

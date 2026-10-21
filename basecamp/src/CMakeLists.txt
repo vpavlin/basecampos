@@ -166,6 +166,7 @@ qt_add_qml_module(basecamp_settings_qml
         Basecamp/Settings/PluginInterfaceView.qml
         Basecamp/Settings/RepositoriesView.qml
         Basecamp/Settings/AppearanceView.qml
+        Basecamp/Settings/NotificationsView.qml
 )
 
 qt_add_qml_module(basecamp_shell_qml

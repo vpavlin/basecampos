@@ -8,6 +8,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <deque>
+#include <functional>
 
 // Notifications: what apps and Basecamp itself tell the user
 // (docs/NOTIFICATIONS-SPEC.md on the notifications branch).
@@ -51,6 +52,9 @@ public:
     QString postSystem(const QString& title, const QString& body, const QString& level,
                        const QVariantMap& action = {});
 
+    // Who draws each sender: returns an icon URL for an app name ("" = none).
+    void setIconResolver(std::function<QString(const QString&)> resolver) { m_iconFor = std::move(resolver); }
+
     Q_INVOKABLE void dismiss(const QString& id);
     Q_INVOKABLE void clearAll();
     Q_INVOKABLE void markAllRead();
@@ -77,5 +81,6 @@ private:
     QSet<QString> m_muted;
     QHash<QString, std::deque<qint64>> m_recent;   // app -> post times (ms)
     bool m_dnd = false;
+    std::function<QString(const QString&)> m_iconFor;
     quint64 m_next = 0;
 };

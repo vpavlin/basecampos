@@ -457,6 +457,19 @@ void MainContainer::onSidebarTooltipRequested(const QString& text, qreal y)
 
 bool MainContainer::eventFilter(QObject* watched, QEvent* event)
 {
+    // An open notification list closes on a click anywhere outside it (the bell
+    // itself toggles it). The click still goes where it was aimed.
+    if (event->type() == QEvent::MouseButtonPress && m_notifyWidget) {
+        QObject* layer = m_notifyWidget->rootObject();
+        if (layer && layer->property("panelOpen").toBool()) {
+            const QPoint at = static_cast<QMouseEvent*>(event)->globalPosition().toPoint();
+            const QRect inside(m_notifyWidget->mapToGlobal(QPoint(0, 0)), m_notifyWidget->size());
+            QWidget* bell = m_tabArea ? m_tabArea->bellButton() : nullptr;
+            const QRect onBell = bell ? QRect(bell->mapToGlobal(QPoint(0, 0)), bell->size()) : QRect();
+            if (!inside.contains(at) && !onBell.contains(at))
+                QMetaObject::invokeMethod(layer, "closePanel");
+        }
+    }
     if (m_tabsLayout && tabsEdgeResize(watched, event))
         return true;
     if (m_tabsLayout && event->type() == QEvent::KeyPress) {

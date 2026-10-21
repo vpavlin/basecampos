@@ -1,8 +1,13 @@
 #include "NotificationCenter.h"
 
 #include <QMetaType>
+#include <QSettings>
 
 namespace {
+
+// The user's per-app choice outlives the session (QSettings, like the shell's
+// other preferences).
+constexpr const char* kMutedKey = "Notifications/muted";
 
 bool isString(const QVariant& v)
 {
@@ -14,6 +19,8 @@ bool isString(const QVariant& v)
 NotificationCenter::NotificationCenter(QObject* parent)
     : QObject(parent)
 {
+    const QStringList muted = QSettings().value(QLatin1String(kMutedKey)).toStringList();
+    m_muted = QSet<QString>(muted.begin(), muted.end());
 }
 
 int NotificationCenter::unreadCount() const
@@ -103,6 +110,8 @@ QString NotificationCenter::store(QVariantMap n)
     const QString id = QStringLiteral("n%1").arg(++m_next);
     n[QStringLiteral("id")] = id;
     n[QStringLiteral("time")] = QDateTime::currentMSecsSinceEpoch();
+    if (m_iconFor)
+        n[QStringLiteral("icon")] = m_iconFor(n.value(QStringLiteral("app")).toString());
     n[QStringLiteral("read")] = false;
 
     // Same app + tag replaces the earlier one ("3 new stations", not 3 toasts).
@@ -173,6 +182,7 @@ void NotificationCenter::setMuted(const QString& app, bool muted)
     } else {
         m_muted.remove(app);
     }
+    QSettings().setValue(QLatin1String(kMutedKey), mutedApps());
     emit mutedAppsChanged();
 }
 

@@ -50,15 +50,17 @@ Rectangle {
         readonly property int sectionAppsInspector:   1
         readonly property int sectionModuleInspector: 2
         readonly property int sectionAppearance:      3
-        readonly property int sectionRepositories:    4
+        readonly property int sectionNotifications:   4
+        readonly property int sectionRepositories:    5
 
         readonly property var sections: [
             { label: qsTr("Dashboard") },
             { label: qsTr("Apps Inspector") },
             { label: qsTr("Module Inspector") },
             { label: qsTr("Customisation") },
+            { label: qsTr("Notifications") },
             { label: qsTr("Package Repositories") }
-        ].slice(0, root.repositoriesAvailable ? 5 : 4)   // Repositories must stay last
+        ].slice(0, root.repositoriesAvailable ? 6 : 5)   // Repositories must stay last
 
         property int selectedIndex: 0
 
@@ -225,7 +227,10 @@ Rectangle {
                     // 3 — Appearance (themes).
                     AppearanceView {}
 
-                    // 4 — Package Repositories (last: dropped when unavailable).
+                    // 4 — Notifications (which apps may notify).
+                    NotificationsView {}
+
+                    // 5 — Package Repositories (last: dropped when unavailable).
                     RepositoriesView {
                         id: repositoriesView
 
