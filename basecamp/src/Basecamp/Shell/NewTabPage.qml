@@ -48,6 +48,42 @@ Rectangle {
 
     color: Theme.palette.background
 
+    // The search keeps focus, and Qt's own cursor blinks forever: each blink
+    // redraws the whole New tab, so an idle window never stops drawing
+    // (~5% CPU in software rendering, basecamp-theming#20). This cursor
+    // blinks for a few seconds after the last edit, then stays solid. A
+    // cursor delegate also stops TextInput's built-in blink timer.
+    Component {
+        id: calmCursor
+        Rectangle {
+            id: caret
+            property bool blinking: true
+            readonly property Item input: parent
+            width: 1
+            color: input ? input.color : Theme.palette.text
+            visible: input ? input.cursorVisible : false
+            onVisibleChanged: { blinking = true; calm.restart() }
+            Component.onCompleted: calm.start()
+
+            SequentialAnimation {
+                running: caret.visible && caret.blinking
+                loops: Animation.Infinite
+                alwaysRunToEnd: true            // stop on the visible half
+                PauseAnimation { duration: 600 }
+                PropertyAction { target: caret; property: "opacity"; value: 0 }
+                PauseAnimation { duration: 600 }
+                PropertyAction { target: caret; property: "opacity"; value: 1 }
+            }
+            Timer { id: calm; interval: 10000; onTriggered: caret.blinking = false }
+            Connections {
+                target: caret.input
+                function onTextChanged() { caret.blinking = true; calm.restart() }
+                function onCursorPositionChanged() { caret.blinking = true; calm.restart() }
+            }
+        }
+    }
+    Component.onCompleted: search.textInput.cursorDelegate = calmCursor
+
     ColumnLayout {
         anchors.top: parent.top
         anchors.topMargin: Math.max(32, parent.height * 0.08)
