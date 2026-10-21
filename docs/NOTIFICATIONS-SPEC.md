@@ -51,7 +51,7 @@ No markup, links, images or sounds in v1. Text is rendered as plain text.
 Declare the intent in the app's manifest (`metadata.json`):
 
 ```json
-"uses": ["basecamp.notifications.post"]
+"uses": [{ "intent": "basecamp.notifications.post" }]
 ```
 
 Post from QML:
@@ -138,3 +138,23 @@ Enforced by review now, and by the catalog's checks later:
 4. Basecampium: toast layer + bell + list.
 5. Receiver: `uses` the intent and posts "New station" when it discovers one, tagged so a burst
    collapses into one.
+
+## 10. Prototype status (2026-10-21, `notifications` branch)
+
+Done and checked on a hidden display (Xvfb), Basecampium:
+
+- Receiver (`notifications` branch of receiver-basecamp) declares the intent and posts
+  "New station"; the toast shows when you are in another tab, the bell counts it, the list
+  shows it with its time.
+- Killing receiver's process shows "receiver_ui stopped unexpectedly" with **Reopen**; Reopen
+  starts it again in a new tab. Closing receiver normally posts nothing.
+
+Learned on the way:
+
+- `uses` entries are objects (`{ "intent": "..." }`); a bare string is ignored with a
+  diagnostic and the request answers `not_declared`.
+- The floating layer must never be zero height or hidden: a view that is not rendering does
+  no layout, so a new toast or a just-opened list would never get its size.
+
+Not done: Default shell, Settings → Notifications (mute UI, Do not disturb), desktop hand-off,
+update notice (#319), core module crashes, persistence, unit tests for NotificationCenter.
