@@ -19,6 +19,8 @@
 #include <QWindow>
 #include <QQuickWidget>
 #include <QQuickWindow>
+#include <QQuickItem>
+#include <QImage>
 
 #include <ThemeColors.h>
 
@@ -825,6 +827,46 @@ void TabArea::onCurrentChanged(int index)
                 if (q->quickWindow())
                     q->quickWindow()->update();
             w->update();
+        });
+        // Diagnostics for blank pages (basecamp-theming#21): one line per switch,
+        // after the page has had time to draw. "frame" says whether the page's
+        // own rendered image has content; if it does while the screen shows a
+        // blank page, the window's compositing lost it.
+        QTimer::singleShot(400, w, [this, w, key]() {
+            if (m_stack->currentWidget() != w)
+                return;
+            auto views = w->findChildren<QQuickWidget*>();
+            if (auto* q = qobject_cast<QQuickWidget*>(w))
+                views.prepend(q);
+            QStringList parts;
+            for (QQuickWidget* q : std::as_const(views)) {
+                if (!q->isVisible())
+                    continue;
+                const QImage img = q->grabFramebuffer();
+                int distinct = 0;
+                QRgb first = 0;
+                for (int y = 0; y < img.height() && distinct < 2; y += 17)
+                    for (int x = 0; x < img.width(); x += 17) {
+                        const QRgb c = img.pixel(x, y);
+                        if (x == 0 && y == 0) first = c;
+                        else if (c != first) { distinct = 2; break; }
+                    }
+                QQuickItem* root = q->rootObject();
+                parts << QStringLiteral("view %1x%2 status=%3 root=%4 frame=%5")
+                             .arg(q->width()).arg(q->height()).arg(int(q->status()))
+                             .arg(root ? QStringLiteral("%1x%2").arg(root->width()).arg(root->height())
+                                       : QStringLiteral("none"))
+                             .arg(img.isNull() ? QStringLiteral("null")
+                                               : distinct ? QStringLiteral("content")
+                                                          : QStringLiteral("flat"));
+            }
+            qInfo().noquote() << QStringLiteral("Basecampium tab %1: page %2 %3x%4 in %5x%6 visible=%7 | %8")
+                                     .arg(key, QString::fromLatin1(w->metaObject()->className()))
+                                     .arg(w->width()).arg(w->height())
+                                     .arg(m_stack->width()).arg(m_stack->height())
+                                     .arg(w->isVisible())
+                                     .arg(parts.isEmpty() ? QStringLiteral("no visible Qt Quick view")
+                                                          : parts.join(QStringLiteral("; ")));
         });
     }
     emit currentKeyChanged(key);
