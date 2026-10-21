@@ -28,6 +28,12 @@ Item {
         }
     }
     function closePanel() { panelOpen = false }
+    // BASECAMP_NOTIFY_SELFTEST=1: one local toast, to check the layer renders.
+    function selfTest() {
+        toasts.insert(0, { nid: "selftest", app: "basecamp", title: "Notifications self-test",
+                           body: "If you can read this, toasts render on this display.",
+                           level: "warning", tag: "", actionLabel: "" })
+    }
 
     function levelColor(level) {
         switch (level) {
@@ -134,18 +140,19 @@ Item {
 
         RowLayout {
             id: header
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-            height: 28
+            anchors { left: parent.left; right: parent.right; top: parent.top
+                      leftMargin: 14; rightMargin: 14; topMargin: 12 }
+            height: 24
             LogosText {
                 Layout.fillWidth: true
                 text: qsTr("Notifications")
                 font.pixelSize: 15
                 font.weight: Font.DemiBold
             }
-            LogosButton {
+            TextLink {
                 visible: root.center && root.center.items.length > 0
-                text: qsTr("Clear all")
-                onClicked: root.center.clearAll()
+                label: qsTr("Clear all")
+                onActivated: root.center.clearAll()
             }
         }
 
@@ -210,7 +217,7 @@ Item {
         implicitHeight: content.implicitHeight + 20
         height: implicitHeight
         radius: Theme.spacing.radiusLarge
-        color: flat ? (hover.hovered ? Theme.palette.surfaceRaised : "transparent")
+        color: flat ? (hover.hovered ? Theme.palette.surfaceRaised : Theme.palette.backgroundTertiary)
                     : Theme.palette.backgroundSecondary
         border.width: flat ? 0 : 1
         border.color: Theme.palette.borderSubtle
@@ -284,14 +291,25 @@ Item {
             }
         }
 
-        ToolButton {
+        TextLink {
             visible: card.showClose
-            anchors { right: parent.right; top: parent.top; margins: 4 }
-            width: 26
-            height: 26
-            text: "✕"
-            font.pixelSize: 11
-            onClicked: card.closed()
+            anchors { right: parent.right; top: parent.top; rightMargin: 10; topMargin: 8 }
+            label: "✕"
+            pixelSize: 12
+            onActivated: card.closed()
         }
+    }
+
+    // A text-only control: secondary text that brightens on hover. No box.
+    component TextLink: LogosText {
+        id: link
+        property string label
+        property int pixelSize: 13
+        signal activated()
+        text: label
+        font.pixelSize: pixelSize
+        color: linkHover.hovered ? Theme.palette.text : Theme.palette.textSecondary
+        HoverHandler { id: linkHover; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: link.activated() }
     }
 }

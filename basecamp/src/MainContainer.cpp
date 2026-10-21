@@ -1365,6 +1365,12 @@ void MainContainer::setupNotifications()
             connect(root, SIGNAL(heightChanged()), this, SLOT(onNotifyLayerResized()));
         });
     positionNotifications();
+    if (qEnvironmentVariableIntValue("BASECAMP_NOTIFY_SELFTEST") > 0) {
+        QTimer::singleShot(5000, this, [this]() {
+            if (QObject* root = m_notifyWidget->rootObject())
+                QMetaObject::invokeMethod(root, "selfTest");
+        });
+    }
 
     auto updateBell = [this, center]() {
         m_tabArea->setNotificationCount(center->property("unreadCount").toInt());
@@ -1407,4 +1413,7 @@ void MainContainer::positionNotifications()
     m_notifyWidget->setGeometry(width() - w - 12, top, w, h);
     m_notifyWidget->show();
     m_notifyWidget->raise();
+    if (qEnvironmentVariableIntValue("BASECAMP_NOTIFY_SELFTEST") > 0)
+        qInfo() << "Notifications layer:" << m_notifyWidget->geometry()
+                << "visible" << m_notifyWidget->isVisible() << "in" << size();
 }
