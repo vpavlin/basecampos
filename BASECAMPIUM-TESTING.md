@@ -9,13 +9,15 @@ Basecampium feel right to use?**
 
 ## 1. Download
 
-From the [Basecampium test release](https://github.com/xAlisher/basecamp-theming/releases/tag/basecampium-3):
+From the [Basecampium test release](https://github.com/xAlisher/basecamp-theming/releases/tag/basecampium-4):
 
 | File | What |
 |---|---|
 | `basecamp-shells-x86_64.AppImage` | Basecamp that can use shell packages (Linux x86_64) |
 | `basecamp-shells-macos-arm64.zip` | the same for macOS (Apple Silicon) |
 | `basecampium.lgx` | the Basecampium shell package (one file for Linux and macOS) |
+
+Build 4 fixes are Linux only for now: the macOS app and the macOS part of the package are still build 3.
 
 ## 2. Start Basecamp
 
