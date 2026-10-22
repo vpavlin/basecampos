@@ -1443,7 +1443,8 @@ void MainContainer::positionNotifications()
     const int h = qMax(1, qRound(root->property("height").toReal()));
     const int w = qRound(root->property("width").toReal());
     // Under the bar, at the right edge.
-    const int top = m_tabArea && m_tabArea->bellButton()
+    const int top = compact ? m_tabArea->topBarHeight() + 8
+                  : m_tabArea && m_tabArea->bellButton()
                   ? m_tabArea->bellButton()->mapTo(this, QPoint(0, m_tabArea->bellButton()->height())).y() + 8
                   : 52;
     if (compact && root->property("panelOpen").toBool()) {

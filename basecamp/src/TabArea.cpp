@@ -59,23 +59,25 @@ class BellButton : public QToolButton
 public:
     using QToolButton::QToolButton;
     void setCount(int n) { if (n != m_count) { m_count = n; update(); } }
+    void setGlyph(int px) { m_glyph = px; update(); }
 
 protected:
     void paintEvent(QPaintEvent* e) override
     {
         QToolButton::paintEvent(e);   // hover background from the style sheet
+        const int g = m_glyph;
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
         const qreal dpr = devicePixelRatioF();
         QPixmap bell = QIcon(QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/bell.svg"))
-                           .pixmap(QSize(18, 18), dpr);
+                           .pixmap(QSize(g, g), dpr);
         if (!bell.isNull()) {
             QPainter tp(&bell);
             tp.setCompositionMode(QPainter::CompositionMode_SourceIn);
             tp.fillRect(bell.rect(), underMouse() ? tok("text", "#FFFFFF")
                                                   : tok("textSecondary", "#A3A3A3"));
         }
-        const QRect r((width() - 18) / 2, (height() - 18) / 2, 18, 18);
+        const QRect r((width() - g) / 2, (height() - g) / 2, g, g);
         p.drawPixmap(r, bell);
         if (m_count > 0) {
             const QString t = m_count > 9 ? QStringLiteral("9+") : QString::number(m_count);
@@ -95,6 +97,7 @@ protected:
 
 private:
     int m_count = 0;
+    int m_glyph = 18;
 };
 
 // The empty part of the bar: drag to move the window, double-click to maximise.
@@ -611,17 +614,6 @@ QToolButton* bottomButton(QWidget* parent, const QString& name, const QString& t
     return b;
 }
 
-QIcon tinted(const QString& svg, const QColor& c, int size)
-{
-    QPixmap pm = QIcon(svg).pixmap(size, size);
-    if (pm.isNull())
-        return QIcon();
-    QPainter p(&pm);
-    p.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    p.fillRect(pm.rect(), c);
-    return QIcon(pm);
-}
-
 // ── TabArea ─────────────────────────────────────────────────────────────────
 
 TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
@@ -665,9 +657,10 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     row->addWidget(m_drag, 1);
     // Compact layout: the current tab's title in place of the tabs.
     auto* dragRow = new QHBoxLayout(m_drag);
-    dragRow->setContentsMargins(4, 0, 4, 6);
+    dragRow->setContentsMargins(8, 0, 8, 6);
     m_title = new QLabel(m_drag);
     m_title->setObjectName(QStringLiteral("basecampium.title"));
+    m_title->setAlignment(Qt::AlignCenter);
     m_title->setAttribute(Qt::WA_TransparentForMouseEvents);
     m_title->setVisible(false);
     dragRow->addWidget(m_title, 1);
@@ -714,7 +707,7 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     column->addWidget(m_stack, 1);
 
     // Compact layout (narrower than kCompactWidth): a bottom bar within thumb
-    // reach, Home · New tab · Tabs, and a tab switcher in place of the strip.
+    // reach, New tab · Notifications · Tabs, and a tab switcher in place of the strip.
     m_bottom = new QWidget(this);
     m_bottom->setObjectName(QStringLiteral("basecampium.bottomBar"));
     m_bottom->setAttribute(Qt::WA_StyledBackground);
@@ -722,11 +715,9 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     auto* bottomRow = new QHBoxLayout(m_bottom);
     bottomRow->setContentsMargins(12, 6, 12, 6);
     bottomRow->setSpacing(8);
-    m_homeButton = bottomButton(m_bottom, QStringLiteral("basecampium.home"), tr("Home"));
-    m_homeButton->setIconSize(QSize(22, 22));
-    connect(m_homeButton, &QToolButton::clicked, this, &TabArea::goHome);
     QToolButton* newButton = bottomButton(m_bottom, QStringLiteral("basecampium.bottomNewTab"), tr("New tab"));
-    newButton->setText(QStringLiteral("+"));
+    newButton->setIconSize(QSize(26, 26));
+    m_newButton = newButton;
     connect(newButton, &QToolButton::clicked, this, [this]() { showSwitcher(false); addNewTab(); });
     auto* tabsButton = new TabsButton(m_bottom);
     tabsButton->setObjectName(QStringLiteral("basecampium.tabSwitcher"));
@@ -736,10 +727,22 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     tabsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     tabsButton->setFocusPolicy(Qt::NoFocus);
     tabsButton->setCheckable(true);
+    // The bell moves down here too, within thumb reach; the top bar keeps
+    // only the title.
+    auto* bottomBell = new BellButton(m_bottom);
+    bottomBell->setObjectName(QStringLiteral("basecampium.bottomNotifications"));
+    bottomBell->setToolTip(tr("Notifications"));
+    bottomBell->setAccessibleName(tr("Notifications"));
+    bottomBell->setMinimumSize(64, 48);
+    bottomBell->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    bottomBell->setFocusPolicy(Qt::NoFocus);
+    bottomBell->setGlyph(24);
+    m_bottomBell = bottomBell;
+    connect(bottomBell, &QToolButton::clicked, this, &TabArea::notificationsClicked);
     m_tabsButton = tabsButton;
     connect(tabsButton, &QToolButton::clicked, this, [this]() { showSwitcher(!m_switcherOpen); });
-    bottomRow->addWidget(m_homeButton);
     bottomRow->addWidget(newButton);
+    bottomRow->addWidget(bottomBell);
     bottomRow->addWidget(tabsButton);
     m_bottom->setVisible(false);
     column->addWidget(m_bottom);
@@ -803,10 +806,22 @@ void TabArea::applyTheme()
 
     m_bar->setStyleSheet(barStyleSheet());
     m_bottom->setStyleSheet(barStyleSheet());
+    {
+        // A drawn plus: a font's "+" is too light at this size.
+        const qreal dpr = devicePixelRatioF();
+        QPixmap pm(QSize(26, 26) * dpr);
+        pm.setDevicePixelRatio(dpr);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(QPen(tok("text", "#FFFFFF"), 2.4, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(QPointF(13, 3), QPointF(13, 23));
+        p.drawLine(QPointF(3, 13), QPointF(23, 13));
+        p.end();
+        m_newButton->setIcon(QIcon(pm));
+    }
     m_switcher->setStyleSheet(barStyleSheet()
         + QStringLiteral("QScrollArea, QScrollArea > QWidget > QWidget { background: %1; }").arg(css(page)));
-    m_homeButton->setIcon(tinted(QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/logos-lambda.svg"),
-                                 tok("textSecondary", "#A3A3A3"), 44));
     for (int i = 0; i < m_tabs->count(); ++i)
         if (TabLabel* l = labelAt(m_tabs, i))
             l->refresh();
@@ -834,12 +849,20 @@ void TabArea::setCompact(bool on)
     m_plus->setVisible(!on);
     m_title->setVisible(on);
     m_bottom->setVisible(on);
-    if (auto* bell = m_bell)
-        bell->setFixedSize(on ? 48 : 40, 32);
+    // Phone layout: no window buttons, no bell up top (it's in the bottom
+    // bar), so the title has the whole bar and sits in the centre.
+    m_bell->setVisible(!on);
+    if (m_buttons)
+        m_buttons->setVisible(!on);
     if (!on)
         showSwitcher(false);
     updateCompactBar();
     emit compactChanged(on);
+}
+
+int TabArea::topBarHeight() const
+{
+    return m_bar->height();
 }
 
 int TabArea::bottomBarHeight() const
@@ -865,20 +888,6 @@ void TabArea::updateCompactBar()
             dot = true;
     tabs->setDot(dot);
     tabs->setChecked(m_switcherOpen);
-}
-
-void TabArea::goHome()
-{
-    showSwitcher(false);
-    // Home is the New tab page: reuse an open New tab, or open one.
-    for (int i = 0; i < m_tabs->count(); ++i) {
-        if (isNewTabKey(m_tabs->tabData(i).toString())) {
-            m_tabs->setCurrentIndex(i);
-            onCurrentChanged(i);
-            return;
-        }
-    }
-    addNewTab();
 }
 
 void TabArea::showSwitcher(bool on)
@@ -1305,4 +1314,6 @@ void TabArea::setNotificationCount(int count)
 {
     if (m_bell)
         static_cast<BellButton*>(m_bell)->setCount(count);
+    if (m_bottomBell)
+        static_cast<BellButton*>(m_bottomBell)->setCount(count);
 }

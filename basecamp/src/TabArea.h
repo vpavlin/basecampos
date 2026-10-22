@@ -79,7 +79,9 @@ public:
     bool isCompact() const { return m_compact; }
     int bottomBarHeight() const;
     void showSwitcher(bool on);
-    QWidget* bellButton() const { return m_bell; }
+    // The bell the user sees: in the bottom bar in the compact layout.
+    QWidget* bellButton() const { return m_compact ? m_bottomBell : m_bell; }
+    int topBarHeight() const;
 
 signals:
     void closeRequested(const QString& key);
@@ -103,7 +105,6 @@ private:
     void setCompact(bool on);
     void updateCompactBar();
     void rebuildSwitcher();
-    void goHome();
 
     QWidget* m_bar = nullptr;
     QToolButton* m_plus = nullptr;
@@ -123,8 +124,9 @@ private:
     bool m_compact = false;
     bool m_switcherOpen = false;
     QLabel* m_title = nullptr;              // compact: the current tab's title
-    QWidget* m_bottom = nullptr;            // compact: Home · New tab · Tabs
-    QToolButton* m_homeButton = nullptr;
+    QWidget* m_bottom = nullptr;            // compact: New tab · Notifications · Tabs
+    QWidget* m_bottomBell = nullptr;
+    QToolButton* m_newButton = nullptr;
     QToolButton* m_tabsButton = nullptr;
     QWidget* m_switcher = nullptr;          // compact: open tabs as cards
     QWidget* m_switcherGrid = nullptr;
