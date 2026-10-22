@@ -18,7 +18,6 @@ Notifications only help if they are seen. When Basecamp is behind other windows,
 + No duplicates once the user is back: one place of record, the list.
 - On by default (the earlier spec said opt-in): chosen because the switch is one click away and the content is already user-filtered; revisit if it feels noisy.
 - macOS (UNUserNotificationCenter) and Windows (toasts) not built.
-- Wayland focus on click depends on the desktop sending an activation token; not yet confirmed on GNOME.
 
 ## Evidence
-`app/DesktopNotifier.{h,cpp}`, `NotificationsView.qml`. Headless with a fake notification daemon on a private bus, 2026-10-22: Notify with summary/escaped body/icon; click → app opened, notification dismissed, `CloseNotification`; return to Basecamp → remaining copies closed; a real receiver "New station" also delivered. On Alisher's GNOME: pending.
+`app/DesktopNotifier.{h,cpp}`, `NotificationsView.qml`. Headless with a fake notification daemon on a private bus, 2026-10-22: Notify with summary/escaped body/icon; click → app opened, notification dismissed, `CloseNotification`; return to Basecamp → remaining copies closed; a real receiver "New station" also delivered. On Alisher's GNOME Wayland, 2026-10-22: clicking the GNOME notification brings Basecamp to the front with the receiver open (activation token works).

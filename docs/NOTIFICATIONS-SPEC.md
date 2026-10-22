@@ -180,7 +180,8 @@ Headless (sway + a fake `org.freedesktop.Notifications` on a private bus, inspec
 the current tab's app is read at once; in the background a post reaches the desktop (summary,
 escaped body, icon, actions); clicking it there opens the app, dismisses it and withdraws the
 desktop copy; returning to Basecamp withdraws the rest; clicking a toast opens the app and
-dismisses it. Not yet seen on a real GNOME desktop.
+dismisses it. On Alisher's GNOME Wayland: clicking the GNOME notification brings Basecamp to
+the front with the sender open.
 
 ## 11. Open questions
 
