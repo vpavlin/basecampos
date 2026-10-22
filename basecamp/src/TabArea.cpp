@@ -1553,38 +1553,95 @@ void TabArea::closeAllTabs()
     }
 }
 
+// Menu icons: the shell's SVGs tinted, or drawn where the set has none.
+static QIcon menuIcon(const QString& svg, const std::function<void(QPainter&)>& draw = {})
+{
+    constexpr int s = 24;
+    const qreal dpr = qApp->devicePixelRatio();
+    QPixmap pm(QSize(s, s) * dpr);
+    pm.setDevicePixelRatio(dpr);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing);
+    const QColor tint = tok("textSecondary", "#A3A3A3");
+    if (!svg.isEmpty()) {
+        QIcon(svg).paint(&p, QRect(0, 0, s, s));   // these SVGs carry their own padding
+        p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        p.fillRect(QRect(0, 0, s, s), tint);
+    } else if (draw) {
+        p.setPen(QPen(tint, 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.setBrush(Qt::NoBrush);
+        draw(p);
+    }
+    return QIcon(pm);
+}
+
 void TabArea::showBarMenu(QWidget* anchor, bool tabsOnly)
 {
     // Non-blocking, so the window (and a test driver) keeps running; opens
     // upward from its button, right-aligned to it, as a bottom bar's menus do.
+    // Styled from the theme with touch-size rows (a bare QMenu is a light
+    // desktop menu); items that don't apply are left out, not greyed.
     auto* menu = new QMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->setAttribute(Qt::WA_TranslucentBackground);
+    menu->setWindowFlags(menu->windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
     menu->setObjectName(tabsOnly ? QStringLiteral("basecampium.tabsMenu")
                                  : QStringLiteral("basecampium.barMenu"));
+    menu->setStyleSheet(QStringLiteral(
+        "QMenu { background: %1; border: 1px solid %2; border-radius: 14px; padding: 6px; icon-size: 22px; }"
+        "QMenu::item { color: %3; font-size: 15px; padding: 14px 20px 14px 14px; border-radius: 10px; }"
+        "QMenu::item:selected { background: %4; }"
+        "QMenu::icon { padding-left: 12px; }"
+        "QMenu::separator { height: 1px; background: %2; margin: 6px 10px; }")
+        .arg(css(tok("backgroundSecondary", "#262626")), css(tok("border", "#333333")),
+             css(tok("text", "#FFFFFF")), css(tok("backgroundTertiary", "#2E2E2E"))));
+    menu->setMinimumWidth(240);
+
     const QString current = currentKey();
     const bool onTab = !current.isEmpty() && !isNewTabKey(current);
-    auto add = [menu](const char* name, const QString& text, bool enabled, std::function<void()> fn) {
-        QAction* a = menu->addAction(text);
+    auto add = [menu](const char* name, const QIcon& icon, const QString& text, std::function<void()> fn) {
+        QAction* a = menu->addAction(icon, text);
         a->setObjectName(QString::fromLatin1(name));
-        a->setEnabled(enabled);
         QObject::connect(a, &QAction::triggered, menu, [fn]() { QTimer::singleShot(0, fn); });
     };
-    add("menu.newTab", tr("New tab"), true, [this]() { openHome(); });
-    if (!tabsOnly)
-        add("menu.reopen", tr("Reopen closed tab"), true, [this]() { emit reopenClosedRequested(); });
-    add("menu.closeTab", tr("Close tab"), onTab, [this, current]() {
-        if (indexOf(current) >= 0)
-            emit closeRequested(current);
+    const QIcon plus = menuIcon({}, [](QPainter& p) {
+        p.drawLine(QPointF(12, 5), QPointF(12, 19));
+        p.drawLine(QPointF(5, 12), QPointF(19, 12));
     });
-    add("menu.closeAll", tr("Close all tabs"), contentTabCount() > 0, [this]() { closeAllTabs(); });
+    const QIcon reopen = menuIcon({}, [](QPainter& p) {
+        p.drawArc(QRectF(5, 5, 14, 14), 90 * 16, 270 * 16);   // ↺ from the top, round to the left
+        p.drawLine(QPointF(12, 5), QPointF(15.5, 2.5));
+        p.drawLine(QPointF(12, 5), QPointF(15.5, 8));
+    });
+    const QIcon cross = menuIcon(QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/close.svg"));
+
+    add("menu.newTab", plus, tr("New tab"), [this]() { openHome(); });
+    if (!tabsOnly)
+        add("menu.reopen", reopen, tr("Reopen closed tab"), [this]() { emit reopenClosedRequested(); });
+    if (onTab)
+        add("menu.closeTab", cross, tr("Close tab"), [this, current]() {
+            if (indexOf(current) >= 0)
+                emit closeRequested(current);
+        });
+    if (contentTabCount() > 1 || (contentTabCount() == 1 && !onTab))
+        add("menu.closeAll", cross, tr("Close all tabs"), [this]() { closeAllTabs(); });
     if (!tabsOnly) {
         menu->addSeparator();
-        add("menu.applications", tr("Applications"), true, [this]() { emit systemAppRequested(QStringLiteral("sys:applications")); });
-        add("menu.settings", tr("Settings"), true, [this]() { emit systemAppRequested(QStringLiteral("sys:settings")); });
-        add("menu.packages", tr("Package Manager"), true, [this]() { emit systemAppRequested(QStringLiteral("sys:packages")); });
+        add("menu.applications", menuIcon(QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/dashboard.svg")),
+            tr("Applications"), [this]() { emit systemAppRequested(QStringLiteral("sys:applications")); });
+        add("menu.settings", menuIcon(QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/settings.svg")),
+            tr("Settings"), [this]() { emit systemAppRequested(QStringLiteral("sys:settings")); });
+        add("menu.packages", menuIcon(QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/module.svg")),
+            tr("Package Manager"), [this]() { emit systemAppRequested(QStringLiteral("sys:packages")); });
     }
+    menu->ensurePolished();
     const QSize hint = menu->sizeHint();
     const QPoint corner = anchor->mapToGlobal(QPoint(anchor->width(), 0));
-    menu->popup(QPoint(corner.x() - hint.width(), corner.y() - hint.height() - 4));
+    menu->popup(QPoint(corner.x() - hint.width(), corner.y() - hint.height() - 6));
     qInfo() << "Basecampium: bar menu" << menu->objectName() << "shown" << menu->isVisible();
+    // Test hook: a popup can't be captured on a headless compositor; save it.
+    const QString shot = qEnvironmentVariable("BASECAMP_SHELL_MENU_SHOT");
+    if (!shot.isEmpty())
+        menu->grab().save(shot);
 }
