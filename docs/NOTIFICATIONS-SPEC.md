@@ -10,7 +10,9 @@ Status: prototype, 2026-10-21, `notifications` branch (Basecampium). Decisions: 
 - Basecamp posts too. First case: **an app's process stopped unexpectedly**, with **Reopen**.
   Before this, that was silent: the tab just went dead (logos-basecamp#10).
 - The shell shows a **toast** with the sender's icon and keeps a **list** behind a bell with an
-  unread count. Clicking a notification opens the app that sent it.
+  unread count, and a dot on the tab of each app with unread notifications. Clicking a
+  notification opens the app that sent it and dismisses it. While Basecamp is in the background,
+  notifications also go to the desktop's own notification centre.
 - **Settings → Notifications** lists every app that declares the intent, with a switch.
 - Plain text only, a rate limit per app, and a short list of things notifications must never be
   used for.
@@ -105,11 +107,26 @@ so **Reopen** starts it fresh.
   panel), with time and ✕. A click anywhere outside the list closes it; the click still goes
   where it was aimed.
 - **Default shell:** later (same layer; bell at the bottom of the sidebar).
-- **Desktop notifications** when Basecamp is not the active window: later, opt-in.
+- **Tab dot:** a small dot on the icon of a tab whose app has unread notifications. Looking at
+  the tab (it is current while Basecamp is in front) marks that app's notifications read, so the
+  dot and the badge go. A post from the app you're looking at is read at once.
+- **Opening dismisses:** clicking a notification (toast, list item, or the desktop copy) opens the
+  sender and removes the notification; it has done its job. A Basecamp notice with no action
+  (nothing to open) stays until closed.
+- **Desktop notifications** while Basecamp is not the active window: the same notification goes
+  to the desktop's notification centre (Linux: `org.freedesktop.Notifications` over D-Bus, works
+  on GNOME and KDE). Title as "<App>: <title>", body as plain text (escaped), the app's icon,
+  urgency normal (critical for `error`). Clicking it brings Basecamp to the front (with the
+  Wayland activation token when the desktop sends one) and opens the sender. Dismissed in
+  Basecamp, or Basecamp comes back to the front: the desktop copies are withdrawn, since the
+  list has them. Muted apps and Do not disturb never reach the desktop. macOS and Windows: not
+  yet.
 
 ## 6. Settings → Notifications
 
 - One row per app that declares `basecamp.notifications.post`: icon, name, switch.
+- **Show on the desktop** (on by default, remembered as `[Notifications] desktop=`): the
+  desktop hand-off above.
 - Off: nothing from that app is shown or listed, and what it already posted is removed. The app is
   not told. Remembered across restarts (`[Notifications] muted=` in Basecamp's settings).
 - Empty state: "No installed app sends notifications yet."
@@ -141,7 +158,9 @@ Enforced by review now, by catalog checks later:
 | Toasts and list | `src/Basecamp/Shell/NotificationLayer.qml` in a translucent `QQuickWidget` (`MainContainer::setupNotifications`) |
 | Bell | `TabArea` (`BellButton`, `setNotificationCount`) |
 | Settings page | `src/Basecamp/Settings/NotificationsView.qml` |
-| Self-test | `BASECAMP_NOTIFY_SELFTEST=1`: a local toast after 5 s, layer geometry in the log |
+| Tab dots | `NotificationCenter::unreadApps` / `markAppRead`; `MainContainer::onNotificationsChanged` → `TabArea::setAttention` |
+| Desktop hand-off | `app/DesktopNotifier.{h,cpp}` (Linux, `BASECAMP_DBUS_NOTIFY` when Qt6::DBus is found) |
+| Self-test | `BASECAMP_NOTIFY_SELFTEST=1`: a local toast after 5 s, layer geometry in the log. `BASECAMP_NOTIFY_SELFTEST_APP=<module>`: posts as that app every 15 s (20 times) |
 
 Learned the hard way: the floating layer must never be hidden or zero height. A view that is not
 rendering does no layout, so a new toast or a just-opened list never gets its size.
@@ -156,6 +175,13 @@ click closes the list.
 On Alisher's GNOME Wayland screen: the list and toasts render, and the Settings page, icons and
 outside-click close were confirmed working. The crash toast on that screen is not yet confirmed.
 
+Headless (sway + a fake `org.freedesktop.Notifications` on a private bus, inspector-driven),
+2026-10-22: the dot shows on a background tab's app and goes when its tab is current; a post from
+the current tab's app is read at once; in the background a post reaches the desktop (summary,
+escaped body, icon, actions); clicking it there opens the app, dismisses it and withdraws the
+desktop copy; returning to Basecamp withdraws the rest; clicking a toast opens the app and
+dismisses it. Not yet seen on a real GNOME desktop.
+
 ## 11. Open questions
 
 1. Backend (C++ / core module) posts: a call through LogosAPI, or QML only?
@@ -163,5 +189,5 @@ outside-click close were confirmed working. The crash toast on that screen is no
 3. Persist the list across restarts?
 4. Owner upstream: the shell (Basecamp) or the platform (`logos.notifications.*`, implemented by
    every frontend including mobile)?
-5. Desktop hand-off: per-OS code or a small library; Qt has no portable API.
+5. Desktop hand-off on macOS (UNUserNotificationCenter) and Windows (toast); Linux is done.
 6. Unit tests for `NotificationCenter` (the unit-test target does not build on this branch today).

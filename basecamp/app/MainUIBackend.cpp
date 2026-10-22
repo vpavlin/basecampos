@@ -10,6 +10,7 @@
 #include "ShellIntentEndpoint.h"
 #include "ShellIntents.h"
 #include "NotificationCenter.h"
+#include "DesktopNotifier.h"
 #include "links/LinkRequestCoordinator.h"
 #include "UIPluginPresenter.h"
 #include "AppsModel.h"
@@ -25,6 +26,7 @@
 #include <QJSValue>
 #include <QMap>
 #include <QTimer>
+#include <QGuiApplication>
 
 // The shell's own capability tables and their registration live in
 // ShellIntents so a unit test can reach them; this file cannot be linked into
@@ -94,6 +96,26 @@ MainUIBackend::MainUIBackend(LogosAPI* logosAPI, ICoreRuntime* core,
             return QStringLiteral("qrc:/qt/qml/Basecamp/Icons/Basecamp/Icons/logos-lambda.svg");
         return m_uiPluginManager->pluginIconUrl(app);
     });
+    // While Basecamp is in the background, the desktop shows them too.
+    auto* desktop = new DesktopNotifier(m_notifications, this);
+    desktop->setNameResolver([this](const QString& app) { return displayNameFor(app); });
+    // BASECAMP_NOTIFY_SELFTEST_APP=<module>: post as that app every 15 s, twenty
+    // times, to test tab dots and the desktop hand-off without the app's help.
+    if (const QString selfTestApp = qEnvironmentVariable("BASECAMP_NOTIFY_SELFTEST_APP"); !selfTestApp.isEmpty()) {
+        auto* timer = new QTimer(this);
+        timer->setInterval(15000);
+        connect(timer, &QTimer::timeout, this, [this, timer, selfTestApp, n = 0]() mutable {
+            ++n;
+            const QString id = m_notifications->post(selfTestApp, QVariantMap{
+                { QStringLiteral("title"), QStringLiteral("Self-test %1").arg(n) },
+                { QStringLiteral("body"), QStringLiteral("Posted as %1 <b>not bold</b>").arg(selfTestApp) },
+                { QStringLiteral("level"), n == 3 ? QStringLiteral("warning") : QStringLiteral("info") } });
+            qInfo() << "Notification self-test" << n << "id" << id << "app state" << QGuiApplication::applicationState();
+            if (n >= 20)
+                timer->stop();
+        });
+        timer->start();
+    }
     connect(m_notifications, &NotificationCenter::mutedAppsChanged,
             this, &MainUIBackend::notificationAppsChanged);
     connect(m_notifications, &NotificationCenter::activated, this,

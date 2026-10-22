@@ -9,6 +9,7 @@
 #include "ShellPrefs.h"
 #include "TabArea.h"
 
+#include <QGuiApplication>
 #include <QQuickWidget>
 #include <QQmlEngine>
 #include <QQmlComponent>
@@ -1095,6 +1096,7 @@ void MainContainer::setupTabsUi()
             m_host->setCurrentVisibleApp(key);
         if (m_notifyWidget && m_notifyWidget->rootObject())
             m_notifyWidget->rootObject()->setProperty("currentApp", key);
+        onNotificationsChanged();   // the tab now shown has been seen
         if (m_shortcutBridge)
             m_shortcutBridge->rebindDeferred();
         saveTabs();
@@ -1385,11 +1387,12 @@ void MainContainer::setupNotifications()
         });
     }
 
-    auto updateBell = [this, center]() {
-        m_tabArea->setNotificationCount(center->property("unreadCount").toInt());
-    };
     connect(center, SIGNAL(itemsChanged()), this, SLOT(onNotificationsChanged()));
-    updateBell();
+    // Back in Basecamp: what the current tab's app posted meanwhile is seen now.
+    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState) {
+        onNotificationsChanged();
+    });
+    onNotificationsChanged();
     connect(m_tabArea, &TabArea::notificationsClicked, this, [this]() {
         if (QObject* root = m_notifyWidget->rootObject())
             QMetaObject::invokeMethod(root, "togglePanel");
@@ -1401,8 +1404,19 @@ void MainContainer::onNotificationsChanged()
     QObject* center = m_host->backendObject()
                     ? m_host->backendObject()->property("notifications").value<QObject*>()
                     : nullptr;
-    if (center && m_tabArea)
-        m_tabArea->setNotificationCount(center->property("unreadCount").toInt());
+    if (!center || !m_tabArea)
+        return;
+    // The app in the current tab, while Basecamp is in front, is being looked
+    // at: its notifications count as read (no dot, no badge). In the
+    // background they stay unread until the user comes back.
+    const QString current = m_tabArea->currentKey();
+    const QStringList unread = center->property("unreadApps").toStringList();
+    if (QGuiApplication::applicationState() == Qt::ApplicationActive && unread.contains(current)) {
+        QMetaObject::invokeMethod(center, "markAppRead", Q_ARG(QString, current));
+        return;   // markAppRead changed the items: this runs again
+    }
+    m_tabArea->setNotificationCount(center->property("unreadCount").toInt());
+    m_tabArea->setAttention(unread);
 }
 
 void MainContainer::onNotifyLayerResized()

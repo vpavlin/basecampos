@@ -27,6 +27,12 @@ find_package(Qt6 COMPONENTS Widgets RemoteObjects Quick Qml QuickWidgets QuickCo
 # The session log sink and its YAML configuration (app/utils/LogSink.*,
 # app/utils/LoggingConfig.*). spdlog supplies the rotating file sink — the same
 # one liblogos already logs through, so this adds no second copy to the closure.
+# Desktop notifications (DesktopNotifier.cpp): org.freedesktop.Notifications
+# on Linux. Elsewhere the hand-off is not built yet.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(Qt6 COMPONENTS DBus QUIET)
+endif()
+
 find_package(spdlog REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
@@ -306,6 +312,7 @@ set(PROJECT_SOURCES
 
     MainUIBackend.cpp
     NotificationCenter.cpp
+    DesktopNotifier.cpp
     ShellIntents.cpp
 
     # Deep links: basecamp:// from a browser. LinkUrl.cpp is the parser and is
@@ -466,6 +473,11 @@ target_link_libraries(LogosBasecamp PRIVATE
     # same last position for the same GNU ld reason.
     ${LOGOS_CORE_TARGET}
 )
+
+if(TARGET Qt6::DBus)
+    target_link_libraries(LogosBasecamp PRIVATE Qt6::DBus)
+    target_compile_definitions(LogosBasecamp PRIVATE BASECAMP_DBUS_NOTIFY=1)
+endif()
 
 if(LOGOS_USE_MOCK_BACKEND)
     # Set explicitly rather than relying on PUBLIC propagation from the target.

@@ -68,6 +68,8 @@ public:
     void goToTab(int index);  // -1 = last
     // The bar's notification bell (NOTIFICATIONS-SPEC.md).
     void setNotificationCount(int count);
+    // Tabs (by key) whose app has unread notifications get a dot.
+    void setAttention(const QStringList& keys);
     QWidget* bellButton() const { return m_bell; }
 
 signals:
@@ -87,6 +89,7 @@ private:
     void updateStripWidth();
     void showMenu(int index, const QPoint& globalPos);
     void onCurrentChanged(int index);
+    void applyAttention();
 
     QWidget* m_bar = nullptr;
     QToolButton* m_plus = nullptr;
@@ -102,4 +105,5 @@ private:
     QHash<QString, QString> m_titles;       // key -> tab title
     QHash<QString, QString> m_icons;        // key -> icon path
     bool m_watchingWindow = false;
+    QStringList m_attention;                // keys with unread notifications
 };

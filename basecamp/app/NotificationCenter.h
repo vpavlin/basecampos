@@ -25,6 +25,11 @@ class NotificationCenter : public QObject {
     Q_PROPERTY(int unreadCount READ unreadCount NOTIFY itemsChanged)
     Q_PROPERTY(QStringList mutedApps READ mutedApps NOTIFY mutedAppsChanged)
     Q_PROPERTY(bool doNotDisturb READ doNotDisturb WRITE setDoNotDisturb NOTIFY doNotDisturbChanged)
+    // Apps with at least one unread notification (a dot on their tab).
+    Q_PROPERTY(QStringList unreadApps READ unreadApps NOTIFY itemsChanged)
+    // Also show notifications on the desktop (the OS notification centre)
+    // while Basecamp is in the background. Remembered; on by default.
+    Q_PROPERTY(bool desktop READ desktop WRITE setDesktop NOTIFY desktopChanged)
 
 public:
     static constexpr int kMaxItems = 50;
@@ -41,6 +46,9 @@ public:
     QStringList mutedApps() const { return QStringList(m_muted.begin(), m_muted.end()); }
     bool doNotDisturb() const { return m_dnd; }
     void setDoNotDisturb(bool on);
+    QStringList unreadApps() const;
+    bool desktop() const { return m_desktop; }
+    void setDesktop(bool on);
 
     // Validate and store a notification from `app`. Returns the id; on failure
     // returns an empty string and sets *error to an intent error code
@@ -58,14 +66,18 @@ public:
     Q_INVOKABLE void dismiss(const QString& id);
     Q_INVOKABLE void clearAll();
     Q_INVOKABLE void markAllRead();
+    // The user is looking at `app` (its tab is current): its notifications are read.
+    Q_INVOKABLE void markAppRead(const QString& app);
     Q_INVOKABLE void setMuted(const QString& app, bool muted);
-    // The user clicked a notification (or its button, when `useAction`).
+    // The user clicked a notification (or its button, when `useAction`). If
+    // that opens an app, the notification has done its job and is dismissed.
     Q_INVOKABLE void activate(const QString& id, bool useAction);
 
 signals:
     void itemsChanged();
     void mutedAppsChanged();
     void doNotDisturbChanged();
+    void desktopChanged();
     // A new or replacing notification to show as a toast. Not emitted for
     // muted apps; emitted under Do not disturb with `quiet` set, so a shell can
     // skip the toast and still update its bell.
@@ -81,6 +93,7 @@ private:
     QSet<QString> m_muted;
     QHash<QString, std::deque<qint64>> m_recent;   // app -> post times (ms)
     bool m_dnd = false;
+    bool m_desktop = true;
     std::function<QString(const QString&)> m_iconFor;
     quint64 m_next = 0;
 };

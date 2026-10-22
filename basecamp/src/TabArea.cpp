@@ -215,7 +215,10 @@ public:
         row->addWidget(m_label, 1);
         setIcon(icon);
     }
-    void setIcon(const QIcon& icon) { m_icon->setPixmap(icon.pixmap(16, 16)); }
+    void setIcon(const QIcon& icon) { m_base = icon; render(); }
+    // A dot on the icon: the tab's app has notifications the user hasn't seen.
+    void setDot(bool on) { if (on != m_dot) { m_dot = on; render(); } }
+    void refresh() { render(); }
     void setText(const QString& t) { m_text = t; elide(); }
     void setActive(bool on)
     {
@@ -228,6 +231,25 @@ protected:
     void resizeEvent(QResizeEvent* e) override { QWidget::resizeEvent(e); elide(); }
 
 private:
+    void render()
+    {
+        const qreal dpr = devicePixelRatioF();
+        QPixmap pm = m_base.pixmap(QSize(16, 16), dpr);
+        if (m_dot) {
+            if (pm.isNull()) {
+                pm = QPixmap(QSize(16, 16) * dpr);
+                pm.setDevicePixelRatio(dpr);
+                pm.fill(Qt::transparent);
+            }
+            QPainter p(&pm);
+            p.setRenderHint(QPainter::Antialiasing);
+            // A ring in the bar's colour keeps the dot readable on any icon.
+            p.setPen(QPen(tok("backgroundSecondary", "#262626"), 1.5));
+            p.setBrush(tok("primary", "#ED7B58"));
+            p.drawEllipse(QRectF(9.5, 0.75, 6, 6));
+        }
+        m_icon->setPixmap(pm);
+    }
     void elide()
     {
         const int w = qMax(0, width() - 4 - 16 - 8);
@@ -236,6 +258,8 @@ private:
     QLabel* m_icon = nullptr;
     QLabel* m_label = nullptr;
     QString m_text;
+    QIcon m_base;
+    bool m_dot = false;
 };
 
 TabLabel* labelAt(QTabBar* bar, int i)
@@ -592,6 +616,9 @@ void TabArea::applyTheme()
     const QColor danger = tok("error", "#E5484D");
 
     m_bar->setStyleSheet(barStyleSheet());
+    for (int i = 0; i < m_tabs->count(); ++i)
+        if (TabLabel* l = labelAt(m_tabs, i))
+            l->refresh();
     for (QWidget* w : std::as_const(m_detached))
         static_cast<DetachedWindow*>(w)->applyStyle();
     QPalette p = m_stack->palette();
@@ -854,6 +881,7 @@ void TabArea::onCurrentChanged(int index)
     for (int i = 0; i < m_tabs->count(); ++i)
         if (TabLabel* l = labelAt(m_tabs, i))
             l->setActive(i == index);
+    applyAttention();
     if (index < 0)
         return;
     const QString key = m_tabs->tabData(index).toString();
@@ -924,6 +952,23 @@ void TabArea::showMenu(int index, const QPoint& globalPos)
         else
             emit closeRequested(k);
     }
+}
+
+void TabArea::setAttention(const QStringList& keys)
+{
+    if (keys == m_attention)
+        return;
+    m_attention = keys;
+    applyAttention();
+}
+
+void TabArea::applyAttention()
+{
+    // The current tab never shows a dot: its app is what the user is looking at.
+    const int current = m_tabs->currentIndex();
+    for (int i = 0; i < m_tabs->count(); ++i)
+        if (TabLabel* l = labelAt(m_tabs, i))
+            l->setDot(i != current && m_attention.contains(m_tabs->tabData(i).toString()));
 }
 
 void TabArea::setNotificationCount(int count)

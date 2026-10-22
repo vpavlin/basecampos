@@ -8,6 +8,7 @@ namespace {
 // The user's per-app choice outlives the session (QSettings, like the shell's
 // other preferences).
 constexpr const char* kMutedKey = "Notifications/muted";
+constexpr const char* kDesktopKey = "Notifications/desktop";
 
 bool isString(const QVariant& v)
 {
@@ -21,6 +22,28 @@ NotificationCenter::NotificationCenter(QObject* parent)
 {
     const QStringList muted = QSettings().value(QLatin1String(kMutedKey)).toStringList();
     m_muted = QSet<QString>(muted.begin(), muted.end());
+    m_desktop = QSettings().value(QLatin1String(kDesktopKey), true).toBool();
+}
+
+QStringList NotificationCenter::unreadApps() const
+{
+    QStringList apps;
+    for (const QVariant& v : m_items) {
+        const QVariantMap n = v.toMap();
+        const QString app = n.value(QStringLiteral("app")).toString();
+        if (!n.value(QStringLiteral("read")).toBool() && !apps.contains(app))
+            apps.append(app);
+    }
+    return apps;
+}
+
+void NotificationCenter::setDesktop(bool on)
+{
+    if (m_desktop == on)
+        return;
+    m_desktop = on;
+    QSettings().setValue(QLatin1String(kDesktopKey), on);
+    emit desktopChanged();
 }
 
 int NotificationCenter::unreadCount() const
@@ -168,6 +191,21 @@ void NotificationCenter::markAllRead()
         emit itemsChanged();
 }
 
+void NotificationCenter::markAppRead(const QString& app)
+{
+    bool changed = false;
+    for (QVariant& v : m_items) {
+        QVariantMap m = v.toMap();
+        if (m.value(QStringLiteral("app")) == app && !m.value(QStringLiteral("read")).toBool()) {
+            m[QStringLiteral("read")] = true;
+            v = m;
+            changed = true;
+        }
+    }
+    if (changed)
+        emit itemsChanged();
+}
+
 void NotificationCenter::setMuted(const QString& app, bool muted)
 {
     if (app.isEmpty() || app == kBasecampApp || muted == m_muted.contains(app))
@@ -196,11 +234,12 @@ void NotificationCenter::activate(const QString& id, bool useAction)
         const QString launch = useAction
             ? n.value(QStringLiteral("action")).toMap().value(QStringLiteral("launch")).toString()
             : QString();
-        // A Basecamp notice with no action has nothing to open.
-        if (useAction || app != kBasecampApp)
+        // A Basecamp notice with no action has nothing to open, so it stays.
+        // Anything that opens an app is done once it has.
+        if (useAction || app != kBasecampApp) {
             emit activated(app, launch);
-        if (useAction)
             dismiss(id);
+        }
         return;
     }
 }

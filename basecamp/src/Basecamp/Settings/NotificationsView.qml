@@ -31,6 +31,50 @@ Item {
             wrapMode: Text.Wrap
         }
 
+        // Hand-off to the desktop's notification centre (DesktopNotifier).
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.spacing.small
+            implicitHeight: 64
+            radius: Theme.spacing.radiusLarge
+            color: Theme.palette.backgroundSecondary
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: Theme.spacing.medium
+                anchors.rightMargin: Theme.spacing.medium
+                spacing: Theme.spacing.medium
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    LogosText {
+                        Layout.fillWidth: true
+                        text: qsTr("Show on the desktop")
+                        elide: Text.ElideRight
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        text: qsTr("While Basecamp is in the background, notifications also appear in your system's notifications.")
+                        color: Theme.palette.textSecondary
+                        font.pixelSize: Theme.typography.secondaryText
+                        elide: Text.ElideRight
+                    }
+                }
+                LogosSwitch {
+                    objectName: "settings.notifications.desktop"
+                    checked: backend && backend.notifications ? backend.notifications.desktop : false
+                    onToggled: backend.notifications.desktop = checked
+                }
+            }
+        }
+
+        LogosText {
+            Layout.topMargin: Theme.spacing.medium
+            text: qsTr("Apps")
+            font.weight: Font.DemiBold
+        }
+
         LogosText {
             visible: root.apps.length === 0
             Layout.topMargin: Theme.spacing.medium
