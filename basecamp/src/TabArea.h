@@ -6,6 +6,7 @@
 #include <QWidget>
 
 class QStackedWidget;
+class QLabel;
 class QToolButton;
 
 // Basecampium's frame: one bar with "+", the tabs, a drag area and the window
@@ -70,6 +71,14 @@ public:
     void setNotificationCount(int count);
     // Tabs (by key) whose app has unread notifications get a dot.
     void setAttention(const QStringList& keys);
+
+    // Phone-width layout (docs/MOBILE-LAYOUT.md): below this width the strip
+    // gives way to a title, a bottom bar and a tab switcher.
+    static constexpr int kCompactWidth = 600;
+    static constexpr int kBottomBarHeight = 60;
+    bool isCompact() const { return m_compact; }
+    int bottomBarHeight() const;
+    void showSwitcher(bool on);
     QWidget* bellButton() const { return m_bell; }
 
 signals:
@@ -77,6 +86,7 @@ signals:
     void currentKeyChanged(const QString& key);
     void newTabShown();
     void notificationsClicked();
+    void compactChanged(bool compact);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -90,6 +100,10 @@ private:
     void showMenu(int index, const QPoint& globalPos);
     void onCurrentChanged(int index);
     void applyAttention();
+    void setCompact(bool on);
+    void updateCompactBar();
+    void rebuildSwitcher();
+    void goHome();
 
     QWidget* m_bar = nullptr;
     QToolButton* m_plus = nullptr;
@@ -106,4 +120,12 @@ private:
     QHash<QString, QString> m_icons;        // key -> icon path
     bool m_watchingWindow = false;
     QStringList m_attention;                // keys with unread notifications
+    bool m_compact = false;
+    bool m_switcherOpen = false;
+    QLabel* m_title = nullptr;              // compact: the current tab's title
+    QWidget* m_bottom = nullptr;            // compact: Home · New tab · Tabs
+    QToolButton* m_homeButton = nullptr;
+    QToolButton* m_tabsButton = nullptr;
+    QWidget* m_switcher = nullptr;          // compact: open tabs as cards
+    QWidget* m_switcherGrid = nullptr;
 };

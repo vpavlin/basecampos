@@ -18,7 +18,12 @@ Item {
     property bool panelOpen: false
 
     readonly property var center: backend ? backend.notifications : null
-    readonly property int cardWidth: 360
+    // Compact (phone-width) layout: banners span the window, the list is a
+    // sheet above the bottom bar. Set by the shell (MainContainer).
+    property bool compact: false
+    property int availableWidth: 1000
+    property int availableHeight: 800
+    readonly property int cardWidth: compact ? Math.max(200, availableWidth - 16) : 360
 
     function togglePanel() {
         panelOpen = !panelOpen
@@ -125,7 +130,8 @@ Item {
         id: panel
         visible: root.panelOpen
         width: root.cardWidth
-        implicitHeight: Math.min(560, header.height + listCol.implicitHeight + 32)
+        implicitHeight: Math.min(root.compact ? Math.max(240, root.availableHeight * 0.7) : 560,
+                                 header.height + listCol.implicitHeight + 32)
         height: implicitHeight
         radius: Theme.spacing.radiusLarge
         color: Theme.palette.backgroundSecondary
@@ -292,7 +298,7 @@ Item {
             visible: card.showClose
             anchors { right: parent.right; top: parent.top; rightMargin: 10; topMargin: 8 }
             label: "✕"
-            pixelSize: 12
+            pixelSize: root.compact ? 16 : 12
             onActivated: card.closed()
         }
     }

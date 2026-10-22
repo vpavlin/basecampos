@@ -19,8 +19,11 @@ Rectangle {
     function clearSearch() { search.text = "" }
 
     readonly property string query: search.text.trim().toLowerCase()
-    readonly property int tileSize: 64
-    readonly property int pitch: 112
+    // Phone width (Basecampium's compact layout): tighter margins and tiles.
+    readonly property bool compact: width < 600
+    readonly property int sideMargin: compact ? 32 : 96
+    readonly property int tileSize: compact ? 56 : 64
+    readonly property int pitch: compact ? 84 : 112
 
     readonly property var systemApps: [
         { key: "sys:applications", name: qsTr("Applications"),    icon: BasecampIcons.dashboard },
@@ -86,12 +89,12 @@ Rectangle {
 
     ColumnLayout {
         anchors.top: parent.top
-        anchors.topMargin: Math.max(32, parent.height * 0.08)
+        anchors.topMargin: root.compact ? 24 : Math.max(32, parent.height * 0.08)
         anchors.bottom: systemRow.top
         anchors.bottomMargin: Theme.spacing.xlarge
         anchors.horizontalCenter: parent.horizontalCenter
-        width: Math.min(parent.width - 96, 880)
-        spacing: Theme.spacing.xlarge * 2
+        width: Math.min(parent.width - root.sideMargin, 880)
+        spacing: root.compact ? Theme.spacing.xlarge : Theme.spacing.xlarge * 2
 
         // Who made this shell, above the search.
         Column {
@@ -101,7 +104,7 @@ Rectangle {
             LogosText {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Basecampium"
-                font.pixelSize: 40
+                font.pixelSize: root.compact ? 28 : 40
                 font.weight: Font.Bold
                 color: Theme.palette.textSecondary
             }
@@ -115,7 +118,8 @@ Rectangle {
             // (icons, not their wider labels).
             Layout.alignment: Qt.AlignHCenter
             // Never narrower than a few tiles: with no apps the grid is empty.
-            Layout.preferredWidth: Math.max(grid.width - (root.pitch - root.tileSize), 4 * root.pitch)
+            Layout.preferredWidth: root.compact ? parent.width
+                                   : Math.max(grid.width - (root.pitch - root.tileSize), 4 * root.pitch)
             Layout.preferredHeight: Theme.components.search.height
             Layout.maximumHeight: Theme.components.search.height
             placeholderText: qsTr("Search apps…")
@@ -188,7 +192,7 @@ Rectangle {
 
         Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
-            width: Math.min(root.width - 96, 480)
+            width: Math.min(root.width - root.sideMargin, 480)
             height: 1
             color: Theme.palette.borderHairline
         }

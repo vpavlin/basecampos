@@ -407,8 +407,12 @@ void MainContainer::setupUi()
     // Set initial state — Apps section (workspace) visible by default.
     m_contentStack->setCurrentIndex(kAppsStackIndex);
 
-    // Set reasonable minimum size
-    setMinimumSize(800, 600);
+    // Set reasonable minimum size. Basecampium goes down to phone width: below
+    // TabArea::kCompactWidth it switches to its compact layout.
+    if (m_tabsLayout)
+        setMinimumSize(320, 480);
+    else
+        setMinimumSize(800, 600);
 
     if (m_desktopLayout)
         setupDesktopUi();
@@ -1393,6 +1397,7 @@ void MainContainer::setupNotifications()
         onNotificationsChanged();
     });
     onNotificationsChanged();
+    connect(m_tabArea, &TabArea::compactChanged, this, [this]() { positionNotifications(); });
     connect(m_tabArea, &TabArea::notificationsClicked, this, [this]() {
         if (QObject* root = m_notifyWidget->rootObject())
             QMetaObject::invokeMethod(root, "togglePanel");
@@ -1429,6 +1434,10 @@ void MainContainer::positionNotifications()
     if (!m_notifyWidget || !m_notifyWidget->rootObject())
         return;
     QObject* root = m_notifyWidget->rootObject();
+    const bool compact = m_tabArea && m_tabArea->isCompact();
+    root->setProperty("compact", compact);
+    root->setProperty("availableWidth", width());
+    root->setProperty("availableHeight", height());
     // Never hidden: a hidden view does no layout, so a list that just opened
     // would report zero height forever. Empty, it is a 1px transparent strip.
     const int h = qMax(1, qRound(root->property("height").toReal()));
@@ -1437,7 +1446,15 @@ void MainContainer::positionNotifications()
     const int top = m_tabArea && m_tabArea->bellButton()
                   ? m_tabArea->bellButton()->mapTo(this, QPoint(0, m_tabArea->bellButton()->height())).y() + 8
                   : 52;
-    m_notifyWidget->setGeometry(width() - w - 12, top, w, h);
+    if (compact && root->property("panelOpen").toBool()) {
+        // The list as a sheet, just above the bottom bar (thumb reach).
+        const int bottom = height() - m_tabArea->bottomBarHeight() - 8;
+        m_notifyWidget->setGeometry((width() - w) / 2, qMax(top, bottom - h), w, h);
+    } else if (compact) {
+        m_notifyWidget->setGeometry((width() - w) / 2, top, w, h);
+    } else {
+        m_notifyWidget->setGeometry(width() - w - 12, top, w, h);
+    }
     m_notifyWidget->show();
     m_notifyWidget->raise();
     if (qEnvironmentVariableIntValue("BASECAMP_NOTIFY_SELFTEST") > 0)

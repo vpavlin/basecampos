@@ -19,6 +19,8 @@
 #include <QShowEvent>
 #include <QVBoxLayout>
 #include <QWindow>
+#include <QGridLayout>
+#include <QScrollArea>
 
 #include <ThemeColors.h>
 
@@ -151,7 +153,12 @@ QString barStyleSheet()
         "QLabel#basecampium\\.tabTitle[active=\"true\"] { color: %5; }"
         "QTabBar::scroller { width: 24px; }"
         "QTabBar QToolButton { background: %1; }"
-        "QToolButton#basecampium\\.dock { border-radius: 0; }")
+        "QToolButton#basecampium\\.dock { border-radius: 0; }"
+        "#basecampium\\.bottomBar { background: %1; border-top: 1px solid %6; }"
+        "#basecampium\\.bottomBar QToolButton { font-size: 24px; border-radius: 10px; }"
+        "#basecampium\\.bottomBar QToolButton:checked { background: %3; color: %5; }"
+        "QLabel#basecampium\\.title { color: %5; background: transparent; font-size: 14px; font-weight: 600; }"
+        "QLabel#basecampium\\.switcherHeader { color: %4; background: transparent; font-size: 13px; }")
         .arg(css(bar), css(page), css(hover), css(muted), css(text), css(border), css(danger));
 }
 
@@ -486,6 +493,135 @@ void TabStrip::mouseReleaseEvent(QMouseEvent* event)
     QTabBar::mouseReleaseEvent(event);
 }
 
+// ── Compact (phone-width) layout ────────────────────────────────────────────
+
+// The bottom bar's tab button: the number of open tabs in a rounded square, as
+// on a phone browser, with a dot when a tab other than the current one has
+// unread notifications.
+class TabsButton : public QToolButton
+{
+public:
+    using QToolButton::QToolButton;
+    void setCount(int n) { if (n != m_count) { m_count = n; update(); } }
+    void setDot(bool on) { if (on != m_dot) { m_dot = on; update(); } }
+
+protected:
+    void paintEvent(QPaintEvent* e) override
+    {
+        QToolButton::paintEvent(e);
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        const QColor fg = isChecked() ? tok("text", "#FFFFFF") : tok("textSecondary", "#A3A3A3");
+        const QRectF box(width() / 2.0 - 11, height() / 2.0 - 11, 22, 22);
+        p.setPen(QPen(fg, 1.8));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(box, 5, 5);
+        QFont f = font();
+        f.setPixelSize(m_count > 99 ? 9 : 12);
+        f.setBold(true);
+        p.setFont(f);
+        p.drawText(box, Qt::AlignCenter, m_count > 99 ? QStringLiteral(":D") : QString::number(m_count));
+        if (m_dot) {
+            p.setPen(QPen(tok("backgroundSecondary", "#262626"), 1.5));
+            p.setBrush(tok("primary", "#ED7B58"));
+            p.drawEllipse(QRectF(box.right() - 4, box.top() - 4, 8, 8));
+        }
+    }
+
+private:
+    int m_count = 0;
+    bool m_dot = false;
+};
+
+// One open tab in the tab switcher: its app's icon large, its title, a close
+// button. The whole card is the touch target; the close corner is 44 px.
+class TabCard : public QWidget
+{
+public:
+    TabCard(const QIcon& icon, const QString& title, bool current, bool dot, QWidget* parent)
+        : QWidget(parent), m_icon(icon), m_title(title), m_current(current), m_dot(dot)
+    {
+        setFixedHeight(150);
+        setCursor(Qt::PointingHandCursor);
+        setAttribute(Qt::WA_Hover);
+    }
+    std::function<void()> onOpen;
+    std::function<void()> onClose;
+
+protected:
+    QRect closeRect() const { return QRect(width() - 44, 0, 44, 44); }
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        const QRectF r = QRectF(rect()).adjusted(1, 1, -1, -1);
+        p.setPen(m_current ? QPen(tok("primary", "#ED7B58"), 2) : QPen(tok("border", "#333333"), 1));
+        p.setBrush(underMouse() ? tok("backgroundTertiary", "#2E2E2E") : tok("backgroundSecondary", "#262626"));
+        p.drawRoundedRect(r, 12, 12);
+
+        QFont f = font();
+        f.setPixelSize(13);
+        f.setBold(m_current);
+        p.setFont(f);
+        p.setPen(tok(m_current ? "text" : "textSecondary", "#FFFFFF"));
+        const QRect titleRect(12, 0, width() - 12 - 44, 44);
+        p.drawText(titleRect, Qt::AlignVCenter | Qt::AlignLeft,
+                   QFontMetrics(f).elidedText(m_title, Qt::ElideRight, titleRect.width()));
+        p.setPen(tok("textSecondary", "#A3A3A3"));
+        f.setBold(false);
+        f.setPixelSize(14);
+        p.setFont(f);
+        p.drawText(closeRect(), Qt::AlignCenter, QStringLiteral("✕"));
+
+        const int s = 56;
+        const QRect ir((width() - s) / 2, 44 + (height() - 44 - s) / 2 - 4, s, s);
+        p.drawPixmap(ir, m_icon.pixmap(QSize(s, s), devicePixelRatioF()));
+        if (m_dot) {
+            p.setPen(QPen(tok("backgroundSecondary", "#262626"), 2));
+            p.setBrush(tok("primary", "#ED7B58"));
+            p.drawEllipse(QRectF(ir.right() - 8, ir.top() - 4, 12, 12));
+        }
+    }
+    void mouseReleaseEvent(QMouseEvent* e) override
+    {
+        if (e->button() != Qt::LeftButton || !rect().contains(e->position().toPoint()))
+            return;
+        // Deferred: both callbacks rebuild the switcher, which deletes this card.
+        auto cb = closeRect().contains(e->position().toPoint()) ? onClose : onOpen;
+        if (cb)
+            QTimer::singleShot(0, cb);
+    }
+
+private:
+    QIcon m_icon;
+    QString m_title;
+    bool m_current;
+    bool m_dot;
+};
+
+QToolButton* bottomButton(QWidget* parent, const QString& name, const QString& tip)
+{
+    auto* b = new QToolButton(parent);
+    b->setObjectName(name);
+    b->setToolTip(tip);
+    b->setAccessibleName(tip);
+    b->setMinimumSize(64, 48);   // touch target: 44 minimum
+    b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    b->setFocusPolicy(Qt::NoFocus);
+    return b;
+}
+
+QIcon tinted(const QString& svg, const QColor& c, int size)
+{
+    QPixmap pm = QIcon(svg).pixmap(size, size);
+    if (pm.isNull())
+        return QIcon();
+    QPainter p(&pm);
+    p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    p.fillRect(pm.rect(), c);
+    return QIcon(pm);
+}
+
 // ── TabArea ─────────────────────────────────────────────────────────────────
 
 TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
@@ -527,6 +663,14 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     m_drag = new DragArea(m_bar);
     m_drag->setObjectName(QStringLiteral("basecampium.dragArea"));
     row->addWidget(m_drag, 1);
+    // Compact layout: the current tab's title in place of the tabs.
+    auto* dragRow = new QHBoxLayout(m_drag);
+    dragRow->setContentsMargins(4, 0, 4, 6);
+    m_title = new QLabel(m_drag);
+    m_title->setObjectName(QStringLiteral("basecampium.title"));
+    m_title->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_title->setVisible(false);
+    dragRow->addWidget(m_title, 1);
 
     auto* bell = new BellButton(m_bar);
     bell->setObjectName(QStringLiteral("basecampium.notifications"));
@@ -568,6 +712,48 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     m_stack = new QStackedWidget(this);
     m_stack->addWidget(m_newTabPage);
     column->addWidget(m_stack, 1);
+
+    // Compact layout (narrower than kCompactWidth): a bottom bar within thumb
+    // reach, Home · New tab · Tabs, and a tab switcher in place of the strip.
+    m_bottom = new QWidget(this);
+    m_bottom->setObjectName(QStringLiteral("basecampium.bottomBar"));
+    m_bottom->setAttribute(Qt::WA_StyledBackground);
+    m_bottom->setFixedHeight(kBottomBarHeight);
+    auto* bottomRow = new QHBoxLayout(m_bottom);
+    bottomRow->setContentsMargins(12, 6, 12, 6);
+    bottomRow->setSpacing(8);
+    m_homeButton = bottomButton(m_bottom, QStringLiteral("basecampium.home"), tr("Home"));
+    m_homeButton->setIconSize(QSize(22, 22));
+    connect(m_homeButton, &QToolButton::clicked, this, &TabArea::goHome);
+    QToolButton* newButton = bottomButton(m_bottom, QStringLiteral("basecampium.bottomNewTab"), tr("New tab"));
+    newButton->setText(QStringLiteral("+"));
+    connect(newButton, &QToolButton::clicked, this, [this]() { showSwitcher(false); addNewTab(); });
+    auto* tabsButton = new TabsButton(m_bottom);
+    tabsButton->setObjectName(QStringLiteral("basecampium.tabSwitcher"));
+    tabsButton->setToolTip(tr("Tabs"));
+    tabsButton->setAccessibleName(tr("Tabs"));
+    tabsButton->setMinimumSize(64, 48);
+    tabsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    tabsButton->setFocusPolicy(Qt::NoFocus);
+    tabsButton->setCheckable(true);
+    m_tabsButton = tabsButton;
+    connect(tabsButton, &QToolButton::clicked, this, [this]() { showSwitcher(!m_switcherOpen); });
+    bottomRow->addWidget(m_homeButton);
+    bottomRow->addWidget(newButton);
+    bottomRow->addWidget(tabsButton);
+    m_bottom->setVisible(false);
+    column->addWidget(m_bottom);
+
+    auto* scroll = new QScrollArea(this);
+    scroll->setObjectName(QStringLiteral("basecampium.switcher"));
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_switcherGrid = new QWidget(scroll);
+    m_switcherGrid->setAutoFillBackground(false);
+    scroll->setWidget(m_switcherGrid);
+    m_switcher = scroll;
+    m_stack->addWidget(m_switcher);
 
     connect(m_tabs, &QTabBar::currentChanged, this, &TabArea::onCurrentChanged);
     connect(m_tabs, &QTabBar::tabCloseRequested, this, [this](int i) {
@@ -616,6 +802,11 @@ void TabArea::applyTheme()
     const QColor danger = tok("error", "#E5484D");
 
     m_bar->setStyleSheet(barStyleSheet());
+    m_bottom->setStyleSheet(barStyleSheet());
+    m_switcher->setStyleSheet(barStyleSheet()
+        + QStringLiteral("QScrollArea, QScrollArea > QWidget > QWidget { background: %1; }").arg(css(page)));
+    m_homeButton->setIcon(tinted(QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/logos-lambda.svg"),
+                                 tok("textSecondary", "#A3A3A3"), 44));
     for (int i = 0; i < m_tabs->count(); ++i)
         if (TabLabel* l = labelAt(m_tabs, i))
             l->refresh();
@@ -630,7 +821,138 @@ void TabArea::applyTheme()
 void TabArea::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
+    setCompact(width() < kCompactWidth);
     updateStripWidth();
+}
+
+void TabArea::setCompact(bool on)
+{
+    if (on == m_compact)
+        return;
+    m_compact = on;
+    m_tabs->setVisible(!on);
+    m_plus->setVisible(!on);
+    m_title->setVisible(on);
+    m_bottom->setVisible(on);
+    if (auto* bell = m_bell)
+        bell->setFixedSize(on ? 48 : 40, 32);
+    if (!on)
+        showSwitcher(false);
+    updateCompactBar();
+    emit compactChanged(on);
+}
+
+int TabArea::bottomBarHeight() const
+{
+    return m_compact ? kBottomBarHeight : 0;
+}
+
+void TabArea::updateCompactBar()
+{
+    if (!m_compact)
+        return;
+    const int i = m_tabs->currentIndex();
+    const QString key = i >= 0 ? m_tabs->tabData(i).toString() : QString();
+    m_title->setText(m_switcherOpen ? tr("Tabs")
+                                    : m_title->fontMetrics().elidedText(
+                                          isNewTabKey(key) ? tr("New tab") : m_titles.value(key, key),
+                                          Qt::ElideRight, qMax(40, m_drag->width() - 8)));
+    auto* tabs = static_cast<TabsButton*>(m_tabsButton);
+    tabs->setCount(m_tabs->count());
+    bool dot = false;
+    for (int t = 0; t < m_tabs->count(); ++t)
+        if (t != i && m_attention.contains(m_tabs->tabData(t).toString()))
+            dot = true;
+    tabs->setDot(dot);
+    tabs->setChecked(m_switcherOpen);
+}
+
+void TabArea::goHome()
+{
+    showSwitcher(false);
+    // Home is the New tab page: reuse an open New tab, or open one.
+    for (int i = 0; i < m_tabs->count(); ++i) {
+        if (isNewTabKey(m_tabs->tabData(i).toString())) {
+            m_tabs->setCurrentIndex(i);
+            onCurrentChanged(i);
+            return;
+        }
+    }
+    addNewTab();
+}
+
+void TabArea::showSwitcher(bool on)
+{
+    if (on && !m_compact)
+        return;
+    if (on == m_switcherOpen) {
+        if (on)
+            rebuildSwitcher();
+        return;
+    }
+    m_switcherOpen = on;
+    if (on) {
+        rebuildSwitcher();
+        m_stack->setCurrentWidget(m_switcher);
+        m_switcher->show();
+        // Out-of-process app views draw over siblings unless hidden.
+        for (int i = 0; i < m_stack->count(); ++i)
+            if (QWidget* other = m_stack->widget(i); other != m_switcher && other->isVisible())
+                other->hide();
+        updateCompactBar();
+    } else {
+        onCurrentChanged(m_tabs->currentIndex());
+    }
+}
+
+void TabArea::rebuildSwitcher()
+{
+    delete m_switcherGrid->layout();
+    for (QWidget* w : m_switcherGrid->findChildren<QWidget*>(QString(), Qt::FindDirectChildrenOnly))
+        w->deleteLater();
+
+    auto* grid = new QGridLayout(m_switcherGrid);
+    grid->setContentsMargins(16, 12, 16, 16);
+    grid->setHorizontalSpacing(12);
+    grid->setVerticalSpacing(12);
+    auto* header = new QLabel(m_tabs->count() == 1 ? tr("1 open tab")
+                                                   : tr("%1 open tabs").arg(m_tabs->count()),
+                               m_switcherGrid);
+    header->setObjectName(QStringLiteral("basecampium.switcherHeader"));
+    grid->addWidget(header, 0, 0, 1, 2);
+
+    const int current = m_tabs->currentIndex();
+    for (int i = 0; i < m_tabs->count(); ++i) {
+        const QString key = m_tabs->tabData(i).toString();
+        const bool newTab = isNewTabKey(key);
+        auto* card = new TabCard(iconFor(newTab ? QString() : m_icons.value(key)),
+                                 newTab ? tr("New tab") : m_titles.value(key, key),
+                                 i == current, !newTab && m_attention.contains(key), m_switcherGrid);
+        card->setObjectName(QStringLiteral("basecampium.tabCard.") + key);
+        card->setAccessibleName(newTab ? tr("New tab") : m_titles.value(key, key));
+        card->onOpen = [this, key]() {
+            const int idx = indexOf(key);
+            if (idx >= 0)
+                m_tabs->setCurrentIndex(idx);
+            showSwitcher(false);
+        };
+        card->onClose = [this, key]() {
+            if (isNewTabKey(key))
+                takeTab(key);
+            else
+                emit closeRequested(key);
+            // Closing happens through the shell; refresh once it has.
+            QTimer::singleShot(0, this, [this]() {
+                if (m_switcherOpen)
+                    rebuildSwitcher();
+                updateCompactBar();
+            });
+        };
+        grid->addWidget(card, 1 + i / 2, i % 2);
+    }
+    grid->setColumnStretch(0, 1);
+    grid->setColumnStretch(1, 1);
+    grid->setRowStretch(1 + (m_tabs->count() + 1) / 2, 1);
 }
 
 void TabArea::updateStripWidth()
@@ -882,6 +1204,11 @@ void TabArea::onCurrentChanged(int index)
         if (TabLabel* l = labelAt(m_tabs, i))
             l->setActive(i == index);
     applyAttention();
+    if (m_switcherOpen) {
+        // A tab picked while the switcher is up (shortcut, notification) wins.
+        m_switcherOpen = false;
+    }
+    updateCompactBar();
     if (index < 0)
         return;
     const QString key = m_tabs->tabData(index).toString();
@@ -960,6 +1287,9 @@ void TabArea::setAttention(const QStringList& keys)
         return;
     m_attention = keys;
     applyAttention();
+    updateCompactBar();
+    if (m_switcherOpen)
+        rebuildSwitcher();
 }
 
 void TabArea::applyAttention()
