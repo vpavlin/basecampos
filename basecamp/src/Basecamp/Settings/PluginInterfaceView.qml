@@ -14,6 +14,12 @@ Item {
 
     signal backClicked()
 
+    // Narrow pane (a phone): 44 px buttons, tighter insets, signatures wrap.
+    readonly property bool narrow: width < Theme.breakpoints.medium
+    readonly property bool touch: narrow || Theme.density === "touch"
+    // False when the host shows its own back row (Settings on a phone).
+    property bool showBack: true
+
     Component.onCompleted: { loadMethods(); loadEvents() }
     onPluginNameChanged: { loadMethods(); loadEvents() }
 
@@ -56,6 +62,7 @@ Item {
 
             Button {
                 objectName: "pluginInterface.back"
+                visible: root.showBack
                 text: "← Back"
 
                 contentItem: LogosText {
@@ -67,7 +74,7 @@ Item {
 
                 background: Rectangle {
                     implicitWidth: 80
-                    implicitHeight: 32
+                    implicitHeight: root.touch ? Theme.minTouchTarget : 32
                     color: parent.pressed ? "#3d3d3d" : "#4b4b4b"
                     radius: 4
                 }
@@ -76,13 +83,13 @@ Item {
             }
 
             LogosText {
+                Layout.fillWidth: true
+                elide: Text.ElideRight
                 text: "Interface: " + root.pluginName
                 font.pixelSize: 20
                 font.weight: Font.Bold
                 color: "#ffffff"
             }
-
-            Item { Layout.fillWidth: true }
         }
 
         // Methods list
@@ -96,7 +103,7 @@ Item {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 20
+                anchors.margins: root.narrow ? 12 : 20
                 spacing: 16
 
                 LogosScrollView {
@@ -146,6 +153,9 @@ Item {
 
                                         LogosText {
                                             text: modelData.name || modelData
+                                            Layout.maximumWidth: methodColumn.width * 0.6
+                                            Layout.fillWidth: modelData.signature === undefined
+                                            elide: Text.ElideRight
                                             font.weight: Font.Bold
                                             color: "#4A90E2"
                                         }
@@ -155,9 +165,9 @@ Item {
                                             font.pixelSize: Theme.typography.secondaryText
                                             color: "#808080"
                                             visible: modelData.signature !== undefined
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WrapAnywhere
                                         }
-
-                                        Item { Layout.fillWidth: true }
 
                                         Button {
                                             objectName: "pluginInterface.call." + (modelData.name || modelData)
@@ -172,8 +182,8 @@ Item {
                                             }
 
                                             background: Rectangle {
-                                                implicitWidth: 60
-                                                implicitHeight: 26
+                                                implicitWidth: root.touch ? Theme.minTouchTarget + 16 : 60
+                                                implicitHeight: root.touch ? Theme.minTouchTarget : 26
                                                 color: parent.pressed ? "#45a049" : "#4CAF50"
                                                 radius: 4
                                             }
@@ -247,9 +257,9 @@ Item {
                                             font.pixelSize: Theme.typography.secondaryText
                                             color: "#808080"
                                             visible: modelData.signature !== undefined
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WrapAnywhere
                                         }
-
-                                        Item { Layout.fillWidth: true }
                                     }
 
                                     LogosText {

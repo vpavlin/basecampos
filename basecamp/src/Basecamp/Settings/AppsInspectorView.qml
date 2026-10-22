@@ -34,6 +34,13 @@ Item {
     signal loadRequested(string name)
     signal unloadRequested(string name)
 
+    // ─── Responsive (RESPONSIVE.md §3.5), by this pane's own width ───
+    // ≥ 760 the full table; 600–759 three key columns; < 600 cards.
+    readonly property bool cards: width < Theme.breakpoints.medium
+    readonly property bool fullTable: width >= 760
+    readonly property bool touch: cards || Theme.density === "touch"
+    onVisibleChanged: if (!visible) detailSheet.close()
+
     ModulesFilterProxy {
         id: tableModel
 
@@ -60,6 +67,7 @@ Item {
             subtitle: qsTr("UI plugins available in this installation.")
             reloadObjectName: "appsInspector.reloadButton"
             loading: root.loading
+            touch: root.touch
             visibleCount: tableModel.visibleCount
             totalCount: tableModel.totalCount
 
@@ -70,6 +78,7 @@ Item {
             id: appsTable
             objectName: "appsInspector.table"
 
+            visible: !root.cards
             Layout.fillWidth: true
             Layout.fillHeight: true
 
@@ -80,6 +89,9 @@ Item {
             emptyText: tableModel.totalCount === 0
                        ? qsTr("No UI plugins found in the plugins directory.")
                        : qsTr("No apps match the current filter.")
+
+            // Medium: a tap on a row opens its detail too (single tap, no hover).
+            onRowClicked: (index, row) => { if (!root.fullTable) detailSheet.openFor(row) }
 
             onSortRequested: function(role, order) {
                 appsTable.sortRole = role
@@ -92,46 +104,63 @@ Item {
             // only finds delegates the ListView has actually created.
             Component.onCompleted: if (view) view.cacheBuffer = 20000
 
-            columns: [
-                LogosTableColumn {
+            // Full table when it fits; three key columns when it doesn't
+            // (RESPONSIVE.md §3.5, medium). Narrower still: cards (see below).
+            columns: root.fullTable
+                     ? [cols.app, cols.version, cols.status, cols.description, cols.actions]
+                     : [cols.app, cols.status, cols.actions, cols.more]
+
+            QtObject {
+                id: cols
+                property LogosTableColumn app: LogosTableColumn {
                     title: qsTr("App")
                     role: "label"
                     minWidth: 170
                     preferredWidth: 230
                     sortable: true
                     cellDelegate: appCellComponent
-                },
-                LogosTableColumn {
+                }
+                property LogosTableColumn version: LogosTableColumn {
                     title: qsTr("Version")
                     role: "version"
                     minWidth: 80
                     preferredWidth: 100
                     sortable: true
                     cellDelegate: versionCellComponent
-                },
-                LogosTableColumn {
+                }
+                property LogosTableColumn status: LogosTableColumn {
                     title: qsTr("Status")
                     role: "statusText"
                     minWidth: 110
                     preferredWidth: 130
                     sortable: true
                     cellDelegate: statusCellComponent
-                },
-                LogosTableColumn {
+                }
+                property LogosTableColumn description: LogosTableColumn {
                     title: qsTr("Description")
                     role: "description"
                     minWidth: 160
                     preferredWidth: 200
                     fillWidth: true
-                },
-                LogosTableColumn {
+                }
+                property LogosTableColumn actions: LogosTableColumn {
                     title: ""
                     minWidth: 200
                     preferredWidth: 220
+                    fillWidth: !root.fullTable
                     alignment: Qt.AlignRight | Qt.AlignVCenter
                     cellDelegate: actionsCellComponent
                 }
-            ]
+                property LogosTableColumn more: LogosTableColumn {
+                    title: ""
+                    minWidth: 56
+                    preferredWidth: 56
+                    maxWidth: 56
+                    cellPadding: 0
+                    alignment: Qt.AlignHCenter | Qt.AlignVCenter
+                    cellDelegate: moreCellComponent
+                }
+            }
 
             Component {
                 id: appCellComponent
@@ -224,6 +253,23 @@ Item {
                 }
             }
 
+            // Medium only: ⋯ opens the row's detail sheet with the dropped columns.
+            Component {
+                id: moreCellComponent
+
+                Item {
+                    LogosIconButton {
+                        objectName: "appsInspector.more." + (rowItem && rowItem.name ? rowItem.name : "")
+                        anchors.centerIn: parent
+                        size: Theme.minTouchTarget
+                        flat: true
+                        iconSource: LogosIcons.more
+                        Accessible.name: qsTr("Details")
+                        onClicked: detailSheet.openFor(rowItem)
+                    }
+                }
+            }
+
             Component {
                 id: actionsCellComponent
 
@@ -242,6 +288,35 @@ Item {
                 }
             }
         }
+
+        // Narrow pane: the same rows as cards. Sorted by name as the table is
+        // by default; no column headers to sort with.
+        InspectorCardList {
+            objectName: "appsInspector.cards"
+            visible: root.cards
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.leftMargin: Theme.spacing.large
+            Layout.rightMargin: Theme.spacing.large
+            model: root.cards ? tableModel : null
+            busy: root.loading
+            emptyText: tableModel.totalCount === 0
+                       ? qsTr("No UI plugins found in the plugins directory.")
+                       : qsTr("No apps match the current filter.")
+            onLoadToggleRequested: row => row.isLoaded ? root.unloadRequested(row.name)
+                                                       : root.loadRequested(row.name)
+        }
+    }
+
+    // Medium (three key columns): the row's detail, dropped columns included,
+    // as a sheet over the right side of this pane. Hidden in the other layouts.
+    InspectorDetailSheet {
+        id: detailSheet
+        anchors.fill: parent
+        allowed: !root.cards && !root.fullTable && root.visible
+        busy: root.loading
+        onLoadToggleRequested: r => r.isLoaded ? root.unloadRequested(r.name)
+                                               : root.loadRequested(r.name)
     }
 
     // Same Reload feedback as the App Manager / Package Manager panels.

@@ -20,6 +20,8 @@ Item {
     property bool loading: false
     property int visibleCount: 0
     property int totalCount: 0
+    // Touch (a phone, or touch density): the Reload button is 44 px tall.
+    property bool touch: false
 
     signal reloadClicked()
 
@@ -80,7 +82,7 @@ Item {
                 Layout.minimumWidth: 80
                 Layout.preferredWidth: 130
                 Layout.maximumWidth: 130
-                Layout.preferredHeight: 40
+                Layout.preferredHeight: root.touch ? Theme.minTouchTarget : 40
                 radius: Theme.spacing.radiusLarge
                 text: qsTr("Reload")
                 enabled: !root.loading

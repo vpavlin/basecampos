@@ -15,4 +15,4 @@ On a phone an always-on search bar costs a full row above every list (Alisher's 
 - Search is one tap further on phones; an active query is visible only while unfolded (it stays unfolded while it has text, so it can't hide a filter).
 
 ## Evidence
-DS fork a365240 (component, scaffold, lab Mail + Table), folded / unfolded renders at 390; Settings adopting it (in progress).
+DS fork a365240 (component, scaffold, lab Mail + Table), folded / unfolded renders at 390; Settings uses it at the right of the "‹ Settings" bar (bc-settings c3a4624; folded, unfolded, filtering, cleared at 390).

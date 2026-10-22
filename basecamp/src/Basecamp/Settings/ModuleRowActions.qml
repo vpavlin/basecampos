@@ -22,6 +22,10 @@ RowLayout {
     property bool interfaceEnabled: false
     property bool busy: false
     property bool locked: false
+    // Touch: 44 px tall buttons. Stretch: the buttons share the row's width
+    // equally (an inspector card on a phone).
+    property bool touch: false
+    property bool stretch: false
 
     signal loadToggleRequested()
     signal interfaceRequested()
@@ -33,7 +37,8 @@ RowLayout {
         // toggle — the "Load"/"Unload" labels repeat across rows and tables.
         objectName: "moduleRow.loadToggle." + (root.row && root.row.name ? root.row.name : "")
         Layout.preferredWidth: 100
-        Layout.preferredHeight: 40
+        Layout.fillWidth: root.stretch
+        Layout.preferredHeight: root.touch ? Theme.minTouchTarget : 40
         radius: Theme.spacing.radiusLarge
         visible: root.row && !root.row.isMainUi
         enabled: !root.busy && !root.locked
@@ -45,7 +50,8 @@ RowLayout {
 
     LogosButton {
         Layout.preferredWidth: 100
-        Layout.preferredHeight: 40
+        Layout.fillWidth: root.stretch
+        Layout.preferredHeight: root.touch ? Theme.minTouchTarget : 40
         radius: Theme.spacing.radiusLarge
         visible: root.interfaceEnabled && root.row && root.row.isLoaded
         text: qsTr("Interface")

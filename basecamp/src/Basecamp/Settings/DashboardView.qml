@@ -2,14 +2,20 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Logos.Controls
+import Logos.Theme
 
 Item {
     id: root
 
+    // Responsive: page margin by this pane's width (40 on desktop as before,
+    // 16 on a phone); commit rows stack name over hash when two columns
+    // would squeeze the hash.
+    readonly property bool narrow: scroll.availableWidth < 520
+
     LogosScrollView {
         id: scroll
         anchors.fill: parent
-        anchors.margins: 40
+        anchors.margins: Theme.pageMargin(root.width)
         clip: true
 
         ColumnLayout {
@@ -72,9 +78,12 @@ Item {
 
                 Repeater {
                     model: backend.buildCommits
-                    delegate: RowLayout {
+                    delegate: GridLayout {
                         Layout.fillWidth: true
-                        spacing: 12
+                        Layout.bottomMargin: root.narrow ? 6 : 0
+                        columns: root.narrow ? 1 : 2
+                        columnSpacing: 12
+                        rowSpacing: 0
 
                         // Module name and commit hash are both copy targets, so
                         // they wrap instead of eliding — an elided hash cannot
@@ -83,7 +92,8 @@ Item {
                             text: modelData.name
                             color: Theme.tokenOr("textSecondary", "#a0a0a0")
                             font.pixelSize: 13
-                            Layout.preferredWidth: 260
+                            Layout.preferredWidth: root.narrow ? -1 : 260
+                            Layout.fillWidth: root.narrow
                             Layout.alignment: Qt.AlignTop
                             wrapMode: TextEdit.WrapAnywhere
                         }

@@ -16,6 +16,13 @@ Item {
     onVisibleChanged: if (visible && root.prefs) root.prefs.rescanShells()
     id: root
 
+    // Responsive, by this pane's own width (RESPONSIVE.md §3.2): one column
+    // that stops at 720; on a phone the pickers fill the width (up to 360),
+    // a control's help text drops under it, and pickers are 44 px tall.
+    readonly property bool compact: Theme.windowClass(width) === "compact"
+    readonly property bool touch: compact || Theme.density === "touch"
+    readonly property int pickerHeight: touch ? Theme.minTouchTarget : Theme.components.combo.height
+
     QtObject {
         id: d
 
@@ -144,7 +151,7 @@ Item {
         clip: true
 
         ColumnLayout {
-            width: scroll.availableWidth
+            width: Math.min(scroll.availableWidth, 720)
             spacing: Theme.spacing.large
 
             ColumnLayout {
@@ -180,7 +187,9 @@ Item {
                 LogosComboBox {
                     id: themeCombo
                     objectName: "appearance.themeCombo"
-                    Layout.preferredWidth: 360
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 360
+                    Layout.preferredHeight: root.pickerHeight
                     model: d.themes
                     textRole: "label"
                     currentIndex: d.indexOf(Theme.currentTheme)
@@ -204,9 +213,11 @@ Item {
                     wrapMode: Text.WordWrap
                 }
 
-                RowLayout {
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: Theme.spacing.medium
+                    columns: root.compact ? 1 : 2
+                    columnSpacing: Theme.spacing.medium
+                    rowSpacing: Theme.spacing.small
 
                     LogosButton {
                         objectName: "appearance.uploadButton"
@@ -267,7 +278,9 @@ Item {
                 LogosComboBox {
                     id: densityCombo
                     objectName: "appearance.densityCombo"
-                    Layout.preferredWidth: 360
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 360
+                    Layout.preferredHeight: root.pickerHeight
                     readonly property var values: ["", "compact", "comfortable", "touch"]
                     model: [qsTr("Theme default"), qsTr("Compact"), qsTr("Comfortable"),
                             qsTr("Touch (larger targets)")]
@@ -309,6 +322,7 @@ Item {
                 }
 
                 RowLayout {
+                    Layout.fillWidth: true
                     spacing: Theme.spacing.medium
 
                     // One list: the built-in arrangements of Basecamp's own shell
@@ -316,7 +330,9 @@ Item {
                     LogosComboBox {
                         id: shellCombo
                         objectName: "customisation.shellCombo"
-                        Layout.preferredWidth: 360
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: 360
+                        Layout.preferredHeight: root.pickerHeight
                         readonly property var packages: root.prefs ? root.prefs.shellPackages : []
                         readonly property var values: ["builtin:sidebar", "builtin:desktop"].concat(packages.map(p => p.id))
                         model: [qsTr("Default  by Logos"), qsTr("Desktop  by Logos")].concat(
@@ -325,7 +341,7 @@ Item {
                             ? (root.prefs.activeShell !== "" ? root.prefs.activeShell : "builtin:" + root.prefs.activeLayout) : ""
                         readonly property string chosen: root.prefs
                             ? (root.prefs.shell !== "" ? root.prefs.shell : "builtin:" + root.prefs.layout) : ""
-                        function sync() { currentIndex = Math.max(0, values.indexOf(chosen)) }
+                        function sync() { currentIndex = Math.max(0, (values || []).indexOf(chosen)) }
                         Component.onCompleted: sync()
                         onPackagesChanged: sync()
                         onChosenChanged: sync()
@@ -353,14 +369,19 @@ Item {
                     }
                 }
 
-                RowLayout {
-                    spacing: Theme.spacing.small
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: root.compact ? 1 : 2
+                    columnSpacing: Theme.spacing.small
+                    rowSpacing: Theme.spacing.small
                     visible: shellCombo.chosen !== shellCombo.active
 
                     LogosText {
+                        Layout.fillWidth: root.compact
                         text: qsTr("Takes effect the next time you start Basecamp.")
                         font.pixelSize: Theme.typography.secondaryText
                         color: Theme.palette.warning
+                        wrapMode: Text.WordWrap
                     }
                     LogosButton {
                         objectName: "customisation.shellRestart"
@@ -405,7 +426,9 @@ Item {
 
                 LogosComboBox {
                     objectName: "appearance.layoutCombo"
-                    Layout.preferredWidth: 360
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 360
+                    Layout.preferredHeight: root.pickerHeight
                     readonly property var values: ["sidebar", "desktop"]
                     model: [qsTr("Window (default)"), qsTr("Desktop")]
                     currentIndex: root.prefs ? Math.max(0, values.indexOf(root.prefs.layout)) : 0
@@ -491,7 +514,9 @@ Item {
 
                 LogosComboBox {
                     objectName: "appearance.wallpaperFit"
-                    Layout.preferredWidth: 360
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 360
+                    Layout.preferredHeight: root.pickerHeight
                     readonly property var values: ["fit", "fill", "stretch"]
                     model: [qsTr("Fit: whole image, blurred edges"), qsTr("Fill: cover the screen, crop"),
                             qsTr("Stretch")]
@@ -609,7 +634,7 @@ Item {
         id: addShellDialog
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: 480
+        width: Math.min(480, parent ? parent.width - 32 : 480)
         modal: true
         title: qsTr("Add a shell")
         message: qsTr("Shells are packages (.lgx), installed like apps. In Package Manager, choose Install Local Package and pick the shell's .lgx file. It then appears in this list; installing doesn't switch to it.")

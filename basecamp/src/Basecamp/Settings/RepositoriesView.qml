@@ -81,6 +81,12 @@ Item {
             && duplicateSignature !== dismissedDuplicateSignature
     }
 
+    // Responsive (RESPONSIVE.md §3.2 / §4): one column that stops at 720;
+    // on a phone or at touch density every control is at least 44 px tall.
+    readonly property bool compact: Theme.windowClass(width) === "compact"
+    readonly property bool touch: compact || Theme.density === "touch"
+    readonly property int controlHeight: touch ? Theme.minTouchTarget : 40
+
     LogosScrollView {
         id: scroll
         anchors.fill: parent
@@ -88,19 +94,23 @@ Item {
         clip: true
 
         ColumnLayout {
-            width: scroll.availableWidth
+            width: Math.min(scroll.availableWidth, 720)
             spacing: Theme.spacing.large
 
-            // Header.
-            RowLayout {
+            // Header. Narrow: Refresh drops under the title.
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: Theme.spacing.medium
+                columns: root.compact ? 1 : 2
+                columnSpacing: Theme.spacing.medium
+                rowSpacing: Theme.spacing.small
 
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spacing.tiny
 
                     LogosText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
                         text: qsTr("Package Repositories")
                         font.pixelSize: Theme.typography.panelTitleText
                         font.weight: Theme.typography.weightMedium
@@ -120,7 +130,7 @@ Item {
                     text: root.loading ? qsTr("Refreshing…") : qsTr("Refresh")
                     enabled: !root.loading
                     implicitWidth: 120
-                    implicitHeight: 36
+                    implicitHeight: root.touch ? Theme.minTouchTarget : 36
                     onClicked: root.refreshRequested()
                 }
             }
@@ -149,14 +159,21 @@ Item {
                         font.pixelSize: Theme.typography.secondaryText
                         wrapMode: Text.WordWrap
                     }
-                    LogosIconButton {
-                        objectName: "repositories.errorDismiss"
-                        iconSource: LogosIcons.close
-                        size: 20
-                        iconSize: 14
-                        iconColor: Theme.palette.textTertiary
-                        background: Item {}
-                        onClicked: d.lastError = ""
+                    // 20 px glyph, 44 px hit area on touch.
+                    Item {
+                        Layout.alignment: Qt.AlignTop
+                        implicitWidth: root.touch ? Theme.minTouchTarget : 20
+                        implicitHeight: implicitWidth
+                        LogosIconButton {
+                            objectName: "repositories.errorDismiss"
+                            anchors.centerIn: parent
+                            iconSource: LogosIcons.close
+                            size: parent.implicitWidth
+                            iconSize: 14
+                            iconColor: Theme.palette.textTertiary
+                            background: Item {}
+                            onClicked: d.lastError = ""
+                        }
                     }
                 }
             }
@@ -215,7 +232,7 @@ Item {
                     objectName: "repositories.downloadSource"
                     Layout.topMargin: Theme.spacing.tiny
                     Layout.preferredWidth: 220
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: root.controlHeight
                     model: d.downloadSourceLabels
                     currentIndex: d.downloadSourceIndex
                     onActivated: function(idx) {
@@ -255,6 +272,8 @@ Item {
                         id: urlInput
                         objectName: "repositories.urlField"
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        Layout.preferredHeight: root.controlHeight
                         placeholderText: qsTr("https://example.com/logos-repo.json")
                         text: d.newRepoUrl
                         onTextChanged: if (text !== d.newRepoUrl) d.newRepoUrl = text
@@ -263,8 +282,8 @@ Item {
                         objectName: "repositories.addButton"
                         text: qsTr("Add")
                         enabled: d.newRepoUrl.trim().length > 0
-                        implicitWidth: 100
-                        implicitHeight: 40
+                        implicitWidth: root.touch ? 72 : 100
+                        implicitHeight: root.controlHeight
                         onClicked: root.addRequested(d.newRepoUrl.trim())
                     }
                 }
@@ -378,6 +397,8 @@ Item {
                                 spacing: Theme.spacing.small
                                 LogosSwitch {
                                     objectName: "repositories.enableSwitch." + url
+                                    Layout.preferredWidth: Math.max(implicitWidth, Theme.minTouchTarget)
+                                    Layout.preferredHeight: root.touch ? Theme.minTouchTarget : implicitHeight
                                     checked: isEnabled
                                     onToggled: root.setEnabledRequested(url, checked)
                                 }
@@ -430,7 +451,7 @@ Item {
 
         anchors.centerIn: parent
         title: qsTr("Remove default repository?")
-        width: 420
+        width: Math.min(420, root.width - 32)
 
         message: qsTr("The default Logos repository provides the official package catalog. "
                       + "Copy the URL first if you want to restore it later — you can re-add it "
