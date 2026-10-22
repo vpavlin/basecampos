@@ -49,11 +49,13 @@
         let
           common = import ./nix/common.nix { inherit pkgs; };
           storybookDrv = import ./nix/storybook.nix { inherit pkgs common; };
+          responsiveLabDrv = import ./nix/responsive-lab.nix { inherit pkgs common; };
           dirBundler = nix-bundle-dir.bundlers.${buildSystemFor system}.qtApp;
         in
         rec {
           default = import ./nix/library.nix { inherit pkgs common; };
           storybook = storybookDrv;
+          responsive-lab = responsiveLabDrv;
           tests = import ./nix/tests.nix { inherit pkgs common; };
 
           # Self-contained tree: Qt libs + QML modules copied next to the

@@ -18,7 +18,9 @@ import Logos.Controls
 //                        / full copy).
 //     showCopyButton     Show the trailing LogosCopyButton (default true).
 //     textColor          Selectable text color (default Theme.palette.text).
-//     buttonSize         Copy button hit-target size in px (default 24).
+//     buttonSize         Copy button hit-target size in px (default 24). At
+//                        Theme.density "touch" the button floors it at
+//                        Theme.minTouchTarget (icon size unchanged).
 //     iconSize           Copy icon footprint in px (default 16).
 //     feedbackDuration   Copied-state duration in ms (default 1500).
 //     feedbackText       Feedback label after copy (default "Copied").
@@ -59,7 +61,7 @@ Control {
     opacity: enabled ? 1.0 : 0.4
 
     implicitWidth: contentItem.implicitWidth
-    implicitHeight: Math.max(selectable.implicitHeight, root.showCopyButton ? root.buttonSize : 0)
+    implicitHeight: Math.max(selectable.implicitHeight, root.showCopyButton ? copyButton.implicitHeight : 0)
 
     contentItem: RowLayout {
         spacing: Theme.spacing.small
@@ -68,7 +70,7 @@ Control {
             id: selectable
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignVCenter
-            Layout.preferredHeight: Math.max(implicitHeight, root.showCopyButton ? root.buttonSize : implicitHeight)
+            Layout.preferredHeight: Math.max(implicitHeight, root.showCopyButton ? copyButton.implicitHeight : implicitHeight)
             text: root.text
             color: root.textColor
             verticalAlignment: TextEdit.AlignVCenter
@@ -79,8 +81,8 @@ Control {
             id: copyButton
             Layout.alignment: Qt.AlignVCenter
             visible: root.showCopyButton
-            Layout.preferredWidth: root.showCopyButton ? root.buttonSize : 0
-            Layout.preferredHeight: root.showCopyButton ? root.buttonSize : 0
+            Layout.preferredWidth: root.showCopyButton ? copyButton.implicitWidth : 0
+            Layout.preferredHeight: root.showCopyButton ? copyButton.implicitHeight : 0
             value: root.copyText.length > 0 ? root.copyText : root.text
             size: root.buttonSize
             iconSize: root.iconSize

@@ -17,6 +17,8 @@ import Logos.Icons
 //     shown            Whether the notice is displayed (default true); `visible`
 //                      follows it.
 //     closable         Show a dismiss button (default false). Emits dismissed().
+//                      The ✕ is 20 px; at Theme.density "touch" its button is
+//                      Theme.minTouchTarget square (icon unchanged).
 //     actions          Items laid out under the message, supplied by the caller
 //                      and reparented
 //     hide()           Imperative close; emits dismissed().
@@ -182,7 +184,7 @@ Control {
             Layout.alignment: Qt.AlignTop
             visible: root.closable
             flat: true
-            size: 20
+            size: Theme.density === "touch" ? Theme.minTouchTarget : 20
             iconSize: 12
             iconSource: LogosIcons.close
             iconColor: Theme.palette.textTertiary

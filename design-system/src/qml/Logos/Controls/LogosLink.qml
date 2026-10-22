@@ -23,6 +23,10 @@ import Logos.Controls
 //
 // Joins the Tab focus chain; Space/Enter show pressed then call activate().
 //
+// Touch: at Theme.density "touch" the link is padded (transparently) to at
+// least Theme.minTouchTarget in each direction, text centred; the label is
+// unchanged. Other densities: the label's own size.
+//
 // Example:
 //     LogosLink {
 //         text: "Docs"
@@ -57,8 +61,13 @@ Control {
     activeFocusOnTab: true
     opacity: enabled ? 1.0 : 0.4
 
-    implicitWidth: label.implicitWidth
-    implicitHeight: label.implicitHeight
+    readonly property bool _touch: Theme.density === "touch"
+    implicitWidth: _touch ? Math.max(label.implicitWidth, Theme.minTouchTarget) : label.implicitWidth
+    implicitHeight: _touch ? Math.max(label.implicitHeight, Theme.minTouchTarget) : label.implicitHeight
+    topPadding: _touch ? Math.max(0, (Theme.minTouchTarget - label.implicitHeight) / 2) : 0
+    bottomPadding: topPadding
+    leftPadding: _touch ? Math.max(0, (Theme.minTouchTarget - label.implicitWidth) / 2) : 0
+    rightPadding: leftPadding
 
     Accessible.role: Accessible.Link
     Accessible.name: root.text

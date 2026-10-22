@@ -27,7 +27,9 @@ import Logos.Icons
 //     textInput        the inner TextInput (cursor, selection, etc.)
 //     fieldItem        the inner LogosTextField
 //     iconItem         the leading icon container
-//     clearItem        the trailing clear button
+//     clearItem        the trailing clear button (a 24 px circle; at touch
+//                      density its hit area is Theme.minTouchTarget square,
+//                      the circle stays 24 px and centred)
 //     shortcutItem     the trailing shortcut chip
 //
 // Signal:
@@ -153,8 +155,8 @@ Control {
 
             Layout.alignment: Qt.AlignVCenter
             visible: d.clearVisible
-            implicitWidth: 24
-            implicitHeight: 24
+            implicitWidth: Theme.density === "touch" ? Theme.minTouchTarget : 24
+            implicitHeight: implicitWidth
             focusPolicy: Qt.NoFocus
             activeFocusOnTab: false
             Accessible.name: qsTr("Clear search")
@@ -163,10 +165,15 @@ Control {
                 field.textInput.forceActiveFocus()
             }
 
-            background: Rectangle {
-                radius: width / 2
-                color: clearButton.isActive ? Theme.palette.accentOrange
-                                            : Theme.palette.surface
+            background: Item {
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 24
+                    height: 24
+                    radius: width / 2
+                    color: clearButton.isActive ? Theme.palette.accentOrange
+                                                : Theme.palette.surface
+                }
             }
 
             contentItem: Item {

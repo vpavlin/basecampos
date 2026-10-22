@@ -20,6 +20,12 @@ import Logos.Theme
 //         }
 //     }
 //
+// Touch (Theme.density "touch"): a long-press on the tip's parent opens it,
+// since there is no hover; a tap on the parent while it shows closes it, and
+// a tap outside the parent closes it (ToolTip's default close policy).
+//     openOnLongPress   default true; set false for tips the control opens
+//                       itself (e.g. LogosCopyButton's "Copied")
+//
 ToolTip {
     id: root
 
@@ -44,6 +50,7 @@ ToolTip {
     // number to pin. Either axis can be manual independently.
     property var manualX: undefined
     property var manualY: undefined
+    property bool openOnLongPress: true
 
     // Exposed for inspection (e.g., from tests). Read-only.
     readonly property alias backgroundItem: bubble
@@ -101,6 +108,16 @@ ToolTip {
         target: root
         property: "y"
         value: root.manualY !== undefined ? root.manualY : d.targetY
+    }
+
+    // Long-press to open on touch. Attached to the tip's parent (the thing the
+    // tip explains); only exists in effect at touch density.
+    TapHandler {
+        parent: root.parent
+        enabled: root.openOnLongPress && Theme.density === "touch"
+                 && !!root.parent && root.text.length > 0
+        onLongPressed: root.open()
+        onTapped: if (root.visible) root.close()
     }
 
     delay: 200

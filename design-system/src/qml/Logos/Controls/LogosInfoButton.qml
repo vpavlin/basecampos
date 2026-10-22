@@ -20,6 +20,10 @@ import Logos.Controls
 // it annotates. An icon-button footprint would push it out of alignment. That
 // is also why it does not use LogosIcons.info.
 //
+// Touch: at Theme.density "touch" the control is Theme.minTouchTarget square
+// (the hit area) with the 16 px ring centred in it via insets/padding, so the
+// glyph looks the same but the tap lands. Other densities: 16 × 16.
+//
 // Public API:
 //     text         the explanation. Wraps. Empty renders an empty dialog
 //     title        dialog heading. Empty hides the header
@@ -84,11 +88,18 @@ LogosAbstractButton {
         id: d
 
         readonly property bool lit: root.hovered || dialog.visible
+        // Transparent margin around the 16 px ring that takes the tap on touch.
+        readonly property real hitPad: Theme.density === "touch"
+                                       ? (Theme.minTouchTarget - 16) / 2 : 0
     }
 
-    implicitWidth: 16
-    implicitHeight: 16
-    padding: 0
+    implicitWidth: 16 + 2 * d.hitPad
+    implicitHeight: 16 + 2 * d.hitPad
+    padding: d.hitPad
+    topInset: d.hitPad
+    bottomInset: d.hitPad
+    leftInset: d.hitPad
+    rightInset: d.hitPad
 
     Accessible.role: Accessible.Button
     Accessible.name: qsTr("More information")

@@ -3,6 +3,9 @@ import QtQuick.Controls
 
 import Logos.Theme
 
+// At touch density the control is at least Theme.minTouchTarget high, so a
+// press anywhere along the row (the track and the space around it) moves the
+// handle; the 4 px track and 18 px handle are drawn as on desktop.
 Slider {
     id: root
 
@@ -14,6 +17,12 @@ Slider {
     readonly property alias trackItem: track
     readonly property alias fillItem: fill
     readonly property alias handleItem: handle
+
+    implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
+                            implicitHandleWidth + leftPadding + rightPadding)
+    implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
+                             implicitHandleHeight + topPadding + bottomPadding,
+                             Theme.density === "touch" ? Theme.minTouchTarget : 0)
 
     focusPolicy: Qt.StrongFocus
     activeFocusOnTab: true

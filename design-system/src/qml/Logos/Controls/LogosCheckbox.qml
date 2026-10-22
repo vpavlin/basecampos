@@ -34,6 +34,17 @@ CheckBox {
     spacing: Theme.spacing.small
     padding: Theme.spacing.tiny
 
+    // Touch density: the whole row (indicator + label) is the hit area and is
+    // at least Theme.minTouchTarget in both directions; the indicator itself
+    // keeps its size. Elsewhere this is the Basic style's own formula.
+    implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
+                            implicitContentWidth + leftPadding + rightPadding,
+                            Theme.density === "touch" ? Theme.minTouchTarget : 0)
+    implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
+                             implicitContentHeight + topPadding + bottomPadding,
+                             implicitIndicatorHeight + topPadding + bottomPadding,
+                             Theme.density === "touch" ? Theme.minTouchTarget : 0)
+
     font.family: Theme.typography.family
     font.pixelSize: Theme.typography.primaryText
     opacity: enabled ? 1.0 : 0.5

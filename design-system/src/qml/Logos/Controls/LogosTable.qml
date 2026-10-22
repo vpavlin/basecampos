@@ -29,6 +29,12 @@ import Logos.Icons
 // Selection (when selectionMode !== None): a checkbox column is auto-prepended
 // at index 0. In Multi mode the header gets a select-all checkbox.
 //
+// Touch (Theme.density "touch"): headerHeight defaults to Theme._size(36)
+// (44); the checkbox column is Theme.minTouchTarget wide and its whole cell
+// toggles the row (the checkbox glyph is unchanged); a row shows
+// Theme.components.listItem.backgroundPressed while pressed and
+// .backgroundSelected while selected. Other densities render as before.
+//
 // Example:
 //     LogosTable {
 //         model: packages
@@ -66,7 +72,7 @@ Rectangle {
 
     // ─── Properties: dimensions ───
     property int rowHeight: 64
-    property int headerHeight: 36
+    property int headerHeight: d._touch ? Theme._size(36) : 36
 
     // Default horizontal inset applied to every body cell + header cell
     property int defaultCellPadding: Theme.spacing.medium
@@ -90,6 +96,9 @@ Rectangle {
     property QtObject d: QtObject {
         id: d
 
+        readonly property bool _touch: Theme.density === "touch"
+        readonly property int _selectionWidth: _touch ? Theme.minTouchTarget : 40
+
         readonly property var effectiveColumns: {
             return root.selectionMode !== LogosTable.None
                 ? [_selectionColumn].concat(root.columns)
@@ -110,9 +119,9 @@ Rectangle {
         }
 
         property LogosTableColumn _selectionColumn: LogosTableColumn {
-            minWidth: 40
-            preferredWidth: 40
-            maxWidth: 40
+            minWidth: d._selectionWidth
+            preferredWidth: d._selectionWidth
+            maxWidth: d._selectionWidth
             cellPadding: 0
             cellDelegate: _selectionCell
             headerCellDelegate: _selectionHeader
@@ -356,6 +365,16 @@ Rectangle {
             readonly property var capturedRowItem: rowItem
             readonly property int capturedRowIndex: rowIndex
 
+            // Touch only: pressed / selected row background (desktop unchanged).
+            Rectangle {
+                anchors.fill: parent
+                z: -2
+                visible: d._touch && color.a > 0
+                color: rowMouse.pressed ? Theme.components.listItem.backgroundPressed
+                     : d._isSelected(_rowRoot.capturedRowIndex) ? Theme.components.listItem.backgroundSelected
+                     : "transparent"
+            }
+
             RowLayout {
                 anchors.fill: parent
                 spacing: 0
@@ -428,7 +447,10 @@ Rectangle {
     Component {
         id: _selectionCell
 
-        Item {
+        // The whole cell toggles on touch; elsewhere only the checkbox does.
+        MouseArea {
+            enabled: d._touch
+            onClicked: d._toggleRow(rowIndex)
             LogosCheckbox {
                 anchors.centerIn: parent
                 checked: d._isSelected(rowIndex)
@@ -440,7 +462,9 @@ Rectangle {
     Component {
         id: _selectionHeader
 
-        Item {
+        MouseArea {
+            enabled: d._touch && root.selectionMode === LogosTable.Multi
+            onClicked: d._toggleAll()
             LogosCheckbox {
                 anchors.centerIn: parent
                 visible: root.selectionMode === LogosTable.Multi

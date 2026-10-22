@@ -18,6 +18,10 @@ import Logos.Icons
 //     copy()             Imperative copy helper (same as a click).
 //     copied(string value)  Emitted after a successful clipboard write.
 //
+// Touch: at Theme.density "touch" the button's footprint (and hit area) is at
+// least Theme.minTouchTarget square; the 16 px icon stays centred and the
+// button is flat, so only the tap area grows. Other densities: `size`.
+//
 // Read-only inspection aliases (for tests):
 //     feedbackTipItem   LogosToolTip shown after copy (open/close, position).
 //                       Closing it also clears recentlyCopied (same as the
@@ -46,6 +50,8 @@ LogosIconButton {
     flat: true
     size: 24
     iconSize: 16
+    implicitWidth: Theme.density === "touch" ? Math.max(size, Theme.minTouchTarget) : size
+    implicitHeight: implicitWidth
     iconSource: d.recentlyCopied ? LogosIcons.check : LogosIcons.copy
     iconColor: d.recentlyCopied ? Theme.palette.success
                                 : (root.isActive ? Theme.palette.text
@@ -95,6 +101,7 @@ LogosIconButton {
         delay: 0
         timeout: -1
         closePolicy: Popup.NoAutoClose
+        openOnLongPress: false
         onClosed: {
             d.recentlyCopied = false
             d.resetTimer.stop()

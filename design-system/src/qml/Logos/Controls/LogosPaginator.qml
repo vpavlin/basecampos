@@ -21,10 +21,20 @@ import Logos.Icons
 //     iconColor         tint applied to the four nav arrow icons
 //
 //     pageCount         (read-only) derived as max(1, ceil(totalCount / pageSize))
+//     compactForm       (read-only) true while the paginator is narrower than
+//                       its full form's minimum (arrows squeezed to 24 px);
+//                       it then shows "‹ 4 / 10 ›"
+//                       (first/last and page cells hidden). implicitWidth is
+//                       always the full form's width, so an unconstrained
+//                       paginator never collapses.
+//
+// Sizes: arrow buttons and page cells are 36 px, Theme._size(36) (44) at
+// Theme.density "touch"; the page-size chip matches.
 //
 // Read-only inspection aliases:
 //     infoLabel, firstButton, prevButton, nextButton, lastButton,
 //     pagesItem (the Row of cells/ellipses), pageCells (the Repeater),
+//     compactLabel (the "4 / 10" text of the compact form),
 //     pageSizeSelector (the LogosComboBox), _d (private state)
 //
 // Signals:
@@ -67,6 +77,7 @@ Control {
 
     readonly property int pageCount: Math.max(
         1, Math.ceil(totalCount / Math.max(1, pageSize)))
+    readonly property bool compactForm: width > 0 && width < d.fullMinWidth - 0.5
 
     // Exposed for inspection (e.g., from tests). Read-only.
     readonly property alias infoLabel: infoLabelText
@@ -77,6 +88,7 @@ Control {
     readonly property alias pagesItem: pagesRow
     readonly property alias pageCells: cellRepeater
     readonly property alias pageSizeSelector: sizeSelector
+    readonly property alias compactLabel: compactText
     readonly property alias _d: d 
 
     signal pageRequested(int page)
@@ -84,6 +96,33 @@ Control {
 
     QtObject {
         id: d
+
+        // Edge of an arrow button / page cell.
+        readonly property int cell: Theme.density === "touch" ? Theme._size(36) : 36
+        // Minimum width the arrow buttons may shrink to.
+        readonly property int minArrow: Theme.density === "touch" ? d.cell : 24
+
+        // Width of the full form (what the RowLayout asks for when nothing is
+        // hidden by the compact form), worked out from the parts so it does
+        // not depend on which form is showing.
+        // fullMinWidth: the same with every part at its Layout.minimumWidth
+        // (arrows d.minArrow, info label 0, page-size chip 80).
+        readonly property real fullWidth: formWidth(false)
+        readonly property real fullMinWidth: formWidth(true)
+        function formWidth(minimum) {
+            const arrow = minimum ? d.minArrow : d.cell
+            const gap = Theme.spacing.small
+            const n = cellRepeater.count
+            const widths = [0, 0]                       // the two fillers
+            if (root.pageInfoText.length > 0) widths.push(minimum ? 0 : infoLabelText.implicitWidth)
+            if (root.showFirstLast) widths.push(arrow, arrow)
+            if (root.showPrevNext) widths.push(arrow, arrow)
+            widths.push(n > 0 ? n * d.cell + (n - 1) * gap : 0)
+            if (root.pageSizeOptions && root.pageSizeOptions.length > 0) widths.push(minimum ? 80 : 130)
+            let w = 0
+            for (let i = 0; i < widths.length; ++i) w += widths[i]
+            return w + (widths.length - 1) * gap + root.leftPadding + root.rightPadding
+        }
 
         // Keyboard focus retention across page changes (disabled «/‹, rebuilt cells).
         property bool retainNavFocus: false
@@ -160,7 +199,7 @@ Control {
                 items.push(prevBtn)
             for (let i = 0; i < cellRepeater.count; ++i) {
                 const cell = cellRepeater.itemAt(i)
-                if (cell && !cell.isEllipsis && cell.enabled)
+                if (cell && !cell.isEllipsis && cell.enabled && !root.compactForm)
                     items.push(cell)
             }
             if (nextBtn.visible && nextBtn.enabled)
@@ -323,7 +362,8 @@ Control {
 
     onCurrentPageChanged: d.scheduleFocusRestore()
 
-    implicitHeight: 36
+    implicitHeight: d.cell
+    implicitWidth: d.fullWidth
     focusPolicy: Qt.NoFocus
     activeFocusOnTab: false
 
@@ -348,15 +388,15 @@ Control {
         LogosIconButton {
             id: firstBtn
             Layout.fillWidth: true
-            Layout.minimumWidth: 24
-            Layout.maximumWidth: 36
+            Layout.minimumWidth: d.minArrow
+            Layout.maximumWidth: d.cell
             iconSource: LogosIcons.arrowLeftDouble
             iconColor: root.iconColor
-            size: 36
+            size: d.cell
             flat: true
             focusPolicy: Qt.StrongFocus
             activeFocusOnTab: true
-            visible: root.showFirstLast
+            visible: root.showFirstLast && !root.compactForm
             enabled: root.currentPage > 1
             background: Rectangle {
                 color: "transparent"
@@ -372,11 +412,11 @@ Control {
         LogosIconButton {
             id: prevBtn
             Layout.fillWidth: true
-            Layout.minimumWidth: 24
-            Layout.maximumWidth: 36
+            Layout.minimumWidth: d.minArrow
+            Layout.maximumWidth: d.cell
             iconSource: LogosIcons.arrowLeft
             iconColor: root.iconColor
-            size: 36
+            size: d.cell
             flat: true
             focusPolicy: Qt.StrongFocus
             activeFocusOnTab: true
@@ -394,9 +434,24 @@ Control {
             onActiveFocusChanged: d.trackNavFocus(prevBtn, activeFocus)
         }
 
+        LogosText {
+            id: compactText
+            Layout.alignment: Qt.AlignVCenter
+            Layout.leftMargin: Theme.spacing.small
+            Layout.rightMargin: Theme.spacing.small
+            visible: root.compactForm
+            text: Math.max(1, Math.min(root.currentPage, root.pageCount)) + " / " + root.pageCount
+            font.pixelSize: Theme.typography.primaryText
+            font.weight: Theme.typography.weightMedium
+            color: Theme.palette.text
+            Accessible.name: qsTr("Page %1 of %2").arg(Math.max(1, Math.min(root.currentPage, root.pageCount)))
+                                                  .arg(root.pageCount)
+        }
+
         Row {
             id: pagesRow
             spacing: Theme.spacing.small
+            visible: !root.compactForm
 
             Repeater {
                 id: cellRepeater
@@ -404,8 +459,8 @@ Control {
 
                 delegate: AbstractButton {
                     id: pageCell
-                    width: 36
-                    height: 36
+                    width: d.cell
+                    height: d.cell
 
                     readonly property bool isEllipsis: typeof modelData === "string"
                     readonly property bool isCurrent: !isEllipsis && modelData === root.currentPage
@@ -461,11 +516,11 @@ Control {
         LogosIconButton {
             id: nextBtn
             Layout.fillWidth: true
-            Layout.minimumWidth: 24
-            Layout.maximumWidth: 36
+            Layout.minimumWidth: d.minArrow
+            Layout.maximumWidth: d.cell
             iconSource: LogosIcons.arrowRight
             iconColor: root.iconColor
-            size: 36
+            size: d.cell
             flat: true
             focusPolicy: Qt.StrongFocus
             activeFocusOnTab: true
@@ -485,15 +540,15 @@ Control {
         LogosIconButton {
             id: lastBtn
             Layout.fillWidth: true
-            Layout.minimumWidth: 24
-            Layout.maximumWidth: 36
+            Layout.minimumWidth: d.minArrow
+            Layout.maximumWidth: d.cell
             iconSource: LogosIcons.arrowRightDouble
             iconColor: root.iconColor
-            size: 36
+            size: d.cell
             flat: true
             focusPolicy: Qt.StrongFocus
             activeFocusOnTab: true
-            visible: root.showFirstLast
+            visible: root.showFirstLast && !root.compactForm
             enabled: root.currentPage < root.pageCount
             background: Rectangle {
                 color: "transparent"
@@ -519,7 +574,7 @@ Control {
             Layout.preferredWidth: 130
             Layout.maximumWidth: 130
             visible: root.pageSizeOptions && root.pageSizeOptions.length > 0
-            implicitHeight: 36
+            implicitHeight: d.cell
 
             textColor: Theme.palette.textMuted
             indicatorColor: root.iconColor

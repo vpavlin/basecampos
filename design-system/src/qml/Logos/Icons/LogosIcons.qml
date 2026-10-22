@@ -18,6 +18,7 @@ QtObject {
     readonly property url install:  Theme.iconOr("install", Qt.resolvedUrl("icons/install.svg"))
     readonly property url trash:    Theme.iconOr("trash", Qt.resolvedUrl("icons/delete.svg"))
     readonly property url more:     Theme.iconOr("more", Qt.resolvedUrl("icons/more.svg"))
+    readonly property url menu:     Theme.iconOr("menu", Qt.resolvedUrl("icons/menu.svg"))
     readonly property url search:   Theme.iconOr("search", Qt.resolvedUrl("icons/search.svg"))
     readonly property url close:    Theme.iconOr("close", Qt.resolvedUrl("icons/close.svg"))
     readonly property url copy:     Theme.iconOr("copy", Qt.resolvedUrl("icons/copy.svg"))

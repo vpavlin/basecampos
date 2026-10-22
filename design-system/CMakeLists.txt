@@ -82,6 +82,11 @@ if(LOGOS_DS_BUILD_STORYBOOK)
     add_subdirectory(storybook)
 endif()
 
+option(LOGOS_DS_BUILD_RESPONSIVE_LAB "Build the responsive-layout lab app" OFF)
+if(LOGOS_DS_BUILD_RESPONSIVE_LAB)
+    add_subdirectory(responsive-lab)
+endif()
+
 option(LOGOS_DS_BUILD_TESTS "Build the design-system QML unit tests" OFF)
 if(LOGOS_DS_BUILD_TESTS)
     enable_testing()

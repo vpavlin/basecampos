@@ -102,6 +102,24 @@ QtObject {
 
     function setDensity(value) { settings.density = value }
 
+    // ── Responsive layout (docs/RESPONSIVE.md) ─────────────────────────────
+    // Window size classes, by the width of the app's own area (not the
+    // screen): compact < 600 ≤ medium < 840 ≤ expanded. The same thresholds
+    // as Android's window size classes, so they match what designers know.
+    readonly property var breakpoints: ({ medium: 600, expanded: 840, large: 1200 })
+    function windowClass(width) {
+        return width < breakpoints.medium ? "compact"
+             : width < breakpoints.expanded ? "medium" : "expanded"
+    }
+    // Smallest hit area for anything tappable on a touch screen (iOS 44 pt,
+    // Android 48 dp). The visual can be smaller; the hit area may not.
+    readonly property int minTouchTarget: 44
+    // Side margin of page content per window class.
+    function pageMargin(width) {
+        var c = windowClass(width)
+        return c === "compact" ? spacing.large : c === "medium" ? spacing.xlarge : spacing.xxlarge
+    }
+
     function _size(px) {
         var v = Math.round(px * densityScale)
         return density === "touch" ? Math.max(44, v) : v

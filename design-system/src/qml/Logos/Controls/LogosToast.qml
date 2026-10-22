@@ -10,6 +10,11 @@ import Logos.Controls
 //                           that stays until dismissed. The countdown is held
 //                           while the pointer is over the toast, so the message
 //                           can be read and selected without it vanishing.
+//                           A tap (or click) on the toast pins it: the
+//                           countdown stops until it is dismissed or shown
+//                           again, so touch users, who have no hover, can
+//                           keep it too.
+//     pinned                Read-only; true once tapped, until the next show().
 //     show(title, message)  Open, updating either field if given, and arm the
 //                           timer when duration > 0.
 //
@@ -29,6 +34,7 @@ LogosNotice {
     id: root
 
     property int duration: 4000
+    readonly property bool pinned: d.pinned
 
     closable: true
     shown: false
@@ -39,6 +45,7 @@ LogosNotice {
         if (newMessage !== undefined)
             root.message = newMessage
         root.shown = true
+        d.pinned = false
         d.rearm()
     }
 
@@ -48,12 +55,22 @@ LogosNotice {
         id: pointerOver
         onHoveredChanged: d.rearm()
     }
+    // Tap to pin: the touch counterpart of holding the pointer over it.
+    TapHandler {
+        enabled: root.shown
+        onTapped: {
+            d.pinned = true
+            d.rearm()
+        }
+    }
 
     QtObject {
         id: d
 
+        property bool pinned: false
+
         function rearm() {
-            if (root.shown && root.duration > 0 && !pointerOver.hovered)
+            if (root.shown && root.duration > 0 && !pointerOver.hovered && !d.pinned)
                 d.autoHideTimer.restart()
             else
                 d.autoHideTimer.stop()

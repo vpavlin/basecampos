@@ -68,6 +68,8 @@ qt_add_qml_module(logos_controls_qml
         LogosToolTip.qml
         LogosItemDelegate.qml
         LogosDrawer.qml
+        LogosAppScaffold.qml
+        LogosListRow.qml
         LogosStackView.qml
         LogosMenuSeparator.qml
         LogosToolSeparator.qml
