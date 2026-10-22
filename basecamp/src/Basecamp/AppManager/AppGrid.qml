@@ -11,6 +11,9 @@ Item {
     property var modulesSource: null
     property string viewMode: "grid"
     property string emptyText: qsTr("No applications.")
+    // Touch: actions behind a visible ⋯ (list) or a long-press (tiles).
+    property bool touch: false
+    property int gridMinCellWidth: 180
     signal appClicked(string name, string repositoryUrl)
     signal appDetailsRequested(string name, string repositoryUrl)
     signal appInstallRequested(string name, string repositoryUrl)
@@ -19,7 +22,7 @@ Item {
     QtObject {
         id: d
 
-        readonly property int gridMinCellWidth: 180
+        readonly property int gridMinCellWidth: root.gridMinCellWidth
         readonly property int gridCellHeight: 162
         readonly property int listRowHeight: 64
 
@@ -63,6 +66,7 @@ Item {
             width:  GridView.view.cellWidth
             height: GridView.view.cellHeight
             appData: model
+            touch: root.touch
             onAppClicked: function(name, repoUrl) {
                 root.appClicked(name, repoUrl)
             }
@@ -85,6 +89,7 @@ Item {
             width:  GridView.view.cellWidth
             height: GridView.view.cellHeight
             appData: model
+            touch: root.touch
             onAppClicked: function(name, repoUrl) {
                 root.appClicked(name, repoUrl)
             }

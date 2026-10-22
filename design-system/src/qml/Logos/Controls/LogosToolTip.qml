@@ -20,7 +20,7 @@ import Logos.Theme
 //         }
 //     }
 //
-// Touch (Theme.density "touch"): a long-press on the tip's parent opens it,
+// Touch (Theme.touch): a long-press on the tip's parent opens it,
 // since there is no hover; a tap on the parent while it shows closes it, and
 // a tap outside the parent closes it (ToolTip's default close policy).
 //     openOnLongPress   default true; set false for tips the control opens
@@ -111,10 +111,10 @@ ToolTip {
     }
 
     // Long-press to open on touch. Attached to the tip's parent (the thing the
-    // tip explains); only exists in effect at touch density.
+    // tip explains); only exists in effect under Theme.touch.
     TapHandler {
         parent: root.parent
-        enabled: root.openOnLongPress && Theme.density === "touch"
+        enabled: root.openOnLongPress && Theme.touch
                  && !!root.parent && root.text.length > 0
         onLongPressed: root.open()
         onTapped: if (root.visible) root.close()

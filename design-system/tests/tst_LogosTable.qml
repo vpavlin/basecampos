@@ -231,6 +231,65 @@ TestCase {
                "view alias must expose ListView API")
     }
 
+    // ─── Header tap areas ───
+
+    Component {
+        id: actionsTableComp
+
+        LogosTable {
+            anchors.fill: parent
+            model: peopleModel
+            columns: [
+                LogosTableColumn { title: "Name"; role: "name"; minWidth: 100; fillWidth: true; sortable: true },
+                LogosTableColumn { title: "Role"; role: "role_"; minWidth: 100 },
+                LogosTableColumn { minWidth: 44; maxWidth: 44 }   // untitled actions column
+            ]
+        }
+    }
+
+    function _headerTapAreas(item, out) {
+        out = out || []
+        if (item.objectName === "headerTapArea")
+            out.push(item)
+        for (var i = 0; i < item.children.length; ++i)
+            _headerTapAreas(item.children[i], out)
+        return out
+    }
+
+    function test_untitled_header_cell_is_not_a_tap_target() {
+        var t = createTemporaryObject(actionsTableComp, root)
+        waitForRendering(t)
+        var areas = _headerTapAreas(t)
+        compare(areas.length, 3)
+        areas.sort(function(a, b) { return a.mapToItem(t, 0, 0).x - b.mapToItem(t, 0, 0).x })
+        compare(areas[0].enabled, true)    // sortable
+        compare(areas[1].enabled, true)    // titled, not sortable: still emits headerClicked
+        compare(areas[2].enabled, false)   // untitled, not sortable
+    }
+
+    function test_header_tap_area_spans_the_whole_cell() {
+        var t = createTemporaryObject(actionsTableComp, root)
+        waitForRendering(t)
+        var areas = _headerTapAreas(t)
+        areas.sort(function(a, b) { return a.mapToItem(t, 0, 0).x - b.mapToItem(t, 0, 0).x })
+        // Cell widths: the Loader is inset by the padding; the tap area is not.
+        compare(areas[0].mapToItem(t, 0, 0).x, 0)
+        compare(areas[0].width, areas[1].mapToItem(t, 0, 0).x)
+        compare(areas[0].height, t.headerHeight)
+    }
+
+    function test_sortable_header_reaches_44_under_touch() {
+        Theme.compactWindow = true
+        var t = createTemporaryObject(actionsTableComp, root)
+        waitForRendering(t)
+        compare(t.headerHeight, Theme.minTouchTarget)
+        var areas = _headerTapAreas(t)
+        areas.sort(function(a, b) { return a.mapToItem(t, 0, 0).x - b.mapToItem(t, 0, 0).x })
+        verify(areas[0].height >= Theme.minTouchTarget)
+        verify(areas[0].width >= Theme.minTouchTarget)
+        Theme.compactWindow = false
+    }
+
     // ─── SignalSpy templates (re-used per test) ───
 
     Component { id: sortSpy;       SignalSpy { signalName: "sortRequested"  } }

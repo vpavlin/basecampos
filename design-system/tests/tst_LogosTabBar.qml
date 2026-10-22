@@ -150,4 +150,33 @@ TestCase {
         fuzzyCompare(ind.x, btn.mapToItem(nestedBar, 0, 0).x, 1.0)
         fuzzyCompare(ind.width, btn.width, 1.0)
     }
+
+    // A bar at its implicit width in a layout (Basecamp's App Manager header)
+    // used to print "Binding loop detected for property implicitWidth".
+    Component {
+        id: implicitRowComp
+        RowLayout {
+            width: 600
+            spacing: 16
+            LogosText { text: "Apps" }
+            LogosTabBar {
+                spacing: 16
+                LogosTabButton { text: "All" }
+                LogosTabButton { text: "Installed" }
+                LogosTabButton { text: "Not Installed" }
+            }
+            Item { Layout.fillWidth: true }
+        }
+    }
+
+    function test_no_implicitWidth_binding_loop_at_implicit_width() {
+        failOnWarning(/Binding loop/)
+        var row = createTemporaryObject(implicitRowComp, root)
+        verify(row)
+        var b = row.children[1]
+        tryVerify(function() { return b.width > 0 })
+        fuzzyCompare(b.width, b.implicitWidth, 1)
+        verify(b.indicatorItem, "indicator exists once the background is created")
+        verify(b.trackItem)
+    }
 }

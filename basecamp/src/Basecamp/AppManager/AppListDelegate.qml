@@ -11,6 +11,10 @@ ItemDelegate {
 
     // ─── Public API ───
     property var appData: ({})
+    // Touch: a visible 44 px ⋯ opens the actions menu (Open / Details /
+    // Install / Uninstall) in place of the trash icon; long-press does too;
+    // the install-state badge shows without hover.
+    property bool touch: false
     signal appClicked(string name, string repositoryUrl)
     signal detailsRequested(string name, string repositoryUrl)
     signal installRequested(string name, string repositoryUrl)
@@ -107,9 +111,15 @@ ItemDelegate {
 
     // Inert when unavailable: opening it leads to an install that cannot run.
     onClicked: if (d.isAvailable) root.appClicked(d.nameText, d.repositoryUrl)
+    // Under the row: a touch has no pointer position to pop up at.
+    onPressAndHold: contextMenu.openUnder(root, d.snapshot())
 
     TapHandler {
         acceptedButtons: Qt.RightButton
+        // acceptedButtons filters mice only: without this, every touch tap
+        // also opened the menu (at the stale pointer position) on top of
+        // whatever the tap opened. Touch has long-press instead.
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onTapped: contextMenu.openFor(d.snapshot())
     }
 
@@ -209,7 +219,7 @@ ItemDelegate {
                      || d.isInstalling
                      || d.installStage === InstallStage.Failed
                      || (d.installStatus !== InstallStatus.Installed
-                         && (d.isInstalled || root.hovered))
+                         && (d.isInstalled || root.hovered || root.touch))
             // While bytes are moving the badge counts them; the rest of the
             // install (verify, install) has no byte count, so it reverts to
             // the plain label instead of parking at 100%.
@@ -258,7 +268,7 @@ ItemDelegate {
             Layout.alignment: Qt.AlignVCenter
             Layout.preferredWidth: 32
             Layout.preferredHeight: 32
-            visible: d.canUninstall
+            visible: d.canUninstall && !root.touch
             size: 32
             iconSize: 18
             iconSource: LogosIcons.trash
@@ -270,6 +280,20 @@ ItemDelegate {
                 placement: LogosToolTip.Top
                 visible: parent.hovered
             }
+        }
+
+        LogosIconButton {
+            id: moreButton
+            objectName: "appListDelegate.more"
+            visible: root.touch
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: Theme.minTouchTarget
+            Layout.preferredHeight: Theme.minTouchTarget
+            size: Theme.minTouchTarget
+            flat: true
+            iconSource: LogosIcons.more
+            Accessible.name: qsTr("Actions for %1").arg(d.displayName)
+            onClicked: contextMenu.openUnder(moreButton, d.snapshot())
         }
     }
 }

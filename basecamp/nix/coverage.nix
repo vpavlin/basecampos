@@ -17,7 +17,7 @@
 # .gcno and therefore do NOT appear in the report as 0% — the percentage here
 # is "coverage of the code under unit test", not of all of app/. Adding a
 # source to tests/CMakeLists.txt is what pulls it into the denominator.
-{ pkgs, src, logosPackageHeaders, logosViewModuleRuntimeSrc
+{ pkgs, src, logosPackageHeaders, logosViewModuleRuntimeSrc, logosDesignSystem
 , failUnderLine ? 0, failUnderBranch ? 0 }:
 
 let
@@ -50,6 +50,8 @@ pkgs.stdenv.mkDerivation {
     # error naming the test, not a skip.
     pkgs.spdlog
     pkgs.yaml-cpp
+    # workspace_area_test: `// libdeps: Logos::DesignSystem` (ThemeColors.h).
+    logosDesignSystem
   ];
 
   dontUseCmakeConfigure = true;
@@ -61,6 +63,7 @@ pkgs.stdenv.mkDerivation {
     cmake -S tests -B build-cov -GNinja -DCMAKE_BUILD_TYPE=Debug \
       -DLOGOS_PACKAGE_HEADERS="${logosPackageHeaders}/include" \
       -DLOGOS_VIEW_MODULE_RUNTIME_ROOT="${logosViewModuleRuntimeSrc}" \
+      -DLogosDesignSystem_DIR="${logosDesignSystem}/lib/cmake/LogosDesignSystem" \
       -DCMAKE_CXX_FLAGS="--coverage -fprofile-update=atomic" \
       -DCMAKE_EXE_LINKER_FLAGS="--coverage"
     cmake --build build-cov

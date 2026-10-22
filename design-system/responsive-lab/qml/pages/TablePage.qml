@@ -34,6 +34,12 @@ Item {
 
     readonly property string title: compact && openPkg ? openPkg.name : "Packages"
     readonly property bool canGoBack: compact && openPkg !== null
+    // Compact: search folds into the top bar (scaffold's LogosSearchToggle).
+    readonly property bool searchable: compact && openPkg === null
+    readonly property string searchPlaceholder: "Search packages"
+    readonly property string barQuery: parent && parent.searchText ? parent.searchText : ""
+    onBarQueryChanged: if (compact) d.query = barQuery
+    onCompactChanged: d.query = compact ? barQuery : search.text
     function goBack() { openName = "" }
 
     // ─── Data ───
@@ -295,7 +301,7 @@ Item {
         visible: !(page.compact && page.openPkg)
         spacing: 0
 
-        // compact: search on its own line, filter + Install below it.
+        // compact: filter + Install (search is folded into the top bar).
         // medium/expanded: search · filter · (space) · Install on one line.
         GridLayout {
             Layout.fillWidth: true
@@ -307,13 +313,14 @@ Item {
 
             LogosSearchBar {
                 id: search
-                Layout.columnSpan: page.compact ? 2 : 1
+                visible: !page.compact
+                Layout.columnSpan: 1
                 Layout.fillWidth: true
                 Layout.maximumWidth: page.compact ? -1 : 420
                 Layout.preferredWidth: page.compact ? -1 : 420
                 Layout.preferredHeight: page.toolbarHeight
                 placeholderText: "Search packages"
-                onTextChanged: d.query = text
+                onTextChanged: if (!page.compact) d.query = text
             }
             LogosComboBox {
                 id: typeFilter
@@ -425,7 +432,7 @@ Item {
                         model: page.compact ? null : page.expanded ? pageModel : listModel
                         rowHeight: Math.max(56, Theme.minTouchTarget + Theme.spacing.small)
                         // DS header is 36 px; on touch it is a row of sort targets.
-                        headerHeight: Theme.density === "touch" ? Theme.minTouchTarget : 36
+                        headerHeight: Theme.touch ? Theme.minTouchTarget : 36
                         sortRole: d.sortRole
                         sortOrder: d.sortOrder
                         emptyText: "No packages match"

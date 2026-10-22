@@ -21,15 +21,19 @@ import Logos.Icons
 //     iconColor         tint applied to the four nav arrow icons
 //
 //     pageCount         (read-only) derived as max(1, ceil(totalCount / pageSize))
-//     compactForm       (read-only) true while the paginator is narrower than
-//                       its full form's minimum (arrows squeezed to 24 px);
+//     forceCompact      show the compact form whatever the width (default false)
+//     compactForm       (read-only) true with forceCompact, or while the
+//                       paginator is narrower than its full form's minimum
+//                       (arrows at their minimum: 24 px, d.cell under Theme.touch);
 //                       it then shows "‹ 4 / 10 ›"
 //                       (first/last and page cells hidden). implicitWidth is
 //                       always the full form's width, so an unconstrained
 //                       paginator never collapses.
 //
-// Sizes: arrow buttons and page cells are 36 px, Theme._size(36) (44) at
-// Theme.density "touch"; the page-size chip matches.
+// Sizes: arrow buttons and page cells are 36 px, Theme._size(36) (44) under
+// Theme.touch (touch density or a compact window); the page-size chip
+// matches. On a phone-width window it therefore falls back to the compact
+// form by itself when the 44 px cells don't fit; no knob needed.
 //
 // Read-only inspection aliases:
 //     infoLabel, firstButton, prevButton, nextButton, lastButton,
@@ -77,7 +81,8 @@ Control {
 
     readonly property int pageCount: Math.max(
         1, Math.ceil(totalCount / Math.max(1, pageSize)))
-    readonly property bool compactForm: width > 0 && width < d.fullMinWidth - 0.5
+    property bool forceCompact: false
+    readonly property bool compactForm: forceCompact || (width > 0 && width < d.fullMinWidth - 0.5)
 
     // Exposed for inspection (e.g., from tests). Read-only.
     readonly property alias infoLabel: infoLabelText
@@ -98,9 +103,9 @@ Control {
         id: d
 
         // Edge of an arrow button / page cell.
-        readonly property int cell: Theme.density === "touch" ? Theme._size(36) : 36
+        readonly property int cell: Theme.touch ? Theme._size(36) : 36
         // Minimum width the arrow buttons may shrink to.
-        readonly property int minArrow: Theme.density === "touch" ? d.cell : 24
+        readonly property int minArrow: Theme.touch ? d.cell : 24
 
         // Width of the full form (what the RowLayout asks for when nothing is
         // hidden by the compact form), worked out from the parts so it does

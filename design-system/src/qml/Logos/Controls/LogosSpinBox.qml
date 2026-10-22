@@ -4,7 +4,7 @@ import QtQuick.Controls
 import Logos.Theme
 import Logos.Controls
 
-// Sizes: 32 high with 28-wide − / + on desktop. At touch density the control
+// Sizes: 32 high with 28-wide − / + on desktop. Under Theme.touch the control
 // takes the text-field height (Theme.components.field.height, >= 44) and
 // − / + are Theme.minTouchTarget wide, so each is a 44 x 44 target.
 SpinBox {
@@ -18,7 +18,7 @@ SpinBox {
     readonly property alias backgroundItem: bg
     readonly property alias contentLabel: input
 
-    readonly property bool _touch: Theme.density === "touch"
+    readonly property bool _touch: Theme.touch
     implicitHeight: _touch ? Math.max(Theme.components.field.height, Theme.minTouchTarget) : 32
     editable: true
 

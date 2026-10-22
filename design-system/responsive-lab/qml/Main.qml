@@ -32,6 +32,8 @@ ApplicationWindow {
         Theme.setDensity(LabArgs.density || "comfortable")
         // --state drawer=1: shoot the compact navigation drawer open.
         if (LabArgs.state.drawer) Qt.callLater(scaffold.drawer.open)
+        // --state search=1: shoot the compact search unfolded.
+        if (LabArgs.state.search) Qt.callLater(scaffold.openSearch)
     }
 
     LogosAppScaffold {
@@ -42,6 +44,8 @@ ApplicationWindow {
         navModel: window.pages
         currentNav: window.currentPage.id
         canGoBack: loader.item ? !!loader.item.canGoBack : false
+        searchEnabled: loader.item ? !!loader.item.searchable : false
+        searchPlaceholder: loader.item && loader.item.searchPlaceholder ? loader.item.searchPlaceholder : "Search"
         onNavActivated: id => window.current = id
         onBackRequested: if (loader.item && loader.item.goBack) loader.item.goBack()
 
@@ -52,6 +56,8 @@ ApplicationWindow {
             // Pages read the window class and lab state from here.
             property string windowClass: scaffold.windowClass
             property var labState: LabArgs.state
+            // Compact: the scaffold's folded search (see LogosSearchToggle).
+            property string searchText: scaffold.searchText
         }
     }
 }

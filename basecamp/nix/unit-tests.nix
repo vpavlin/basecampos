@@ -1,4 +1,4 @@
-{ pkgs, src, logosPackageHeaders, logosViewModuleRuntimeSrc }:
+{ pkgs, src, logosPackageHeaders, logosViewModuleRuntimeSrc, logosDesignSystem }:
 
 pkgs.stdenv.mkDerivation {
   pname = "logos-basecamp-unit-tests";
@@ -18,6 +18,8 @@ pkgs.stdenv.mkDerivation {
     # log_sink_test / logging_config_test declare these as `// libdeps:`.
     pkgs.spdlog
     pkgs.yaml-cpp
+    # workspace_area_test: `// libdeps: Logos::DesignSystem` (ThemeColors.h).
+    logosDesignSystem
   ];
 
   dontUseCmakeConfigure = true;
@@ -26,7 +28,8 @@ pkgs.stdenv.mkDerivation {
     runHook preBuild
     cmake -S tests -B build-unit-tests -GNinja -DCMAKE_BUILD_TYPE=Debug \
       -DLOGOS_PACKAGE_HEADERS="${logosPackageHeaders}/include" \
-      -DLOGOS_VIEW_MODULE_RUNTIME_ROOT="${logosViewModuleRuntimeSrc}"
+      -DLOGOS_VIEW_MODULE_RUNTIME_ROOT="${logosViewModuleRuntimeSrc}" \
+      -DLogosDesignSystem_DIR="${logosDesignSystem}/lib/cmake/LogosDesignSystem"
     cmake --build build-unit-tests
     runHook postBuild
   '';

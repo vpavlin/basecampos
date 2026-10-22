@@ -19,7 +19,7 @@ import Logos.Controls
 //     showCopyButton     Show the trailing LogosCopyButton (default true).
 //     textColor          Selectable text color (default Theme.palette.text).
 //     buttonSize         Copy button hit-target size in px (default 24). At
-//                        Theme.density "touch" the button floors it at
+//                        Theme.touch the button floors it at
 //                        Theme.minTouchTarget (icon size unchanged).
 //     iconSize           Copy icon footprint in px (default 16).
 //     feedbackDuration   Copied-state duration in ms (default 1500).

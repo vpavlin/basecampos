@@ -17,6 +17,11 @@ ItemDelegate {
     property bool selected: false
     property string selectedVersion: ""
     property string selectionObjectName: ""
+    // Compact (a phone): no description column, it sits under the name; the
+    // name takes what the version picker and badge leave. Touch: 44 px
+    // version picker and checkbox hit areas.
+    property bool compact: false
+    property bool touch: false
     signal versionPicked(string name, string newVersion)
     signal selectionToggled(bool checked)
 
@@ -90,16 +95,17 @@ ItemDelegate {
 
         RowLayout {
             Layout.alignment: Qt.AlignVCenter
-            Layout.preferredWidth: 150
-            Layout.minimumWidth: 150
-            Layout.maximumWidth: 150
+            Layout.preferredWidth: root.compact ? -1 : 150
+            Layout.minimumWidth: root.compact ? 0 : 150
+            Layout.maximumWidth: root.compact ? Number.POSITIVE_INFINITY : 150
+            Layout.fillWidth: root.compact
             spacing: Theme.spacing.small
 
             LogosCheckbox {
                 objectName: root.selectionObjectName
                 visible: root.selectable
-                Layout.preferredWidth: 24
-                Layout.preferredHeight: 24
+                Layout.preferredWidth: root.touch ? Theme.minTouchTarget : 24
+                Layout.preferredHeight: root.touch ? Theme.minTouchTarget : 24
                 // Installed-only (not in the catalog): kept as installed, nothing to choose.
                 enabled: !root.installing && !d.isError && !(root.appRow && root.appRow.installedOnly)
                 checked: root.selected
@@ -107,6 +113,11 @@ ItemDelegate {
                 ToolTip.visible: hovered && !!root.appRow.error
                 ToolTip.text: root.appRow.error || ""
             }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                spacing: 0
 
             LogosText {
                 id: nameLabel
@@ -125,14 +136,26 @@ ItemDelegate {
                     visible: nameHover.hovered && nameLabel.truncated
                 }
             }
+
+            LogosText {
+                objectName: "packageRow.compactDescription"
+                visible: root.compact && text.length > 0
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                text: descLabel.text
+                font.pixelSize: Theme.typography.secondaryText
+                color: Theme.palette.textTertiary
+                elide: Text.ElideRight
+            }
+            }
         }
 
         // Per-row version picker. Same combo as before; emits a
         // versionPicked signal that the dialog folds into its pin map.
         Item {
             Layout.alignment: Qt.AlignVCenter
-            Layout.preferredWidth: 110
-            Layout.preferredHeight: 32
+            Layout.preferredWidth: root.compact ? 96 : 110
+            Layout.preferredHeight: root.touch ? Theme.minTouchTarget : 32
 
             LogosComboBox {
                 id: versionCombo
@@ -191,6 +214,7 @@ ItemDelegate {
 
         LogosText {
             id: descLabel
+            visible: !root.compact
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignVCenter
             text: root.appRow ? (root.appRow.description || "") : ""

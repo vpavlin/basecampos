@@ -383,5 +383,9 @@ bool AppsFilterProxy::lessThan(const QModelIndex& left, const QModelIndex& right
         return m_requiredPackagesOrder.value(ln, INT_MAX)
              < m_requiredPackagesOrder.value(rn, INT_MAX);
     }
-    return QSortFilterProxyModel::lessThan(left, right);
+    // Catalog order. The proxy sorts by column 0's display role, which the
+    // model doesn't provide, so every row compared equal: a row that a filter
+    // change (a search, then clearing it) hid and showed again was inserted
+    // after the rows that never left, and the grid kept the search's order.
+    return left.row() < right.row();
 }

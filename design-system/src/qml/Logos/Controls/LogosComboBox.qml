@@ -23,7 +23,7 @@ import Logos.Icons
 //     popupListView    the ListView inside the popup (delegate model is owned
 //                      by ComboBox via root.delegateModel)
 //
-// Dropdown rows are at least Theme.minTouchTarget high at touch density (the
+// Dropdown rows are at least Theme.minTouchTarget high under Theme.touch (the
 // closed control already is, through Theme.components.combo.height).
 //
 // The closed control keeps whatever width it is given; the dropdown widens to
@@ -221,7 +221,7 @@ ComboBox {
         implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
                                  implicitContentHeight + topPadding + bottomPadding,
                                  implicitIndicatorHeight + topPadding + bottomPadding,
-                                 Theme.density === "touch" ? Theme.minTouchTarget : 0)
+                                 Theme.touch ? Theme.minTouchTarget : 0)
 
         contentItem: EntryText {
             text: d.entryText(index)

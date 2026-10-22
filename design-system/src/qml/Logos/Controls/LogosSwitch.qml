@@ -25,11 +25,11 @@ Switch {
     // keeps its size. Elsewhere this is the Basic style's own formula.
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding,
-                            Theme.density === "touch" ? Theme.minTouchTarget : 0)
+                            Theme.touch ? Theme.minTouchTarget : 0)
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
                              implicitContentHeight + topPadding + bottomPadding,
                              implicitIndicatorHeight + topPadding + bottomPadding,
-                             Theme.density === "touch" ? Theme.minTouchTarget : 0)
+                             Theme.touch ? Theme.minTouchTarget : 0)
     opacity: enabled ? 1.0 : 0.5
 
     focusPolicy: Qt.StrongFocus

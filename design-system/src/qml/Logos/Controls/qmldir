@@ -55,3 +55,4 @@ LogosToolSeparator 1.0 LogosToolSeparator.qml
 LogosDotMatrix 1.0 LogosDotMatrix.qml
 LogosAppScaffold 1.0 LogosAppScaffold.qml
 LogosListRow 1.0 LogosListRow.qml
+LogosSearchToggle 1.0 LogosSearchToggle.qml

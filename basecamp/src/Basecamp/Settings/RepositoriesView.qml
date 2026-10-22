@@ -398,7 +398,6 @@ Item {
                                 LogosSwitch {
                                     objectName: "repositories.enableSwitch." + url
                                     Layout.preferredWidth: Math.max(implicitWidth, Theme.minTouchTarget)
-                                    Layout.preferredHeight: root.touch ? Theme.minTouchTarget : implicitHeight
                                     checked: isEnabled
                                     onToggled: root.setEnabledRequested(url, checked)
                                 }

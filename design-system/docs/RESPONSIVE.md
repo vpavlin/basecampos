@@ -118,9 +118,23 @@ LogosAppScaffold {
 - **medium:** keep 3 columns (name, version, status) + ⋯; the detail opens as a sheet over the
   right side with the dropped fields.
 - **compact:** no table. Each row is a card (name + status badge; version · size · date; ⋯; ›);
-  a tap opens a full-page detail with ‹. Toolbar: search on its own line, filter + primary below.
+  a tap opens a full-page detail with ‹. Toolbar: filter + primary on one line; search folds into
+  the bar (§4).
 - Row actions are a visible ⋯ (44 px) opening a menu. A single tap opens; nothing needs hover or
   double-click.
+
+### 3.6 Catalog (icon grid + filters) · Basecamp Applications, Package Manager
+- Columns from a minimum cell width: ≈ 104 compact, 140 medium, 180 expanded (5 / 3 / 3 across
+  at 1280 / 700 / 390 in Applications).
+- The filter sidebar (categories) becomes a picker (a menu) on the left of the compact bar; 🔍
+  then ⋯ on its right.
+- Tiles: tap opens, long-press opens the actions menu anchored to the tile. List rows: a
+  visible 44 px ⋯.
+- Filters are not navigation: a categories / types sidebar becomes pickers below expanded
+  (Package Manager: two dropdowns; Applications: a menu in the compact bar).
+- Package Manager's table: medium keeps Package · Available · Action + ⋯; expanded drops the
+  description column rather than scroll sideways; compact uses cards; per-row version pickers
+  and Uninstall move into the detail's action strip.
 
 ## 4. Touch
 
@@ -130,7 +144,16 @@ LogosAppScaffold {
 - No hover-only affordances: actions behind hover need a visible button (⋯ menu); information in
   tooltips also needs a visible place (help text, a row subtitle, the detail view).
 - No double-click: a single tap opens; selection uses checkboxes or a long-press menu.
+- Right-click menus need a touch path (long-press, plus a visible ⋯ where there's room),
+  anchored to their item, not the cursor.
+- One flag: `touch = Theme.windowClass(width) === "compact" || Theme.density === "touch"`.
 - Primary action within thumb reach on phones: last in the form, full width.
+- **Search folds in compact:** a 🔍 (44 px) at the right end of the navigation bar, unfolding
+  across the bar on tap (title hides, ✕ clears and folds, stays open while it has text, Esc
+  folds). `LogosSearchToggle`, or `LogosAppScaffold { searchEnabled: true }` + `searchText`.
+  The list gets the row back. Medium / expanded keep the full search bar.
+
+  ![search folded and unfolded, Mail and Table at 390](responsive/search-fold.png)
 
 ## 5. Proving it (required before "done")
 

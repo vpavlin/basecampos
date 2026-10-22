@@ -13,6 +13,10 @@ import Logos.Theme
 //                         menu at the mouse cursor. For true context menus
 //                         (right-click), keep using popup() / popup(pos).
 //
+// Placement: margins (default Theme.spacing.small) keep the whole menu inside
+// the window, so one opened from a ⋯ at the right edge shifts left instead
+// of running off it.
+//
 // Read-only inspection aliases:
 //     backgroundItem
 Menu {
@@ -25,6 +29,7 @@ Menu {
     readonly property alias backgroundItem: bg
 
     padding: Theme.spacing.tiny
+    margins: Theme.spacing.small
 
     // Opens below the anchor with a tiny gap. Prefer over bare popup() when
     // the menu is triggered from a control (mouse or keyboard).

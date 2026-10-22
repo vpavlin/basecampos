@@ -25,6 +25,14 @@ LogosMenu {
         root.popup();
     }
 
+    // From a visible ⋯ button or a long-press: the menu opens under the
+    // anchor, right edges aligned (a ⋯ sits at the row's right end), not at
+    // the pointer.
+    function openUnder(anchor, appData_) {
+        root.appData = appData_ || ({});
+        root.popup(anchor, anchor.width - root.width, anchor.height + Theme.spacing.tiny);
+    }
+
 
     QtObject {
         id: d

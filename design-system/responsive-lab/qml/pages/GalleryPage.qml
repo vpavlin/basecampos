@@ -14,7 +14,7 @@ import Logos.Icons
 // screenshot is the measurement. Controls are NOT padded to 44 here on
 // purpose: this page shows them as they ship.
 //
-// Lab state: scroll=<px> sets contentY; open=menu|combo|info|tooltip opens
+// Lab state: scroll=<px> sets contentY; open=menu|edgemenu|combo|info|tooltip opens
 // that popup so its rows can be measured too.
 Flickable {
     id: page
@@ -251,6 +251,28 @@ Flickable {
                     }
                 }
             }
+            // A ⋯ at the right edge (open=edgemenu): the menu must stay in
+            // the window; checkable items show the check mark.
+            Spec {
+                name: "LogosMenu at the edge, checkable"
+                target: edgeBtn
+                parts: page.tick >= 0 ? [["item", edgeMenu.itemAt(0)]] : []
+                Item {
+                    width: parent ? parent.width : 0
+                    height: edgeBtn.height
+                    LogosIconButton {
+                        id: edgeBtn; anchors.right: parent.right; iconSource: LogosIcons.more
+                        onClicked: edgeMenu.popupUnder(edgeBtn)
+                        LogosMenu {
+                            id: edgeMenu
+                            LogosMenuItem { text: "Sort by name"; checkable: true; checked: true }
+                            LogosMenuItem { text: "Sort by date"; checkable: true }
+                            LogosMenuSeparator {}
+                            LogosMenuItem { text: "Refresh" }
+                        }
+                    }
+                }
+            }
         }
 
         Group {
@@ -342,7 +364,9 @@ Flickable {
                     model: [ { name: "wallet", ver: "0.4.1" }, { name: "chat", ver: "0.2.2" }, { name: "storage", ver: "3.0.3" } ]
                     columns: [
                         LogosTableColumn { title: "Module"; role: "name"; minWidth: 100; fillWidth: true; sortable: true },
-                        LogosTableColumn { title: "Version"; role: "ver"; minWidth: 70 }
+                        LogosTableColumn { title: "Version"; role: "ver"; minWidth: 70 },
+                        // Untitled actions column: its header is not a tap target.
+                        LogosTableColumn { minWidth: 44; maxWidth: 44 }
                     ]
                 }
             }
@@ -354,6 +378,7 @@ Flickable {
         onTriggered: {
             var o = page.labState.open
             if (o === "menu") menu.popupUnder(menuBtn)
+            else if (o === "edgemenu") edgeMenu.popupUnder(edgeBtn)
             else if (o === "combo") combo.popup.open()
             else if (o === "info") infoBtn.open()
         }

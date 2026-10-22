@@ -13,6 +13,9 @@ ItemDelegate {
     property var appData: ({})
     property int tileSize: 80
     property bool contextMenuEnabled: true
+    // Touch: long-press opens the actions menu (right-click has no touch
+    // equivalent), and the install-state badge shows without hover.
+    property bool touch: false
     signal appClicked(string name, string repositoryUrl)
     signal detailsRequested(string name, string repositoryUrl)
     signal installRequested(string name, string repositoryUrl)
@@ -100,10 +103,16 @@ ItemDelegate {
     padding: 0
     hoverEnabled: true
     onClicked: if (d.isAvailable) root.appClicked(d.nameText, d.repositoryUrl)
+    // Under the tile: a touch has no pointer position to pop up at.
+    onPressAndHold: if (root.contextMenuEnabled) contextMenu.openUnder(tile, d.snapshot())
 
     TapHandler {
         enabled: root.contextMenuEnabled
         acceptedButtons: Qt.RightButton
+        // acceptedButtons filters mice only: without this, every touch tap
+        // also opened the menu (at the stale pointer position) on top of
+        // whatever the tap opened. Touch has long-press instead.
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onTapped: contextMenu.openFor(d.snapshot())
     }
 
@@ -154,7 +163,7 @@ ItemDelegate {
                              || d.isInstalling
                              || d.installStage === InstallStage.Failed
                              || (d.installStatus !== InstallStatus.Installed
-                                 && (d.isInstalled || root.hovered))
+                                 && (d.isInstalled || root.hovered || root.touch))
                     text: !d.isAvailable                                      ? qsTr("Not available")
                         : d.hasProgress ? DownloadFormat.percent(d.dlReceived, d.dlTotal)
                         : d.isInstalling                                      ? qsTr("Installing…")

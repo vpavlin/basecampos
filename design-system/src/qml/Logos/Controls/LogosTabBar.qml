@@ -41,11 +41,30 @@ TabBar {
     property color trackColor: Theme.palette.borderHairline
 
     // Exposed for inspection (e.g., from tests). Read-only.
-    readonly property alias indicatorItem: indicator
-    readonly property alias trackItem: track
+    readonly property Item indicatorItem: _indicatorItem
+    readonly property Item trackItem: _trackItem
+    // Filled in by the background once Qt creates it. Not bindings on
+    // `background`: reading it creates the deferred background early (below).
+    property Item _indicatorItem: null
+    property Item _trackItem: null
 
-    background: Item {
+    // The background is an inline component so that nothing in it has an id
+    // in this file's scope, and nothing binds to `background`: either makes Qt
+    // create the background ahead of the tabs instead of deferring it, which
+    // loops on implicitWidth ("Binding loop detected for property
+    // implicitWidth" when the bar sits in a layout at its implicit width).
+    component IndicatorBackground: Item {
+        id: bgItem
+        required property TabBar bar
+        readonly property alias indicator: indicator
+        readonly property alias track: track
+
         clip: true
+
+        Component.onCompleted: {
+            bgItem.bar._indicatorItem = indicator
+            bgItem.bar._trackItem = track
+        }
 
         // Low-opacity baseline under every tab; selected segment uses indicatorColor.
         Rectangle {
@@ -53,16 +72,16 @@ TabBar {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: Math.max(1, Math.round(root.indicatorHeight / 3))
-            color: root.trackColor
+            height: Math.max(1, Math.round(bgItem.bar.indicatorHeight / 3))
+            color: bgItem.bar.trackColor
         }
 
         Rectangle {
             id: indicator
 
             z: 1
-            height: root.indicatorHeight
-            color: root.indicatorColor
+            height: bgItem.bar.indicatorHeight
+            color: bgItem.bar.indicatorColor
             radius: height / 2 * Theme.spacing.roundness
             y: parent.height - height
             x: 0
@@ -73,39 +92,47 @@ TabBar {
 
             Behavior on x {
                 enabled: indicator.ready
-                NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: bgItem.bar.animationDuration; easing.type: Easing.OutCubic }
             }
             Behavior on width {
                 enabled: indicator.ready
-                NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: bgItem.bar.animationDuration; easing.type: Easing.OutCubic }
             }
 
             function refresh() {
-                if (!root.currentItem || root.currentItem.width <= 0)
+                const bar = bgItem.bar
+                if (!bar.currentItem || bar.currentItem.width <= 0)
                     return
-                const p = root.currentItem.mapToItem(root, 0, 0)
+                const p = bar.currentItem.mapToItem(bar, 0, 0)
                 indicator.x = p.x
-                indicator.width = root.currentItem.width
+                indicator.width = bar.currentItem.width
             }
         }
     }
 
-    onCurrentItemChanged: indicator.refresh()
-    onWidthChanged: indicator.refresh()
-    onVisibleChanged: if (visible) Qt.callLater(indicator.refresh)
-    Component.onCompleted: Qt.callLater(indicator.refresh)
+    background: IndicatorBackground { bar: root }
+
+    function _refreshIndicator() {
+        if (root.indicatorItem)
+            root.indicatorItem.refresh()
+    }
+
+    onCurrentItemChanged: root._refreshIndicator()
+    onWidthChanged: root._refreshIndicator()
+    onVisibleChanged: if (visible) Qt.callLater(root._refreshIndicator)
+    Component.onCompleted: Qt.callLater(root._refreshIndicator)
 
     Connections {
         target: root.currentItem
         ignoreUnknownSignals: true
-        function onXChanged() { indicator.refresh() }
-        function onWidthChanged() { indicator.refresh() }
+        function onXChanged() { root._refreshIndicator() }
+        function onWidthChanged() { root._refreshIndicator() }
     }
 
     Connections {
         target: root.contentItem
         ignoreUnknownSignals: true
-        function onContentXChanged() { indicator.refresh() }
-        function onWidthChanged() { indicator.refresh() }
+        function onContentXChanged() { root._refreshIndicator() }
+        function onWidthChanged() { root._refreshIndicator() }
     }
 }

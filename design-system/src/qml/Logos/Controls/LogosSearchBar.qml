@@ -155,7 +155,7 @@ Control {
 
             Layout.alignment: Qt.AlignVCenter
             visible: d.clearVisible
-            implicitWidth: Theme.density === "touch" ? Theme.minTouchTarget : 24
+            implicitWidth: Theme.touch ? Theme.minTouchTarget : 24
             implicitHeight: implicitWidth
             focusPolicy: Qt.NoFocus
             activeFocusOnTab: false

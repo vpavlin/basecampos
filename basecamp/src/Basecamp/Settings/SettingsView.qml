@@ -8,6 +8,8 @@ import Logos.Theme
 
 Rectangle {
     id: root
+    // Test anchor (UI audits / inspector).
+    objectName: "settings.view"
 
     property var    repositories:        []
     property bool   repositoriesLoading: false
@@ -52,6 +54,18 @@ Rectangle {
     readonly property string windowClass: Theme.windowClass(width)
     readonly property bool compact: windowClass === "compact"
     readonly property bool touch: compact || Theme.density === "touch"
+    // DS controls in this engine floor at 44 px while Settings is
+    // phone-narrow (Theme.touch). Settings has its own engine in the tabs and
+    // desktop layouts; in the classic layout it shares ContentViews with
+    // Applications, so it claims the value only while shown.
+    Binding {
+        target: Theme
+        property: "compactWindow"
+        when: root.visible && root.width > 0
+        value: root.compact
+        restoreMode: Binding.RestoreValue
+    }
+    Component.onDestruction: Theme.compactWindow = false
     // Narrowed to compact while a section was open (a window dragged narrow):
     // stay on that section rather than jumping back to the list.
     onCompactChanged: {
@@ -306,8 +320,6 @@ Rectangle {
                     textColor: (cell.highlighted || cell.hovered)
                                    ? Theme.palette.text
                                    : Theme.palette.textTertiary
-                    implicitHeight: root.touch ? Math.max(Theme.minTouchTarget, Theme.components.listItem.height)
-                                               : Theme.components.listItem.height
                     onClicked: d.selectedIndex = index
                 }
             }

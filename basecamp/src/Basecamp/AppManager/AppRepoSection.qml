@@ -11,6 +11,8 @@ ColumnLayout {
     property int count: 0
     property var modulesSource: null
     property string viewMode: "grid"
+    property bool touch: false
+    property int gridMinCellWidth: 180
 
     signal appClicked(string name, string repositoryUrl)
     signal appManageRequested(string name, string repositoryUrl)
@@ -59,6 +61,8 @@ ColumnLayout {
         Layout.preferredHeight: implicitHeight
         modulesSource: root.modulesSource
         viewMode: root.viewMode
+        touch: root.touch
+        gridMinCellWidth: root.gridMinCellWidth
         onAppClicked: function(name, repositoryUrl) {
             root.appClicked(name, repositoryUrl || "")
         }

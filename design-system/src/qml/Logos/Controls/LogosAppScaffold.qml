@@ -29,10 +29,29 @@ Item {
     property bool canGoBack: false       // compact: show ‹ instead of ☰
     // Items placed at the right end of the top bar (icon buttons).
     property list<Item> actions
+    // Search in compact: a 🔍 at the right of the top bar that unfolds across
+    // it (LogosSearchToggle). Pages show their own search bar when wider and
+    // read `searchText` when compact.
+    property bool searchEnabled: false
+    property string searchPlaceholder: qsTr("Search")
+    readonly property string searchText: compact && searchEnabled ? searchToggle.text : ""
     default property alias content: contentArea.data
 
     readonly property string windowClass: Theme.windowClass(width)
     readonly property bool compact: windowClass === "compact"
+
+    // A compact window floors every DS tappable at Theme.minTouchTarget, at
+    // any density (Theme.touch). This engine's Theme only: a screen hosted in
+    // its own QML engine sets Theme.compactWindow itself (see Theme.qml).
+    Binding {
+        target: Theme
+        property: "compactWindow"
+        // Visibility is part of the value, not a `when`: a Binding switched
+        // off and on again by `when` did not re-apply its value (Qt 6.9).
+        value: root.visible && root.width > 0 && root.compact
+    }
+    // A Binding does not restore its target when it is destroyed.
+    Component.onDestruction: Theme.compactWindow = false
     readonly property alias drawer: navDrawer
 
     signal navActivated(string id)
@@ -207,14 +226,22 @@ Item {
                 onClicked: root.canGoBack ? root.backRequested() : navDrawer.open()
             }
             LogosText {
+                visible: !searchToggle.expanded
                 Layout.fillWidth: true
                 text: root.pageTitle
                 font.pixelSize: root.compact ? 17 : 20
                 font.weight: Font.DemiBold
                 elide: Text.ElideRight
             }
+            LogosSearchToggle {
+                id: searchToggle
+                objectName: "scaffold.search"
+                visible: root.compact && root.searchEnabled
+                placeholderText: root.searchPlaceholder
+            }
             Row {
                 id: actionRow
+                visible: !searchToggle.expanded
                 spacing: Theme.spacing.tiny
                 children: root.actions
             }
@@ -261,4 +288,7 @@ Item {
     }
     // Growing out of compact with the drawer open: the sidebar takes over.
     onCompactChanged: if (!compact) navDrawer.close()
+    // A page change starts with search folded and empty.
+    onCurrentNavChanged: searchToggle.close()
+    function openSearch() { if (compact && searchEnabled) searchToggle.open() }
 }

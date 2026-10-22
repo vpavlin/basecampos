@@ -19,8 +19,9 @@ import Logos.Theme
 //     fallbackColor  plate colour when there is no artwork. Defaults to the
 //                    theme grey. Callers wanting a per-item colour compute it
 //                    and pass it in
-//     tileSize       edge length in px (default 40; 48 at Theme.density
-//                    "touch"). On touch a smaller tileSize keeps its look but
+//     tileSize       edge length in px (default 40; Theme._size(40) under
+//                    Theme.touch: 48 at touch density, 44 in a compact
+//                    window at comfortable). On touch a smaller tileSize keeps its look but
 //                    the control (hit area) is padded to Theme.minTouchTarget
 //     radius         corner radius; artwork is masked to it
 //     highlighted    force hovered chrome (selected/current tile)
@@ -64,7 +65,7 @@ LogosAbstractButton {
     property bool highlighted: false
     // Artwork is inset and uncropped rather than bleeding to the tile edge.
     property bool insetArtwork: true
-    property int tileSize: Theme.density === "touch" ? Theme._size(40) : 40
+    property int tileSize: Theme.touch ? Theme._size(40) : 40
     property real radius: Theme.spacing.radiusMedium
     property real dimOpacity: 1.0
 
@@ -107,7 +108,7 @@ LogosAbstractButton {
             d.isPressed ? -0.06 : (d.isHovered ? 0.08 : 0)
 
         // Transparent margin that brings a small tile's hit area to 44 on touch.
-        readonly property real hitPad: Theme.density === "touch"
+        readonly property real hitPad: Theme.touch
                                        ? Math.max(0, (Theme.minTouchTarget - root.tileSize) / 2) : 0
     }
 

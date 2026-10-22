@@ -30,6 +30,11 @@ Item {
     property int selected: 0
     property bool detailOpen: labState.open === "1"
     readonly property bool canGoBack: compact && detailOpen
+    // Compact: search folds into the top bar (scaffold); wider: our own bar.
+    readonly property bool searchable: compact && !detailOpen
+    readonly property string searchPlaceholder: "Search mail"
+    readonly property string query: (compact ? (parent && parent.searchText ? parent.searchText : "")
+                                             : search.text).toLowerCase()
     function goBack() { detailOpen = false }
 
     function open(index) {
@@ -153,6 +158,7 @@ Item {
 
         LogosSearchBar {
             id: search
+            visible: !page.compact
             anchors { left: parent.left; right: parent.right; top: parent.top
                       margins: page.compact ? Theme.spacing.large : Theme.spacing.medium }
             placeholderText: "Search mail"
@@ -160,14 +166,15 @@ Item {
 
         ListView {
             id: list
-            anchors { left: parent.left; right: parent.right; top: search.bottom; bottom: parent.bottom
-                      topMargin: Theme.spacing.small }
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom
+                      top: page.compact ? parent.top : search.bottom
+                      topMargin: page.compact ? 0 : Theme.spacing.small }
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             model: messages
             delegate: MessageRow {
                 width: ListView.view.width
-                readonly property string q: search.text.toLowerCase()
+                readonly property string q: page.query
                 readonly property bool matches: q === "" || (sender + " " + subject + " " + body).toLowerCase().indexOf(q) >= 0
                 visible: matches
                 height: matches ? implicitHeight : 0

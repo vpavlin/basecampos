@@ -189,9 +189,28 @@ void MainContainer::wireSidebar(QObject* sidebarRoot)
             this, SLOT(onSidebarTooltipRequested(QString, qreal)));
 }
 
+// Whether Applications is what the user is looking at, in every layout. The
+// section index only says so in the classic layout: the desktop and tabs
+// layouts park it back on Workspace right after opening a section (see
+// onSectionIndexChanged), so it never reads AppManager there.
+bool MainContainer::applicationsInFront() const
+{
+    static const QString key = QStringLiteral("sys:applications");
+    if (m_tabArea) return m_tabArea->currentKey() == key;
+    if (m_desktop) return m_desktop->activeKey() == key;
+    return m_host->currentSectionIndex() == ShellSection::AppManager;
+}
+
+// The dialog opens over whatever is in front. Asked for from inside
+// Applications (a tile, a list row, its ⋯ menu), it stays put: the user is
+// already where the app is. Asked for from elsewhere (the welcome / new-tab
+// page's app results, a launcher), Applications comes forward filtered to that
+// app, so closing the dialog leaves them on its entry — that part is unchanged.
+// Before this, the tabs and desktop layouts never matched the guard, so a tap
+// inside Applications also replaced the user's grid with a one-app search.
 void MainContainer::onAddApplicationDialogRequested(const QVariantMap& metadata)
 {
-    if (m_host->currentSectionIndex() == ShellSection::AppManager) return;
+    if (applicationsInFront()) return;
 
     m_host->setCurrentSectionIndex(ShellSection::AppManager);
     applyAppManagerSearch(metadata.value(QStringLiteral("name")).toString());

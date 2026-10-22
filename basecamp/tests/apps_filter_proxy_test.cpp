@@ -133,6 +133,32 @@ private slots:
         QCOMPARE(m_proxy->rowCount(), 3);
     }
 
+    // ── order ──────────────────────────────────────────────────────────
+    // Clearing a search restores catalog order: rows the search hid come
+    // back in their places, not after the rows it kept.
+    void clearing_search_restores_catalog_order()
+    {
+        m_model->replaceCatalog({
+            row("alpha",       "r", "1.0", "H1"),
+            row("beta_wallet", "r", "1.0", "H2"),
+            row("gamma",       "r", "1.0", "H3"),
+            row("delta_wallet","r", "1.0", "H4"),
+            row("epsilon",     "r", "1.0", "H5"),
+        });
+        auto names = [this]() {
+            QStringList out;
+            for (int i = 0; i < m_proxy->rowCount(); ++i)
+                out << m_proxy->index(i, 0).data(AppsModel::NameRole).toString();
+            return out;
+        };
+        const QStringList catalog{"alpha", "beta_wallet", "gamma", "delta_wallet", "epsilon"};
+        QCOMPARE(names(), catalog);
+        m_proxy->setSearchText("wallet");
+        QCOMPARE(names(), (QStringList{"beta_wallet", "delta_wallet"}));
+        m_proxy->setSearchText("");
+        QCOMPARE(names(), catalog);
+    }
+
     // ── searchText ─────────────────────────────────────────────────────
     void searchText_case_insensitive_substring_on_name()
     {

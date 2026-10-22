@@ -20,8 +20,9 @@ Item {
     // that stops at 720; on a phone the pickers fill the width (up to 360),
     // a control's help text drops under it, and pickers are 44 px tall.
     readonly property bool compact: Theme.windowClass(width) === "compact"
-    readonly property bool touch: compact || Theme.density === "touch"
-    readonly property int pickerHeight: touch ? Theme.minTouchTarget : Theme.components.combo.height
+    // The DS combo floors at 44 under Theme.touch (touch density, or a
+    // phone-narrow window); no override needed.
+    readonly property int pickerHeight: Theme.components.combo.height
 
     QtObject {
         id: d

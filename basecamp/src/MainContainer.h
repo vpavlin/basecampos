@@ -83,6 +83,7 @@ private slots:
     void onNotifyLayerResized();
 
 private:
+    bool applicationsInFront() const;
     void wireSidebar(QObject* sidebarRoot);
     bool offersSection(int section) const;
     void applyAppManagerSearch(const QString& query);

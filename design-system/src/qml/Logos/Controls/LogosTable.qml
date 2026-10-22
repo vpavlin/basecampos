@@ -29,11 +29,14 @@ import Logos.Icons
 // Selection (when selectionMode !== None): a checkbox column is auto-prepended
 // at index 0. In Multi mode the header gets a select-all checkbox.
 //
-// Touch (Theme.density "touch"): headerHeight defaults to Theme._size(36)
-// (44); the checkbox column is Theme.minTouchTarget wide and its whole cell
+// Header: a titled or sortable header cell is tappable across its whole
+// width (padding included); an untitled, non-sortable one is not tappable.
+//
+// Touch (Theme.touch: touch density, or a compact window at any density):
+// headerHeight defaults to Theme._size(36) (44); the checkbox column is Theme.minTouchTarget wide and its whole cell
 // toggles the row (the checkbox glyph is unchanged); a row shows
 // Theme.components.listItem.backgroundPressed while pressed and
-// .backgroundSelected while selected. Other densities render as before.
+// .backgroundSelected while selected. Otherwise renders as before.
 //
 // Example:
 //     LogosTable {
@@ -96,7 +99,7 @@ Rectangle {
     property QtObject d: QtObject {
         id: d
 
-        readonly property bool _touch: Theme.density === "touch"
+        readonly property bool _touch: Theme.touch
         readonly property int _selectionWidth: _touch ? Theme.minTouchTarget : 40
 
         readonly property var effectiveColumns: {
@@ -291,8 +294,15 @@ Rectangle {
             readonly property bool _isAscending: _isSorted
                                                  && root.sortOrder === Qt.AscendingOrder
 
+            // The tap area spans the whole header cell (the Loader is inset by
+            // the cell padding). An untitled, non-sortable cell (e.g. an
+            // actions column) is not a tap target at all.
             MouseArea {
+                objectName: "headerTapArea"
                 anchors.fill: parent
+                anchors.leftMargin: -d._cellPadFor(columnDef)
+                anchors.rightMargin: -d._cellPadFor(columnDef)
+                enabled: columnDef.sortable || columnDef.title !== ""
                 cursorShape: columnDef.sortable ? Qt.PointingHandCursor : Qt.ArrowCursor
                 onClicked: d._onHeaderClick(columnDef)
                 z: -1

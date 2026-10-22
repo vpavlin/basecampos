@@ -102,6 +102,18 @@ QtObject {
 
     function setDensity(value) { settings.density = value }
 
+    // True while the app's own area is phone-narrow (windowClass "compact").
+    // Session-only, never saved: set by whoever knows the width.
+    // LogosAppScaffold sets it from its own width; a screen hosted in its own
+    // QML engine (each engine has its own Theme) sets it at its root:
+    //     Binding { target: Theme; property: "compactWindow"
+    //               value: Theme.windowClass(root.width) === "compact" }
+    property bool compactWindow: false
+    // Tappables floor at minTouchTarget (44): touch density, or a compact
+    // window at any density. Only density scales sizes (densityScale);
+    // compactWindow floors, it never scales.
+    readonly property bool touch: density === "touch" || compactWindow
+
     // ── Responsive layout (docs/RESPONSIVE.md) ─────────────────────────────
     // Window size classes, by the width of the app's own area (not the
     // screen): compact < 600 ≤ medium < 840 ≤ expanded. The same thresholds
@@ -122,7 +134,7 @@ QtObject {
 
     function _size(px) {
         var v = Math.round(px * densityScale)
-        return density === "touch" ? Math.max(44, v) : v
+        return touch ? Math.max(minTouchTarget, v) : v
     }
     function _pad(px) { return Math.round(px * densityScale) }
 

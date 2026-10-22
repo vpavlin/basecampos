@@ -16,6 +16,29 @@ Dialog {
     // onCatalogInstallFailed; cleared on each (re)open.
     property string installError: ""
 
+    // ─── Responsive (docs/RESPONSIVE.md in the design system) ───
+    // Measured on the overlay the dialog sits in (the window's content):
+    //   medium / expanded  the 560 px centred dialog, as on desktop.
+    //   compact (< 600)    a full-screen page: 44 px ✕ in the header, the body
+    //                      scrolls as one page, package rows drop the
+    //                      description column (it moves under the name), and
+    //                      Uninstall + the primary action sit at the bottom,
+    //                      the primary full width and last.
+    readonly property real hostWidth: parent ? parent.width : width
+    readonly property bool compact: Theme.windowClass(hostWidth) === "compact"
+    // The dialog lives in the overlay's own QML engine: while it is open as a
+    // phone page, it tells that engine's Theme so DS controls inside it (the
+    // version pickers and their dropdown rows, checkboxes) floor at 44 px.
+    Binding {
+        target: Theme
+        property: "compactWindow"
+        when: root.visible
+        value: root.compact
+        restoreMode: Binding.RestoreValue
+    }
+    Component.onDestruction: Theme.compactWindow = false
+    readonly property bool touch: Theme.touch
+
     signal installRequested(string name, string repositoryUrl)
     signal launchRequested(string name)
     signal versionChangeRequested(string name, string repositoryUrl, var versionPins, var optionalSelection, var optionalVersionPins)
@@ -101,6 +124,19 @@ Dialog {
             return raw
         }
         readonly property int tileSize: 64
+
+        function primaryAction() {
+            if (d.actionMode === "launch") {
+                root.launchRequested(d.targetName)
+                root.close()
+                return
+            }
+            root.installRequested(d.targetName, d.targetRepoUrl)
+        }
+        function uninstall() {
+            root.uninstallRequested(d.targetName, d.targetRepoUrl)
+            root.close()
+        }
 
         readonly property bool   installed:        root.metadata.isInstalled === true
         readonly property string installedVersion: root.metadata.installedVersion || ""
@@ -303,22 +339,49 @@ Dialog {
     }
 
     modal: true
-    anchors.centerIn: parent
-    width: 560
-    height: root.parent
-            ? Math.min(implicitHeight, root.parent.height - 2 * Theme.spacing.large)
-            : implicitHeight
+    anchors.centerIn: root.compact ? undefined : parent
+    x: 0
+    y: 0
+    width: root.compact ? root.hostWidth : 560
+    height: root.compact
+            ? (root.parent ? root.parent.height : implicitHeight)
+            : root.parent
+              ? Math.min(implicitHeight, root.parent.height - 2 * Theme.spacing.large)
+              : implicitHeight
     padding: 0
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
     background: Rectangle {
         color: Theme.palette.backgroundSecondary
         border.color: Theme.palette.borderSubtle
-        border.width: 1
-        radius: Theme.spacing.radiusLarge
+        border.width: root.compact ? 0 : 1
+        radius: root.compact ? 0 : Theme.spacing.radiusLarge
     }
 
+    // Compact: the body is one scrolling page (a phone can't fit the fixed
+    // sections plus two lists), the header and the action bar stay put.
     contentItem: ColumnLayout {
+        objectName: "addApplicationDialog.content"
+        spacing: 0
+
+    Flickable {
+        id: bodyScroll
+        objectName: "addApplicationDialog.body"
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        // Expanded/medium: sized by the content, exactly as before.
+        Layout.preferredHeight: root.compact ? -1 : body.implicitHeight
+        contentWidth: width
+        contentHeight: root.compact ? body.implicitHeight : height
+        interactive: root.compact && contentHeight > height
+        clip: root.compact
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: LogosScrollBar { policy: ScrollBar.AsNeeded; visible: root.compact }
+
+    ColumnLayout {
+        id: body
+        width: bodyScroll.width
+        height: root.compact ? implicitHeight : bodyScroll.height
         spacing: Theme.spacing.large
 
         // ─── Header ───
@@ -333,19 +396,27 @@ Dialog {
             LogosText {
                 Layout.fillWidth: true
                 text: qsTr("Add Application")
-                font.pixelSize: Theme.typography.pageTitleText
+                font.pixelSize: root.compact ? Theme.typography.panelTitleText
+                                             : Theme.typography.pageTitleText
                 font.weight: Theme.typography.weightBold
                 color: Theme.palette.text
             }
 
             LogosIconButton {
                 objectName: "addApplicationDialog.closeButton"
+                Accessible.name: qsTr("Close")
                 iconSource: LogosIcons.close
-                size: 28
+                // Touch: a 44 px hit area around the same 28 px circle.
+                size: root.touch ? Theme.minTouchTarget : 28
                 iconSize: 14
-                background: Rectangle {
-                    radius: width / 2 * Theme.spacing.roundness
-                    color: Theme.palette.surfaceRaised
+                background: Item {
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 28
+                        height: 28
+                        radius: width / 2 * Theme.spacing.roundness
+                        color: Theme.palette.surfaceRaised
+                    }
                 }
                 onClicked: root.close()
             }
@@ -357,8 +428,8 @@ Dialog {
             Layout.fillWidth: true
             Layout.leftMargin: Theme.spacing.large
             Layout.rightMargin: Theme.spacing.large
-            Layout.preferredHeight: d.showcaseHeight
-            Layout.minimumHeight: d.showcaseHeight
+            Layout.preferredHeight: root.compact ? 140 : d.showcaseHeight
+            Layout.minimumHeight: root.compact ? 140 : d.showcaseHeight
             color: Theme.palette.background
             radius: Theme.spacing.radiusMedium
 
@@ -451,17 +522,14 @@ Dialog {
 
                 LogosButton {
                     id: uninstallButton
-                    objectName: "addApplicationDialog.uninstallButton"
+                    objectName: root.compact ? "" : "addApplicationDialog.uninstallButton"
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredHeight: 40
                     Layout.leftMargin: Theme.spacing.small
                     Layout.rightMargin: Theme.spacing.small
-                    visible: d.canUninstall
+                    visible: d.canUninstall && !root.compact
                     text: qsTr("Uninstall")
-                    onClicked: {
-                        root.uninstallRequested(d.targetName, d.targetRepoUrl)
-                        root.close()
-                    }
+                    onClicked: d.uninstall()
                     contentItem: LogosText {
                         text: uninstallButton.text
                         color: Theme.palette.error
@@ -473,20 +541,14 @@ Dialog {
 
                 LogosButton {
                     id: actionButton
-                    objectName: "addApplicationDialog.primaryButton"
+                    objectName: root.compact ? "" : "addApplicationDialog.primaryButton"
+                    visible: !root.compact
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredWidth: 110
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: root.touch ? Theme.minTouchTarget : 40
                     enabled: d.actionEnabled
                     text: d.actionText
-                    onClicked: {
-                        if (d.actionMode === "launch") {
-                            root.launchRequested(d.targetName)
-                            root.close()
-                            return
-                        }
-                        root.installRequested(d.targetName, d.targetRepoUrl)
-                    }
+                    onClicked: d.primaryAction()
                     background: Rectangle {
                         radius: Theme.spacing.radiusXlarge
                         color: !actionButton.enabled
@@ -532,12 +594,14 @@ Dialog {
             // bar hugging the dialog edge and the content clear of it.
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.preferredHeight: Math.min(d.depsWantedHeight,
-                                             d.depsRowHeight * d.depsMaxRows)
+            Layout.preferredHeight: root.compact
+                                    ? d.depsWantedHeight
+                                    : Math.min(d.depsWantedHeight,
+                                               d.depsRowHeight * d.depsMaxRows)
             Layout.maximumHeight: Layout.preferredHeight
-            Layout.minimumHeight: d.depsRowHeight
+            Layout.minimumHeight: root.compact ? d.depsWantedHeight : d.depsRowHeight
 
-            interactive: d.depsWantedHeight > height
+            interactive: !root.compact && d.depsWantedHeight > height
             spacing: 0
             model: root.requiredPackagesModel
 
@@ -553,6 +617,8 @@ Dialog {
 
                 appRow: model
                 installing: d.installing
+                compact: root.compact
+                touch: root.touch
 
                 onVersionPicked: function(rowName, newVersion) {
                     var nextPicks = Object.assign({}, d.pickedVersions)
@@ -583,11 +649,13 @@ Dialog {
                 objectName: "addApplicationDialog.optionalPackages"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredHeight: Math.min(d.optionalPackages.length * d.depsRowHeight,
-                                                 3 * d.depsRowHeight)
+                Layout.preferredHeight: root.compact
+                                        ? d.optionalPackages.length * d.depsRowHeight
+                                        : Math.min(d.optionalPackages.length * d.depsRowHeight,
+                                                   3 * d.depsRowHeight)
                 Layout.maximumHeight: Layout.preferredHeight
-                Layout.minimumHeight: d.depsRowHeight
-                interactive: contentHeight > height
+                Layout.minimumHeight: root.compact ? Layout.preferredHeight : d.depsRowHeight
+                interactive: !root.compact && contentHeight > height
                 clip: true
                 spacing: 0
                 model: d.optionalPackages
@@ -600,6 +668,8 @@ Dialog {
                     rightPadding: Theme.spacing.large
                     appRow: modelData
                     installing: d.installing
+                    compact: root.compact
+                    touch: root.touch
                     selectable: !modelData.requiredFor
                     selectionObjectName: "addApplicationDialog.optional." + modelData.name
                     selected: d.isOptionalSelected(modelData)
@@ -673,6 +743,56 @@ Dialog {
             font.pixelSize: Theme.typography.secondaryText
             color: Theme.palette.textTertiary
             text: d.footerText
+        }
+    }
+    }
+
+        // ─── Compact action bar ───
+        // Uninstall (when offered), then the primary action full width and
+        // last, within thumb reach; it stays visible while the body scrolls.
+        ColumnLayout {
+            visible: root.compact
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.spacing.large
+            Layout.rightMargin: Theme.spacing.large
+            Layout.topMargin: Theme.spacing.medium
+            Layout.bottomMargin: Theme.spacing.large
+            spacing: Theme.spacing.small
+
+            LogosButton {
+                id: compactUninstall
+                objectName: root.compact ? "addApplicationDialog.uninstallButton" : ""
+                visible: d.canUninstall
+                Layout.fillWidth: true
+                Layout.preferredHeight: Theme.minTouchTarget
+                text: qsTr("Uninstall")
+                onClicked: d.uninstall()
+                contentItem: LogosText {
+                    text: compactUninstall.text
+                    color: Theme.palette.error
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Item {}
+            }
+
+            LogosButton {
+                id: compactAction
+                objectName: root.compact ? "addApplicationDialog.primaryButton" : ""
+                Layout.fillWidth: true
+                Layout.preferredHeight: Theme.minTouchTarget
+                enabled: d.actionEnabled
+                text: d.actionText
+                onClicked: d.primaryAction()
+                background: Rectangle {
+                    radius: Theme.spacing.radiusXlarge
+                    color: !compactAction.enabled
+                               ? Theme.palette.backgroundMuted
+                               : (compactAction.isActive
+                                      ? Theme.palette.accentOrangeMid
+                                      : Theme.palette.accentOrange)
+                }
+            }
         }
     }
 }

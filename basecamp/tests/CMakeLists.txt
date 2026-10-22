@@ -13,6 +13,10 @@ find_package(Qt6 REQUIRED COMPONENTS Core Network Qml Test Widgets Quick QuickWi
 # below, never a silent skip.
 find_package(spdlog QUIET)
 find_package(yaml-cpp QUIET)
+# The shell's C++ chrome (WorkspaceArea, TabArea, DesktopArea, MainContainer)
+# reads theme colours through ThemeColors.h; a test pulling one of those in
+# declares `// libdeps: Logos::DesignSystem`.
+find_package(LogosDesignSystem CONFIG QUIET)
 
 enable_testing()
 
