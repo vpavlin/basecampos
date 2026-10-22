@@ -227,8 +227,11 @@ Item {
         HoverHandler { id: hover }
         TapHandler {
             onTapped: {
-                if (root.center) root.center.activate(card.notificationId, false)
+                // Close first: activating dismisses the notification, which
+                // destroys this card mid-handler, so nothing after it runs.
+                const id = card.notificationId
                 root.closePanel()
+                if (root.center) root.center.activate(id, false)
             }
         }
 
@@ -287,9 +290,10 @@ Item {
                 Layout.topMargin: 4
                 text: card.action
                 onClicked: {
-                    if (root.center) root.center.activate(card.notificationId, true)
-                    card.closed()
+                    const id = card.notificationId
                     root.closePanel()
+                    card.closed()
+                    if (root.center) root.center.activate(id, true)
                 }
             }
         }

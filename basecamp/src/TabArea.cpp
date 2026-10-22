@@ -707,7 +707,7 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     column->addWidget(m_stack, 1);
 
     // Compact layout (narrower than kCompactWidth): a bottom bar within thumb
-    // reach, New tab · Notifications · Tabs, and a tab switcher in place of the strip.
+    // reach, Notifications · New tab · Tabs, and a tab switcher in place of the strip.
     m_bottom = new QWidget(this);
     m_bottom->setObjectName(QStringLiteral("basecampium.bottomBar"));
     m_bottom->setAttribute(Qt::WA_StyledBackground);
@@ -741,8 +741,10 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     connect(bottomBell, &QToolButton::clicked, this, &TabArea::notificationsClicked);
     m_tabsButton = tabsButton;
     connect(tabsButton, &QToolButton::clicked, this, [this]() { showSwitcher(!m_switcherOpen); });
-    bottomRow->addWidget(newButton);
+    // Primary action in the middle, where the thumb rests; the tab switcher
+    // on the right, where phone browsers keep it; notifications on the left.
     bottomRow->addWidget(bottomBell);
+    bottomRow->addWidget(newButton);
     bottomRow->addWidget(tabsButton);
     m_bottom->setVisible(false);
     column->addWidget(m_bottom);
@@ -814,7 +816,8 @@ void TabArea::applyTheme()
         pm.fill(Qt::transparent);
         QPainter p(&pm);
         p.setRenderHint(QPainter::Antialiasing);
-        p.setPen(QPen(tok("text", "#FFFFFF"), 2.4, Qt::SolidLine, Qt::RoundCap));
+        // Same tone as the bell and the tab count beside it.
+        p.setPen(QPen(tok("textSecondary", "#A3A3A3"), 2.4, Qt::SolidLine, Qt::RoundCap));
         p.drawLine(QPointF(13, 3), QPointF(13, 23));
         p.drawLine(QPointF(3, 13), QPointF(23, 13));
         p.end();

@@ -6,7 +6,7 @@ Question: if a Basecampium-style shell became the default, how far is it from a 
 ## TL;DR
 
 - Basecampium adapts with a **width switch, not a redesign**: below **600 px** the tab strip gives
-  way to a centred title, a **bottom bar** (New tab · Notifications · Tabs) and a **tab
+  way to a centred title, a **bottom bar** (Notifications · New tab · Tabs) and a **tab
   switcher** of cards. No window buttons.
   Above 600 px nothing changes.
 - **Notifications** carry over: full-width banners at the top, the list as a **sheet above the
@@ -36,11 +36,13 @@ Question: if a Basecampium-style shell became the default, how far is it from a 
 │ ┌ Notifications ───── Clear ┐ │  list = sheet above the bottom bar
 │ └───────────────────────────┘ │
 ├───────────────────────────────┤
-│    +        🔔²       [2]•    │  New tab · Notifications (badge) · Tabs (count, dot)
+│    🔔²        +       [2]•    │  Notifications (badge) · New tab · Tabs (count, dot)
 └───────────────────────────────┘
 ```
 
-- **+** opens a New tab (the launcher). **🔔** opens the list as a sheet just above it.
+- Order: the primary action (**+**, a New tab = the launcher) in the middle where the thumb
+  rests; **Tabs** on the right, where phone browsers keep it; **🔔** on the left, opening the list
+  as a sheet above the bar.
 - **Tabs**: a grid of cards, two per row: title, large app icon, ✕ in a 44 px corner, current
   tab outlined in `primary`, dot when that app has unread notifications. Tap opens.
 - Touch targets: bottom buttons 64×48, cards 150 high, close corners 44.

@@ -124,7 +124,7 @@ private:
     bool m_compact = false;
     bool m_switcherOpen = false;
     QLabel* m_title = nullptr;              // compact: the current tab's title
-    QWidget* m_bottom = nullptr;            // compact: New tab · Notifications · Tabs
+    QWidget* m_bottom = nullptr;            // compact: Notifications · New tab · Tabs
     QWidget* m_bottomBell = nullptr;
     QToolButton* m_newButton = nullptr;
     QToolButton* m_tabsButton = nullptr;
