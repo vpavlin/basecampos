@@ -26,8 +26,9 @@ Rectangle {
     // Phone width (Basecampium's compact layout): tighter margins and tiles.
     readonly property bool compact: width < 600
     readonly property int sideMargin: compact ? 32 : 96
-    readonly property int tileSize: compact ? 56 : 64
-    readonly property int pitch: compact ? 84 : 112
+    // Tiles the size of the Applications grid's (80), so an app looks the same in both.
+    readonly property int tileSize: 80
+    readonly property int pitch: compact ? 108 : 124
 
     readonly property var systemApps: [
         { key: "sys:applications", name: qsTr("Applications"),    icon: BasecampIcons.dashboard },
