@@ -1,6 +1,6 @@
 # Notifications: spec
 
-Status: prototype, 2026-10-21, `notifications` branch (Basecampium). Decisions: [ADR-042 to ADR-047](adr/).
+Status: prototype, 2026-10-21, `notifications` branch (Basecampium). Decisions: [ADR-042 to ADR-049](adr/).
 
 ## TL;DR
 
