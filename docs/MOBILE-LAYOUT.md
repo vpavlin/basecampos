@@ -2,6 +2,7 @@
 
 Status: experiment, 2026-10-22, `mobile-layout` branch (on top of `notifications`).
 Question: if a Basecampium-style shell became the default, how far is it from a phone?
+Decisions: [ADR-050 to ADR-059](adr/).
 
 ## TL;DR
 
