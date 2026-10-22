@@ -1,6 +1,7 @@
-# Basecampium on a phone: what IronFox adds (spec, not built)
+# Basecampium on a phone: what IronFox adds
 
-Status: proposal, 2026-10-22. Nothing here is implemented yet.
+Status: **P1 to P4 implemented** on `mobile-ironfox` (from `mobile-onebar`), 2026-10-22; P5 and
+the DS patterns are still proposals. Decision: [ADR-066](adr/0066-ironfox-menu-sheet.md).
 Source: IronFox 158.0.2 (hardened Firefox for Android, the maintained successor of Mull) on a
 Pixel 10 / GrapheneOS. Builds on [MOBILE-ONE-BAR.md](MOBILE-ONE-BAR.md) (Mull 133, ADR-065).
 
@@ -17,6 +18,8 @@ changes fit Basecampium now:
    exception is a fixed row that must not shift, like Back and Forward.
 3. **Swipe up on the bar** opens the tab switcher.
 4. **The switcher gets its own menu:** Recently closed, Close all (red), and later Search tabs.
+
+![Built: the sheet on home and on an app, the switcher menu, the switcher, searching tabs](mobile-ironfox/built.png)
 
 ![IronFox: home, a page, the home menu, the page menu, "More" expanded](mobile-ironfox/bar-and-menus.png)
 ![IronFox: tab page, its menu, tab search, editing the address, Expanded bottom layout](mobile-ironfox/tabs-and-editing.png)
@@ -109,3 +112,21 @@ search, editing, long-press on the count, Customize, the Expanded bottom layout.
 tab list did nothing on home; not tried on a page. Settings were restored to Top / Simple;
 Safe Browsing off, uBlock not installed, JIT off, language spoofing on (IronFox defaults kept
 where they were the private choice).
+
+## Built (P1 to P4)
+
+- **P1** `BarSheet`: a popup window covering the shell's window, a scrim, and a sheet with a
+  handle. It holds a card of tab actions (New tab, Reopen closed tab, "Close <app>"), three tiles
+  (Applications, Settings, Packages), and "Close all N tabs" alone in red with a trash icon. It
+  closes on the scrim, a swipe down from the handle, Esc / Back, or an action.
+- **P2** Context: "Close <app>" only on an app; "Close all" only when it means more than the
+  current tab. The tab-count long-press menu follows the same rule, with Close all in red.
+- **P3** Swipe up on the pill (≥ 40 px, vertical) opens the switcher.
+- **P4** Switcher header: the count, or **Search your tabs** with more than 8 tabs (filters by
+  title, cleared when the switcher closes), and a ⋮ with Reopen closed tab and Close all tabs (red).
+  It also gets a thin phone-style scroll bar, which fixes the desktop scroll bar the switcher had.
+
+Verified headlessly at 390: the sheet captured on home and on an app (popups aren't mapped by the
+headless compositor; a test hook saves them, `BASECAMP_SHELL_MENU_SHOT`); the switcher header,
+menu, search with 9 tabs, and its clearing; 0 QML errors. **Needs a touchscreen:** the swipe up,
+the swipe down on the handle, the scrim tap, and the sheet's real position and translucency.

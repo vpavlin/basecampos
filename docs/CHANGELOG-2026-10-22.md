@@ -1,6 +1,6 @@
 # Change log, 2026-10-22: notifications, phone layout, responsive design system
 
-One day's work across four repositories. Decisions: ADR-048 to ADR-065 ([adr/](adr/)).
+One day's work across four repositories. Decisions: ADR-048 to ADR-066 ([adr/](adr/)).
 
 ## Repositories and branches
 
@@ -41,6 +41,12 @@ One day's work across four repositories. Decisions: ADR-048 to ADR-065 ([adr/](a
 - New tab is the home page: not counted or listed, closes when left; the bar's pill is its search.
 - ⋮ menu (tabs, reopen, close all, shell apps); long-press the tab count; swipe the pill to switch tabs; Esc / Back leaves the switcher or home.
 - Spec from exploring Mull on GrapheneOS: [MOBILE-ONE-BAR.md](MOBILE-ONE-BAR.md).
+
+## After IronFox (ADR-066)
+- The ⋮ menu is a bottom sheet: tab actions, the shell apps as tiles, "Close all" alone in red.
+- Menus leave out what doesn't apply; swipe up on the bar opens the tabs; the switcher has a ⋮ and, with many tabs, a search.
+- The bar menu was first restyled in place (theme colours, 50 px rows, icons) for the Mull demo.
+- Spec: [MOBILE-IRONFOX.md](MOBILE-IRONFOX.md).
 
 ## Tooling (ADR-056, 062)
 - `headless-basecamp-ui` skill: private headless sway, isolated runs (`RUN` / `PORT`), resize by pid, `ui.mjs` driver (objectName clicks, eval in any engine, touch, screenshots), `app-audit.mjs`, fake notification daemon.

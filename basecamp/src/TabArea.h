@@ -79,7 +79,7 @@ public:
     static constexpr int kBottomBarHeight = 60;
     bool isCompact() const { return m_compact; }
     int bottomBarHeight() const;
-    void showSwitcher(bool on);
+    Q_INVOKABLE void showSwitcher(bool on);
     // The bell the user sees: in the bottom bar in the compact layout.
     QWidget* bellButton() const { return m_compact ? m_bottomBell : m_bell; }
     int topBarHeight() const;
@@ -94,6 +94,8 @@ public:
     // Open tabs, not counting New tabs.
     int contentTabCount() const;
     void closeAllTabs();
+    // The ⋮ menu as a bottom sheet (docs/MOBILE-IRONFOX.md P1).
+    Q_INVOKABLE void showSheet();
 
 signals:
     void closeRequested(const QString& key);
@@ -123,6 +125,7 @@ private:
     void updateCompactBar();
     void rebuildSwitcher();
     void showBarMenu(QWidget* anchor, bool tabsOnly);
+    void showSwitcherMenu(QWidget* anchor);
 
     QWidget* m_bar = nullptr;
     QToolButton* m_plus = nullptr;
@@ -151,4 +154,7 @@ private:
     QString m_returnKey;                    // the last tab that was not a New tab
     QWidget* m_switcher = nullptr;          // compact: open tabs as cards
     QWidget* m_switcherGrid = nullptr;
+    QLabel* m_switcherCount = nullptr;      // "N open tabs"
+    QLineEdit* m_switcherSearch = nullptr;  // shown with many tabs
+    QToolButton* m_switcherMenuButton = nullptr;
 };
