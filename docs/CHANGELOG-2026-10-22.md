@@ -1,6 +1,6 @@
 # Change log, 2026-10-22: notifications, phone layout, responsive design system
 
-One day's work across four repositories. Decisions: ADR-048 to ADR-064 ([adr/](adr/)).
+One day's work across four repositories. Decisions: ADR-048 to ADR-065 ([adr/](adr/)).
 
 ## Repositories and branches
 
@@ -35,6 +35,12 @@ One day's work across four repositories. Decisions: ADR-048 to ADR-064 ([adr/](a
 - **Applications:** catalog pattern, category picker, long-press menus, full-screen Add Application on phones; fixed the search-order bug (pre-existing), the tap-pops-menu touch bug, the routing that filtered the grid, and a freeze its own first commit introduced (found by the headless skill, bisected).
 - **Package Manager:** filters → pickers, table → cards, details → rows with an action strip; its UI tests fixed (49 / 49) and unit tests 39 / 39.
 - Basecamp's unit-test build fixed (missing DS headers): 30 / 30.
+
+## One bar, after Mull (ADR-065)
+- Compact Basecampium: one bottom bar `[ current tab · search ] [🔔] [tabs] [⋮]`, no title bar.
+- New tab is the home page: not counted or listed, closes when left; the bar's pill is its search.
+- ⋮ menu (tabs, reopen, close all, shell apps); long-press the tab count; swipe the pill to switch tabs; Esc / Back leaves the switcher or home.
+- Spec from exploring Mull on GrapheneOS: [MOBILE-ONE-BAR.md](MOBILE-ONE-BAR.md).
 
 ## Tooling (ADR-056, 062)
 - `headless-basecamp-ui` skill: private headless sway, isolated runs (`RUN` / `PORT`), resize by pid, `ui.mjs` driver (objectName clicks, eval in any engine, touch, screenshots), `app-audit.mjs`, fake notification daemon.

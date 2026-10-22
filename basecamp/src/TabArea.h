@@ -7,6 +7,7 @@
 
 class QStackedWidget;
 class QLabel;
+class QLineEdit;
 class QToolButton;
 
 // Basecampium's frame: one bar with "+", the tabs, a drag area and the window
@@ -83,12 +84,28 @@ public:
     QWidget* bellButton() const { return m_compact ? m_bottomBell : m_bell; }
     int topBarHeight() const;
 
+    // Compact layout, one bar (docs/MOBILE-LAYOUT.md §8, after Mull): New tab
+    // is the home page, not a tab of its own. Shows it, reusing an open New
+    // tab; on it, focuses the bar's search.
+    Q_INVOKABLE void openHome();
+    // Esc / phone Back: closes the switcher, or leaves the New tab for the
+    // last tab. False when there was nothing to go back from.
+    Q_INVOKABLE bool handleBack();
+    // Open tabs, not counting New tabs.
+    int contentTabCount() const;
+    void closeAllTabs();
+
 signals:
     void closeRequested(const QString& key);
     void currentKeyChanged(const QString& key);
     void newTabShown();
     void notificationsClicked();
     void compactChanged(bool compact);
+    // One bar: the bar's search on the New tab, and its Enter.
+    void homeQueryChanged(const QString& text);
+    void homeQueryAccepted();
+    void reopenClosedRequested();
+    void systemAppRequested(const QString& key);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -105,6 +122,7 @@ private:
     void setCompact(bool on);
     void updateCompactBar();
     void rebuildSwitcher();
+    void showBarMenu(QWidget* anchor, bool tabsOnly);
 
     QWidget* m_bar = nullptr;
     QToolButton* m_plus = nullptr;
@@ -123,11 +141,14 @@ private:
     QStringList m_attention;                // keys with unread notifications
     bool m_compact = false;
     bool m_switcherOpen = false;
-    QLabel* m_title = nullptr;              // compact: the current tab's title
-    QWidget* m_bottom = nullptr;            // compact: Notifications · New tab · Tabs
+    QWidget* m_bottom = nullptr;            // compact: the one bar
     QWidget* m_bottomBell = nullptr;
-    QToolButton* m_newButton = nullptr;
+    QWidget* m_pill = nullptr;              // compact: the current tab, or the search on New tab
+    QLineEdit* m_pillSearch = nullptr;
+    QToolButton* m_menuButton = nullptr;
     QToolButton* m_tabsButton = nullptr;
+    QString m_prevKey;                      // the tab shown before the current one
+    QString m_returnKey;                    // the last tab that was not a New tab
     QWidget* m_switcher = nullptr;          // compact: open tabs as cards
     QWidget* m_switcherGrid = nullptr;
 };

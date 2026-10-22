@@ -7,8 +7,9 @@ Decisions: [ADR-050 to ADR-059](adr/).
 ## TL;DR
 
 - Basecampium adapts with a **width switch, not a redesign**: below **600 px** the tab strip gives
-  way to a centred title, a **bottom bar** (Notifications · New tab · Tabs) and a **tab
-  switcher** of cards. No window buttons.
+  way to **one bottom bar** (current tab / search · Notifications · Tabs · ⋮) and a **tab
+  switcher** of cards. No window buttons, no title bar. New tab is the home page, not a tab.
+  Updated after Mull: [MOBILE-ONE-BAR.md](MOBILE-ONE-BAR.md) (ADR-065).
   Above 600 px nothing changes.
 - **Notifications** carry over: full-width banners at the top, the list as a **sheet above the
   bottom bar**, a dot on the Tabs button and on the card of an app with unread notifications.
@@ -25,6 +26,8 @@ Decisions: [ADR-050 to ADR-059](adr/).
 | Port | strip → bottom bar + switcher; same tabs, same keys | sidebar → drawer, layout backbone changes |
 
 ## Anatomy (below 600 px)
+
+> Superseded by the one bar: [MOBILE-ONE-BAR.md](MOBILE-ONE-BAR.md). Kept for the record.
 
 ```
 ┌───────────────────────────────┐

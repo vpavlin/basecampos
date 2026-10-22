@@ -1127,10 +1127,31 @@ void MainContainer::setupTabsUi()
     connect(m_tabArea, &TabArea::newTabShown, this, [this]() {
         if (m_newTabWidget && m_newTabWidget->rootObject()) {
             QMetaObject::invokeMethod(m_newTabWidget->rootObject(), "clearSearch");
+            // Compact: the search is the one bar's field (TabArea focuses it).
+            if (m_tabArea->isCompact())
+                return;
             m_newTabWidget->setFocus();
             QMetaObject::invokeMethod(m_newTabWidget->rootObject(), "focusSearch");
         }
     });
+    // The one bar (compact): its field searches the New tab page, its menu
+    // reaches the shell's own apps and the closed tabs.
+    auto searchInBar = [this](bool compact) {
+        if (m_newTabWidget && m_newTabWidget->rootObject())
+            m_newTabWidget->rootObject()->setProperty("searchInBar", compact);
+    };
+    searchInBar(m_tabArea->isCompact());
+    connect(m_tabArea, &TabArea::compactChanged, this, searchInBar);
+    connect(m_tabArea, &TabArea::homeQueryChanged, this, [this](const QString& text) {
+        if (m_newTabWidget && m_newTabWidget->rootObject())
+            m_newTabWidget->rootObject()->setProperty("barQuery", text);
+    });
+    connect(m_tabArea, &TabArea::homeQueryAccepted, this, [this]() {
+        if (m_newTabWidget && m_newTabWidget->rootObject())
+            QMetaObject::invokeMethod(m_newTabWidget->rootObject(), "openFirst");
+    });
+    connect(m_tabArea, &TabArea::reopenClosedRequested, this, &MainContainer::reopenClosedTab);
+    connect(m_tabArea, &TabArea::systemAppRequested, this, &MainContainer::tabOpenSystem);
 
     // Keys are caught for the whole window in eventFilter (tabsKey): a focused
     // text field inside an app or Settings would otherwise take Ctrl+W / Ctrl+T
@@ -1353,6 +1374,11 @@ bool MainContainer::tabsKey(QKeyEvent* e)
         if (top->isFullScreen()) top->showNormal(); else top->showFullScreen();
         return true;
     }
+    // Esc / phone Back in the compact layout: out of the tab switcher, or
+    // from the New tab back to the last tab. Otherwise the key goes on.
+    if ((key == Qt::Key_Escape || key == Qt::Key_Back) && mods == Qt::NoModifier
+        && !e->isAutoRepeat() && m_tabArea->handleBack())
+        return true;
     const bool ctrl = mods == Qt::ControlModifier;
     const bool ctrlShift = mods == (Qt::ControlModifier | Qt::ShiftModifier);
     if (!ctrl && !ctrlShift)

@@ -3,6 +3,9 @@
 #include <QApplication>
 #include <QTimer>
 #include <QLabel>
+#include <QDebug>
+#include <QLineEdit>
+#include <QContextMenuEvent>
 #include <QStyle>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -160,6 +163,8 @@ QString barStyleSheet()
         "#basecampium\\.bottomBar { background: %1; border-top: 1px solid %6; }"
         "#basecampium\\.bottomBar QToolButton { font-size: 24px; border-radius: 10px; }"
         "#basecampium\\.bottomBar QToolButton:checked { background: %3; color: %5; }"
+        "QLineEdit#basecampium\\.barSearch { background: transparent; border: none; color: %5; font-size: 15px;"
+        "  selection-background-color: %6; }"
         "QLabel#basecampium\\.title { color: %5; background: transparent; font-size: 14px; font-weight: 600; }"
         "QLabel#basecampium\\.switcherHeader { color: %4; background: transparent; font-size: 13px; }")
         .arg(css(bar), css(page), css(hover), css(muted), css(text), css(border), css(danger));
@@ -504,11 +509,49 @@ void TabStrip::mouseReleaseEvent(QMouseEvent* event)
 class TabsButton : public QToolButton
 {
 public:
-    using QToolButton::QToolButton;
+    explicit TabsButton(QWidget* parent) : QToolButton(parent)
+    {
+        // Long-press (or right-click): the tab menu, as on a phone browser's
+        // tab counter. The press that opened it doesn't also toggle the switcher.
+        m_hold.setSingleShot(true);
+        m_hold.setInterval(500);
+        QObject::connect(&m_hold, &QTimer::timeout, this, [this]() {
+            m_held = true;
+            setDown(false);
+            if (onLongPress)
+                onLongPress();
+        });
+    }
     void setCount(int n) { if (n != m_count) { m_count = n; update(); } }
     void setDot(bool on) { if (on != m_dot) { m_dot = on; update(); } }
+    std::function<void()> onLongPress;
 
 protected:
+    void mousePressEvent(QMouseEvent* e) override
+    {
+        m_held = false;
+        if (e->button() == Qt::LeftButton)
+            m_hold.start();
+        QToolButton::mousePressEvent(e);
+    }
+    void mouseReleaseEvent(QMouseEvent* e) override
+    {
+        m_hold.stop();
+        if (m_held) {
+            m_held = false;
+            setDown(false);
+            e->accept();
+            return;
+        }
+        QToolButton::mouseReleaseEvent(e);
+    }
+    void contextMenuEvent(QContextMenuEvent* e) override
+    {
+        e->accept();
+        if (onLongPress)
+            onLongPress();
+    }
+
     void paintEvent(QPaintEvent* e) override
     {
         QToolButton::paintEvent(e);
@@ -534,6 +577,109 @@ protected:
 private:
     int m_count = 0;
     bool m_dot = false;
+    QTimer m_hold;
+    bool m_held = false;
+};
+
+// The one bar's pill (compact layout), like a phone browser's address bar: the
+// current tab's icon and title. Tap: New tab. Swipe sideways: the previous or
+// next tab. On the New tab it holds the search field instead.
+class OneBarPill : public QWidget
+{
+public:
+    explicit OneBarPill(QWidget* parent) : QWidget(parent)
+    {
+        setMinimumHeight(44);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        setCursor(Qt::PointingHandCursor);
+        setAttribute(Qt::WA_Hover);
+        setFocusPolicy(Qt::NoFocus);
+    }
+    void set(const QIcon& icon, const QString& text, bool searching)
+    {
+        m_icon = icon;
+        m_text = text;
+        m_searching = searching;
+        setAccessibleName(searching ? tr("Search apps") : text);
+        update();
+    }
+    std::function<void()> onTap;
+    std::function<void(int)> onSwipe;   // +1 next tab, -1 previous
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(m_searching ? QPen(tok("primary", "#ED7B58"), 1.5) : Qt::NoPen);
+        p.setBrush(underMouse() && !m_searching ? tok("border", "#333333") : tok("backgroundTertiary", "#2E2E2E"));
+        const QRectF r = QRectF(rect()).adjusted(1, 1, -1, -1);
+        p.drawRoundedRect(r, r.height() / 2, r.height() / 2);
+        const int s = 20;
+        const QRect ir(14, (height() - s) / 2, s, s);
+        if (m_searching) {
+            // A drawn magnifier (the shell's icon set has none).
+            p.setPen(QPen(tok("textSecondary", "#A3A3A3"), 2, Qt::SolidLine, Qt::RoundCap));
+            p.setBrush(Qt::NoBrush);
+            p.drawEllipse(QRectF(ir.left() + 2, ir.top() + 2, 12, 12));
+            p.drawLine(QPointF(ir.left() + 12.5, ir.top() + 12.5), QPointF(ir.right() - 1, ir.bottom() - 1));
+            return;   // the search field draws the rest
+        }
+        int x = 18;
+        if (!m_icon.isNull()) {
+            p.drawPixmap(ir, m_icon.pixmap(QSize(s, s), devicePixelRatioF()));
+            x = ir.right() + 11;
+        }
+        QFont f = font();
+        f.setPixelSize(15);
+        p.setFont(f);
+        p.setPen(tok("text", "#FFFFFF"));
+        const QRect tr(x, 0, width() - x - 16, height());
+        p.drawText(tr, Qt::AlignVCenter | Qt::AlignLeft,
+                   QFontMetrics(f).elidedText(m_text, Qt::ElideRight, tr.width()));
+    }
+    void mousePressEvent(QMouseEvent* e) override
+    {
+        if (e->button() != Qt::LeftButton)
+            return;
+        m_down = true;
+        m_swiping = false;
+        m_press = e->position().toPoint();
+    }
+    void mouseMoveEvent(QMouseEvent* e) override
+    {
+        if (!m_down || m_swiping)
+            return;
+        const QPoint d = e->position().toPoint() - m_press;
+        if (qAbs(d.x()) > 16 && qAbs(d.x()) > 2 * qAbs(d.y()))
+            m_swiping = true;
+    }
+    void mouseReleaseEvent(QMouseEvent* e) override
+    {
+        if (!m_down)
+            return;
+        m_down = false;
+        const int dx = e->position().toPoint().x() - m_press.x();
+        // Deferred: both change the tab, which updates this pill.
+        if (m_swiping) {
+            m_swiping = false;
+            if (qAbs(dx) >= 48 && onSwipe) {
+                const int dir = dx < 0 ? 1 : -1;   // swipe left: the next tab
+                QTimer::singleShot(0, this, [this, dir]() { if (onSwipe) onSwipe(dir); });
+            }
+            return;
+        }
+        if (rect().contains(e->position().toPoint()) && onTap)
+            QTimer::singleShot(0, this, [this]() { if (onTap) onTap(); });
+    }
+
+private:
+    QIcon m_icon;
+    QString m_text;
+    bool m_searching = false;
+    bool m_down = false;
+    bool m_swiping = false;
+    QPoint m_press;
 };
 
 // One open tab in the tab switcher: its app's icon large, its title, a close
@@ -620,6 +766,7 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     : QWidget(parent)
     , m_newTabPage(newTabPage)
 {
+    setObjectName(QStringLiteral("basecampium.tabArea"));
     auto* column = new QVBoxLayout(this);
     column->setContentsMargins(0, 0, 0, 0);
     column->setSpacing(0);
@@ -655,15 +802,6 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     m_drag = new DragArea(m_bar);
     m_drag->setObjectName(QStringLiteral("basecampium.dragArea"));
     row->addWidget(m_drag, 1);
-    // Compact layout: the current tab's title in place of the tabs.
-    auto* dragRow = new QHBoxLayout(m_drag);
-    dragRow->setContentsMargins(8, 0, 8, 6);
-    m_title = new QLabel(m_drag);
-    m_title->setObjectName(QStringLiteral("basecampium.title"));
-    m_title->setAlignment(Qt::AlignCenter);
-    m_title->setAttribute(Qt::WA_TransparentForMouseEvents);
-    m_title->setVisible(false);
-    dragRow->addWidget(m_title, 1);
 
     auto* bell = new BellButton(m_bar);
     bell->setObjectName(QStringLiteral("basecampium.notifications"));
@@ -706,46 +844,69 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     m_stack->addWidget(m_newTabPage);
     column->addWidget(m_stack, 1);
 
-    // Compact layout (narrower than kCompactWidth): a bottom bar within thumb
-    // reach, Notifications · New tab · Tabs, and a tab switcher in place of the strip.
-    m_bottom = new QWidget(this);
+    // Compact layout (narrower than kCompactWidth): one bar, at the bottom
+    // within thumb reach, holding everything (docs/MOBILE-LAYOUT.md §8):
+    // [ current tab · search ] [ notifications ] [ tabs ] [ menu ].
+    // Its gaps move the window, like the desktop bar's empty part.
+    m_bottom = new DragArea(this);
     m_bottom->setObjectName(QStringLiteral("basecampium.bottomBar"));
     m_bottom->setAttribute(Qt::WA_StyledBackground);
     m_bottom->setFixedHeight(kBottomBarHeight);
     auto* bottomRow = new QHBoxLayout(m_bottom);
-    bottomRow->setContentsMargins(12, 6, 12, 6);
-    bottomRow->setSpacing(8);
-    QToolButton* newButton = bottomButton(m_bottom, QStringLiteral("basecampium.bottomNewTab"), tr("New tab"));
-    newButton->setIconSize(QSize(26, 26));
-    m_newButton = newButton;
-    connect(newButton, &QToolButton::clicked, this, [this]() { showSwitcher(false); addNewTab(); });
-    auto* tabsButton = new TabsButton(m_bottom);
-    tabsButton->setObjectName(QStringLiteral("basecampium.tabSwitcher"));
-    tabsButton->setToolTip(tr("Tabs"));
-    tabsButton->setAccessibleName(tr("Tabs"));
-    tabsButton->setMinimumSize(64, 48);
-    tabsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    tabsButton->setFocusPolicy(Qt::NoFocus);
-    tabsButton->setCheckable(true);
-    // The bell moves down here too, within thumb reach; the top bar keeps
-    // only the title.
+    bottomRow->setContentsMargins(10, 6, 6, 6);
+    bottomRow->setSpacing(2);
+
+    auto* pill = new OneBarPill(m_bottom);
+    pill->setObjectName(QStringLiteral("basecampium.pill"));
+    pill->onTap = [this]() { openHome(); };
+    pill->onSwipe = [this](int dir) { showSwitcher(false); nextTab(dir); };
+    m_pill = pill;
+    // On the New tab the pill is the search: the page below shows the results.
+    m_pillSearch = new QLineEdit(pill);
+    m_pillSearch->setObjectName(QStringLiteral("basecampium.barSearch"));
+    m_pillSearch->setPlaceholderText(tr("Search apps…"));
+    m_pillSearch->setAccessibleName(tr("Search apps"));
+    m_pillSearch->setFrame(false);
+    m_pillSearch->setVisible(false);
+    auto* pillRow = new QHBoxLayout(pill);
+    pillRow->setContentsMargins(44, 0, 16, 0);
+    pillRow->addWidget(m_pillSearch);
+    connect(m_pillSearch, &QLineEdit::textChanged, this, &TabArea::homeQueryChanged);
+    connect(m_pillSearch, &QLineEdit::returnPressed, this, &TabArea::homeQueryAccepted);
+
     auto* bottomBell = new BellButton(m_bottom);
     bottomBell->setObjectName(QStringLiteral("basecampium.bottomNotifications"));
     bottomBell->setToolTip(tr("Notifications"));
     bottomBell->setAccessibleName(tr("Notifications"));
-    bottomBell->setMinimumSize(64, 48);
-    bottomBell->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    bottomBell->setFixedSize(48, 48);   // touch target: 44 minimum
     bottomBell->setFocusPolicy(Qt::NoFocus);
-    bottomBell->setGlyph(24);
+    bottomBell->setGlyph(22);
     m_bottomBell = bottomBell;
     connect(bottomBell, &QToolButton::clicked, this, &TabArea::notificationsClicked);
+
+    auto* tabsButton = new TabsButton(m_bottom);
+    tabsButton->setObjectName(QStringLiteral("basecampium.tabSwitcher"));
+    tabsButton->setToolTip(tr("Tabs"));
+    tabsButton->setAccessibleName(tr("Tabs"));
+    tabsButton->setFixedSize(48, 48);
+    tabsButton->setFocusPolicy(Qt::NoFocus);
+    tabsButton->setCheckable(true);
+    tabsButton->onLongPress = [this, tabsButton]() { showBarMenu(tabsButton, true); };
     m_tabsButton = tabsButton;
     connect(tabsButton, &QToolButton::clicked, this, [this]() { showSwitcher(!m_switcherOpen); });
-    // Primary action in the middle, where the thumb rests; the tab switcher
-    // on the right, where phone browsers keep it; notifications on the left.
+
+    QToolButton* menuButton = bottomButton(m_bottom, QStringLiteral("basecampium.menu"), tr("Menu"));
+    menuButton->setMinimumSize(0, 0);
+    menuButton->setFixedSize(40, 48);
+    menuButton->setIconSize(QSize(24, 24));
+    m_menuButton = menuButton;
+    connect(menuButton, &QToolButton::clicked, this, [this]() { showBarMenu(m_menuButton, false); });
+
+    bottomRow->addWidget(pill, 1);
+    bottomRow->addSpacing(4);
     bottomRow->addWidget(bottomBell);
-    bottomRow->addWidget(newButton);
     bottomRow->addWidget(tabsButton);
+    bottomRow->addWidget(menuButton);
     m_bottom->setVisible(false);
     column->addWidget(m_bottom);
 
@@ -809,19 +970,19 @@ void TabArea::applyTheme()
     m_bar->setStyleSheet(barStyleSheet());
     m_bottom->setStyleSheet(barStyleSheet());
     {
-        // A drawn plus: a font's "+" is too light at this size.
+        // A drawn "⋮", in the same tone as the bell and the tab count beside it.
         const qreal dpr = devicePixelRatioF();
-        QPixmap pm(QSize(26, 26) * dpr);
+        QPixmap pm(QSize(24, 24) * dpr);
         pm.setDevicePixelRatio(dpr);
         pm.fill(Qt::transparent);
         QPainter p(&pm);
         p.setRenderHint(QPainter::Antialiasing);
-        // Same tone as the bell and the tab count beside it.
-        p.setPen(QPen(tok("textSecondary", "#A3A3A3"), 2.4, Qt::SolidLine, Qt::RoundCap));
-        p.drawLine(QPointF(13, 3), QPointF(13, 23));
-        p.drawLine(QPointF(3, 13), QPointF(23, 13));
+        p.setPen(Qt::NoPen);
+        p.setBrush(tok("textSecondary", "#A3A3A3"));
+        for (int y : { 5, 12, 19 })
+            p.drawEllipse(QPointF(12, y), 2.2, 2.2);
         p.end();
-        m_newButton->setIcon(QIcon(pm));
+        m_menuButton->setIcon(QIcon(pm));
     }
     m_switcher->setStyleSheet(barStyleSheet()
         + QStringLiteral("QScrollArea, QScrollArea > QWidget > QWidget { background: %1; }").arg(css(page)));
@@ -848,15 +1009,9 @@ void TabArea::setCompact(bool on)
     if (on == m_compact)
         return;
     m_compact = on;
-    m_tabs->setVisible(!on);
-    m_plus->setVisible(!on);
-    m_title->setVisible(on);
+    // Phone layout: one bar at the bottom holds everything; the top bar goes.
+    m_bar->setVisible(!on);
     m_bottom->setVisible(on);
-    // Phone layout: no window buttons, no bell up top (it's in the bottom
-    // bar), so the title has the whole bar and sits in the centre.
-    m_bell->setVisible(!on);
-    if (m_buttons)
-        m_buttons->setVisible(!on);
     if (!on)
         showSwitcher(false);
     updateCompactBar();
@@ -865,7 +1020,16 @@ void TabArea::setCompact(bool on)
 
 int TabArea::topBarHeight() const
 {
-    return m_bar->height();
+    return m_compact ? 0 : m_bar->height();
+}
+
+int TabArea::contentTabCount() const
+{
+    int n = 0;
+    for (int i = 0; i < m_tabs->count(); ++i)
+        if (!isNewTabKey(m_tabs->tabData(i).toString()))
+            ++n;
+    return n;
 }
 
 int TabArea::bottomBarHeight() const
@@ -879,12 +1043,17 @@ void TabArea::updateCompactBar()
         return;
     const int i = m_tabs->currentIndex();
     const QString key = i >= 0 ? m_tabs->tabData(i).toString() : QString();
-    m_title->setText(m_switcherOpen ? tr("Tabs")
-                                    : m_title->fontMetrics().elidedText(
-                                          isNewTabKey(key) ? tr("New tab") : m_titles.value(key, key),
-                                          Qt::ElideRight, qMax(40, m_drag->width() - 8)));
+    const bool home = isNewTabKey(key) && !m_switcherOpen;
+    static_cast<OneBarPill*>(m_pill)->set(m_switcherOpen ? QIcon() : iconFor(m_icons.value(key)),
+                                          m_switcherOpen ? tr("Tabs") : m_titles.value(key, key), home);
+    if (m_pillSearch->isVisible() != home) {
+        m_pillSearch->setVisible(home);
+        if (!home && m_pillSearch->hasFocus())
+            m_pillSearch->clearFocus();
+    }
     auto* tabs = static_cast<TabsButton*>(m_tabsButton);
-    tabs->setCount(m_tabs->count());
+    // The New tab is the home page, not a tab: it isn't counted.
+    tabs->setCount(contentTabCount());
     bool dot = false;
     for (int t = 0; t < m_tabs->count(); ++t)
         if (t != i && m_attention.contains(m_tabs->tabData(t).toString()))
@@ -927,16 +1096,21 @@ void TabArea::rebuildSwitcher()
     grid->setContentsMargins(16, 12, 16, 16);
     grid->setHorizontalSpacing(12);
     grid->setVerticalSpacing(12);
-    auto* header = new QLabel(m_tabs->count() == 1 ? tr("1 open tab")
-                                                   : tr("%1 open tabs").arg(m_tabs->count()),
+    const int open = contentTabCount();
+    auto* header = new QLabel(open == 0 ? tr("No open tabs")
+                              : open == 1 ? tr("1 open tab") : tr("%1 open tabs").arg(open),
                                m_switcherGrid);
     header->setObjectName(QStringLiteral("basecampium.switcherHeader"));
     grid->addWidget(header, 0, 0, 1, 2);
 
+    // New tabs are the home page, reached from the bar: not listed.
     const int current = m_tabs->currentIndex();
+    int slot = 0;
     for (int i = 0; i < m_tabs->count(); ++i) {
         const QString key = m_tabs->tabData(i).toString();
         const bool newTab = isNewTabKey(key);
+        if (newTab)
+            continue;
         auto* card = new TabCard(iconFor(newTab ? QString() : m_icons.value(key)),
                                  newTab ? tr("New tab") : m_titles.value(key, key),
                                  i == current, !newTab && m_attention.contains(key), m_switcherGrid);
@@ -960,11 +1134,12 @@ void TabArea::rebuildSwitcher()
                 updateCompactBar();
             });
         };
-        grid->addWidget(card, 1 + i / 2, i % 2);
+        grid->addWidget(card, 1 + slot / 2, slot % 2);
+        ++slot;
     }
     grid->setColumnStretch(0, 1);
     grid->setColumnStretch(1, 1);
-    grid->setRowStretch(1 + (m_tabs->count() + 1) / 2, 1);
+    grid->setRowStretch(1 + (slot + 1) / 2, 1);
 }
 
 void TabArea::updateStripWidth()
@@ -1224,6 +1399,17 @@ void TabArea::onCurrentChanged(int index)
     if (index < 0)
         return;
     const QString key = m_tabs->tabData(index).toString();
+    // Compact: the New tab is transient, like a phone browser's home page.
+    // Leaving it for another tab closes it.
+    if (m_compact && isNewTabKey(m_prevKey) && m_prevKey != key) {
+        QTimer::singleShot(0, this, [this, left = m_prevKey]() {
+            if (m_compact && indexOf(left) >= 0 && currentKey() != left)
+                takeTab(left);
+        });
+    }
+    m_prevKey = key;
+    if (!isNewTabKey(key))
+        m_returnKey = key;
     if (QWidget* w = contentFor(key)) {
         if (m_stack->indexOf(w) < 0)
             m_stack->addWidget(w);
@@ -1234,8 +1420,13 @@ void TabArea::onCurrentChanged(int index)
         for (int i = 0; i < m_stack->count(); ++i)
             if (QWidget* other = m_stack->widget(i); other != w && other->isVisible())
                 other->hide();
-        if (w == m_newTabPage)
+        if (w == m_newTabPage) {
             emit newTabShown();
+            if (m_compact) {
+                m_pillSearch->clear();
+                m_pillSearch->setFocus();
+            }
+        }
     }
     emit currentKeyChanged(key);
 }
@@ -1319,4 +1510,81 @@ void TabArea::setNotificationCount(int count)
         static_cast<BellButton*>(m_bell)->setCount(count);
     if (m_bottomBell)
         static_cast<BellButton*>(m_bottomBell)->setCount(count);
+}
+
+void TabArea::openHome()
+{
+    if (m_switcherOpen)
+        showSwitcher(false);
+    const QString current = currentKey();
+    if (isNewTabKey(current)) {
+        m_pillSearch->setFocus();
+        return;
+    }
+    for (const QString& k : keys())
+        if (isNewTabKey(k)) {
+            activate(k);
+            return;
+        }
+    addNewTab();
+}
+
+bool TabArea::handleBack()
+{
+    if (!m_compact)
+        return false;
+    if (m_switcherOpen) {
+        showSwitcher(false);
+        return true;
+    }
+    if (isNewTabKey(currentKey()) && indexOf(m_returnKey) >= 0) {
+        activate(m_returnKey);
+        return true;
+    }
+    return false;
+}
+
+void TabArea::closeAllTabs()
+{
+    for (const QString& k : keys()) {
+        if (isNewTabKey(k))
+            continue;
+        emit closeRequested(k);
+    }
+}
+
+void TabArea::showBarMenu(QWidget* anchor, bool tabsOnly)
+{
+    // Non-blocking, so the window (and a test driver) keeps running; opens
+    // upward from its button, right-aligned to it, as a bottom bar's menus do.
+    auto* menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->setObjectName(tabsOnly ? QStringLiteral("basecampium.tabsMenu")
+                                 : QStringLiteral("basecampium.barMenu"));
+    const QString current = currentKey();
+    const bool onTab = !current.isEmpty() && !isNewTabKey(current);
+    auto add = [menu](const char* name, const QString& text, bool enabled, std::function<void()> fn) {
+        QAction* a = menu->addAction(text);
+        a->setObjectName(QString::fromLatin1(name));
+        a->setEnabled(enabled);
+        QObject::connect(a, &QAction::triggered, menu, [fn]() { QTimer::singleShot(0, fn); });
+    };
+    add("menu.newTab", tr("New tab"), true, [this]() { openHome(); });
+    if (!tabsOnly)
+        add("menu.reopen", tr("Reopen closed tab"), true, [this]() { emit reopenClosedRequested(); });
+    add("menu.closeTab", tr("Close tab"), onTab, [this, current]() {
+        if (indexOf(current) >= 0)
+            emit closeRequested(current);
+    });
+    add("menu.closeAll", tr("Close all tabs"), contentTabCount() > 0, [this]() { closeAllTabs(); });
+    if (!tabsOnly) {
+        menu->addSeparator();
+        add("menu.applications", tr("Applications"), true, [this]() { emit systemAppRequested(QStringLiteral("sys:applications")); });
+        add("menu.settings", tr("Settings"), true, [this]() { emit systemAppRequested(QStringLiteral("sys:settings")); });
+        add("menu.packages", tr("Package Manager"), true, [this]() { emit systemAppRequested(QStringLiteral("sys:packages")); });
+    }
+    const QSize hint = menu->sizeHint();
+    const QPoint corner = anchor->mapToGlobal(QPoint(anchor->width(), 0));
+    menu->popup(QPoint(corner.x() - hint.width(), corner.y() - hint.height() - 4));
+    qInfo() << "Basecampium: bar menu" << menu->objectName() << "shown" << menu->isVisible();
 }

@@ -18,7 +18,11 @@ Rectangle {
     function focusSearch() { search.forceActiveFocus() }
     function clearSearch() { search.text = "" }
 
-    readonly property string query: search.text.trim().toLowerCase()
+    // Basecampium's compact layout puts the search in its one bar
+    // (docs/MOBILE-LAYOUT.md §8): this page then shows the results only.
+    property bool searchInBar: false
+    property string barQuery: ""
+    readonly property string query: (searchInBar ? barQuery : search.text).trim().toLowerCase()
     // Phone width (Basecampium's compact layout): tighter margins and tiles.
     readonly property bool compact: width < 600
     readonly property int sideMargin: compact ? 32 : 96
@@ -113,6 +117,7 @@ Rectangle {
         LogosSearchBar {
             id: search
             objectName: "newTab.search"
+            visible: !root.searchInBar
             focus: true
             // From the first icon's left edge to the last icon's right edge
             // (icons, not their wider labels).
