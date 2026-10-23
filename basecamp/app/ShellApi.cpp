@@ -4,6 +4,11 @@
 #include "MainUIBackend.h"
 #include "UIPluginManager.h"
 
+#include "BasecampModelRoles.h"
+
+#include <QAbstractItemModel>
+#include <QCoreApplication>
+#include <QFileInfo>
 #include <QImage>
 #include <QQuickImageProvider>
 #include <QUrl>
@@ -25,34 +30,97 @@ bool holdsAnyRole(MainUIBackend* backend, const QString& app)
     return false;
 }
 
-// Local files only, chosen by the host: an installed app's icon, or one of the
-// shell's two wallpapers. Nothing here reaches the network.
-class BasecampImageProvider : public QQuickImageProvider {
-public:
-    BasecampImageProvider(MainUIBackend* backend, const QString& app)
-        : QQuickImageProvider(QQuickImageProvider::Image), m_backend(backend), m_app(app) {}
-
-    QImage requestImage(const QString& id, QSize* size, const QSize& requested) override
-    {
-        QImage image;
-        if (holdsAnyRole(m_backend, m_app)) {
-            QString path;
-            if (id.startsWith(QStringLiteral("appicon/"))) {
-                if (UIPluginManager* plugins = m_backend->uiPluginManager())
-                    path = localPathFor(plugins->pluginIconUrl(id.mid(8)));
-            } else if (id.startsWith(QStringLiteral("wallpaper/"))
-                       && m_backend->roleHolder(QStringLiteral("settings")) == m_app) {
-                QObject* prefs = m_backend->shellPreferences();
-                const char* key = id.startsWith(QStringLiteral("wallpaper/custom"))
-                    ? "customWallpaperUrl" : "builtinWallpaperUrl";
-                if (prefs) path = localPathFor(prefs->property(key).toUrl().toString());
+// What the host will draw for a role app, chosen by the host: an app's icon by
+// name (its installed file, or the URL the catalog gives for it) or one of the
+// shell's two wallpapers. The app names the item, never the address.
+QString iconSourceFor(MainUIBackend* backend, const QString& name)
+{
+    if (UIPluginManager* plugins = backend->uiPluginManager()) {
+        const QString installed = plugins->pluginIconUrl(name);
+        if (!installed.isEmpty() && !installed.startsWith(QStringLiteral("qrc:"))
+            && QFileInfo::exists(localPathFor(QUrl(installed).adjusted(QUrl::RemoveQuery).toString())))
+            return QUrl(installed).adjusted(QUrl::RemoveQuery).toString();
+    }
+    // Not installed: the catalog's icon, which the package downloader resolves
+    // to a release asset URL.
+    if (QAbstractItemModel* model = backend->appsModel()) {
+        for (int i = 0; i < model->rowCount(); ++i) {
+            const QModelIndex ix = model->index(i, 0);
+            if (ix.data(AppsModelRoles::NameRole).toString() == name) {
+                const QString url = ix.data(AppsModelRoles::IconUrlRole).toString();
+                if (!url.isEmpty()) return url;
             }
-            if (!path.isEmpty()) image.load(path);
         }
-        if (!image.isNull() && requested.isValid())
-            image = image.scaled(requested, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        if (size) *size = image.size();
-        return image;
+    }
+    if (UIPluginManager* plugins = backend->uiPluginManager())
+        return plugins->pluginIconUrl(name);   // qrc: default, or ""
+    return {};
+}
+
+class BasecampImageResponse : public QQuickImageResponse {
+public:
+    BasecampImageResponse(QPointer<MainUIBackend> backend, QString app, QString id, QSize requested)
+        : m_requested(requested)
+    {
+        // Model lookups and the network live on the GUI thread. Moved there and
+        // called through itself, so a response QML drops first is never touched.
+        moveToThread(qApp->thread());
+        QMetaObject::invokeMethod(this, [this, backend, app, id]() { start(backend, app, id); },
+                                  Qt::QueuedConnection);
+    }
+
+    QQuickTextureFactory* textureFactory() const override
+    {
+        return QQuickTextureFactory::textureFactoryForImage(m_image);
+    }
+
+private:
+    void start(QPointer<MainUIBackend> backend, const QString& app, const QString& id)
+    {
+        if (!holdsAnyRole(backend, app)) { finish({}); return; }
+        QString source;
+        if (id.startsWith(QStringLiteral("appicon/"))) {
+            source = iconSourceFor(backend, id.mid(8));
+        } else if (id.startsWith(QStringLiteral("wallpaper/"))
+                   && backend->roleHolder(QStringLiteral("settings")) == app) {
+            if (QObject* prefs = backend->shellPreferences())
+                source = prefs->property(id.startsWith(QStringLiteral("wallpaper/custom"))
+                                             ? "customWallpaperUrl" : "builtinWallpaperUrl")
+                             .toUrl().toString();
+        }
+        // Local files only. A catalog icon for an app that isn't installed is a
+        // GitHub URL (logos-package-downloader resolves the index's icon path
+        // against the index URL), fetched with no storage-network source and no
+        // sha256 check; the host doesn't repeat that on an app's behalf. Such
+        // tiles show a placeholder until the catalog offers a storage source.
+        if (source.contains(QStringLiteral("://")) && !source.startsWith(QStringLiteral("file:"))) {
+            finish({});
+            return;
+        }
+        QImage image;
+        if (!source.isEmpty()) image.load(localPathFor(source));
+        finish(image);
+    }
+
+    void finish(QImage image)
+    {
+        if (!image.isNull() && m_requested.isValid())
+            image = image.scaled(m_requested, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        m_image = image;
+        emit finished();
+    }
+
+    QSize m_requested;
+    QImage m_image;
+};
+
+class BasecampImageProvider : public QQuickAsyncImageProvider {
+public:
+    BasecampImageProvider(MainUIBackend* backend, const QString& app) : m_backend(backend), m_app(app) {}
+
+    QQuickImageResponse* requestImageResponse(const QString& id, const QSize& requested) override
+    {
+        return new BasecampImageResponse(m_backend, m_app, id, requested);
     }
 
 private:
@@ -82,7 +150,7 @@ QVariantList withServedIcons(QVariantList rows)
 
 } // namespace
 
-QQuickImageProvider* ShellApi::createImageProvider(MainUIBackend* backend, const QString& appName)
+QQuickAsyncImageProvider* ShellApi::createImageProvider(MainUIBackend* backend, const QString& appName)
 {
     return new BasecampImageProvider(backend, appName);
 }

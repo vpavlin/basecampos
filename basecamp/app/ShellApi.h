@@ -7,7 +7,7 @@
 #include <QVariantMap>
 
 class MainUIBackend;
-class QQuickImageProvider;
+class QQuickAsyncImageProvider;
 
 // ── ShellApi ─────────────────────────────────────────────────────────────────
 //
@@ -76,7 +76,7 @@ public:
     // (appicon/<name>) and the wallpaper previews (wallpaper/builtin|custom).
     // The sandbox keeps an app from reading files outside its own folder, so
     // the host reads these few on its behalf. Owned by the engine it is added to.
-    static QQuickImageProvider* createImageProvider(MainUIBackend* backend, const QString& appName);
+    static QQuickAsyncImageProvider* createImageProvider(MainUIBackend* backend, const QString& appName);
 
     QVariantMap roles() const;
 

@@ -263,10 +263,10 @@ the frame, the confirmation dialogs and a fallback page per role.
   `homeQueryAccepted`; `shell.launch(name)` and `shell.openRole(role)` turn the New tab into that app.
   Apps holding a role are left out of its grid: they're in the row of shell apps already (this
   closes the duplicate noted in §9).
-- **Icons:** installed apps' icons are served by name (`image://basecamp/appicon/<name>`). The
-  catalog itself carries no icon URLs (an entry's `icon` is a path inside the package), so nothing
-  is fetched from the network; uninstalled apps show a placeholder, as before. The shared app tile
-  (`AppGridDelegate`) takes an `iconOverride`.
+- **Icons:** installed apps' icons are served by name (`image://basecamp/appicon/<name>`), local
+  files only. Apps that aren't installed show a placeholder, **unlike the in-shell Applications**,
+  which loaded their catalog icons straight from GitHub (see "Catalog icons bypass the storage
+  network" below). The shared app tile (`AppGridDelegate`) takes an `iconOverride`.
 - **Shared, not moved:** the app tile, its context menu and the install dialog's pieces stay in the
   shell (its welcome page and dialogs use them); the apps import them like the design system.
 - The shell's `ContentViews` is now only its navigation-intent handler; `basecamp.apps.open` /
@@ -281,6 +281,17 @@ shell, Applications opens as an app tab.
 
 ![Home in the New tab, bar search, a tile opens Chat, Applications, the shell's install dialog](shell-roles/step3-phone.png)
 ![Home at 1280; Applications in the sidebar shell](shell-roles/step3-1280.png)
+
+**Catalog icons bypass the storage network (upstream, found here).** Each version in the catalog
+index carries `"icon": {"path": "<sha256>.png", "sha256", "size"}` beside its manifest.
+`logos-package-downloader` resolves the path against the index URL
+([package_downloader_lib.cpp#L1351-L1353](https://github.com/logos-co/logos-package-downloader/blob/010059417a3d70cbba508205071343f6eb118d1c/src/package_downloader_lib.cpp#L1351-L1353)),
+so the icon becomes a `https://github.com/logos-co/logos-modules-release/releases/download/index/…`
+URL, and Basecamp's Applications loads it directly in a QML `Image`. Packages, by contrast, list
+storage-network sources first (`logos:logos.dev:<cid>`, then HTTPS). So browsing the catalog sends
+one request per icon to GitHub (IP and "browsing the Logos catalog"), and the `sha256` is not
+checked on that path. The role apps don't repeat it. A fix belongs upstream: icons with storage
+sources like packages, fetched storage-first, verified against `sha256`, and cached.
 
 **Open**
 - **Home is Basecampium-only.** The sidebar and desktop layouts have their own welcome page /
