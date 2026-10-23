@@ -68,8 +68,12 @@ Item {
             width:  GridView.view.cellWidth
             height: GridView.view.cellHeight
             appData: model
-            // The sandbox can't read other apps' files: the host serves installed icons.
-            iconOverride: model.iconUrl ? "image://basecamp/appicon/" + model.name : ""
+            // The sandbox can't read other apps' files: the host serves installed
+            // (local) icons. A catalog icon is a web URL, which isn't fetched:
+            // empty, so the tile shows the app's letters, as for a repository
+            // that publishes no icons.
+            iconOverride: String(model.iconUrl || "").startsWith("file:")
+                          ? "image://basecamp/appicon/" + model.name : ""
             touch: root.touch
             onAppClicked: function(name, repoUrl) {
                 root.appClicked(name, repoUrl)

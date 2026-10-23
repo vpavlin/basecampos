@@ -1,6 +1,6 @@
 # System apps as roles: Launcher, Packages, Settings
 
-Status: draft, 2026-10-23, branch `shell-roles`. Decision: [ADR-067](adr/0067-system-apps-are-roles.md).
+Status: draft, 2026-10-23, branch `shell-roles`. Decision: [ADR-067](adr/0067-system-apps-are-roles.md); steps [068](adr/0068-package-manager-fills-the-packages-role.md), [069](adr/0069-role-apps-get-a-role-gated-shell-object.md), [070](adr/0070-applications-and-new-tab-are-apps.md), [071](adr/0071-role-apps-show-local-icons-only.md).
 Based on logos-basecamp `master` (intents as in `docs/app-to-app-intents.md`) plus the Basecampium
 branches (`mobile-ironfox`). **All three steps are built** (§9 Package Manager, §10 Settings, §11 Applications and New tab); Part B is not.
 

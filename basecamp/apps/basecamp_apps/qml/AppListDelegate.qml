@@ -68,7 +68,7 @@ ItemDelegate {
         readonly property string nameText:      root.appData ? (root.appData.name || "") : ""
         readonly property string displayName:   root.appData ? (root.appData.displayName || root.appData.name || "") : ""
         // The sandbox can't read other apps' files: the host serves installed icons.
-        readonly property string iconUrl:      root.appData && root.appData.iconUrl
+        readonly property string iconUrl:      root.appData && String(root.appData.iconUrl || "").startsWith("file:")
                                                ? "image://basecamp/appicon/" + root.appData.name : ""
         readonly property string description:   root.appData ? (root.appData.description || "") : ""
         // 0.4.0+ guarantees a validated 256x256 icon, so it can fill the
