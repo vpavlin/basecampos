@@ -808,6 +808,34 @@ private slots:
                  QStringLiteral("file:///cache/logos/icons/abc123.png"));
     }
 
+    // A remote icon (the official index resolves to a GitHub release asset)
+    // is never loaded: it would reach GitHub before anything is installed,
+    // unverified against the index's sha256 (logos-package-downloader#55).
+    void catalogIconRejectsRemoteUrl()
+    {
+        AppsModel model;
+        QVariantMap row = makeCatalogRow("repo1", "wallet_ui", "1.0", "H");
+        row.insert(QStringLiteral("icon"),
+                   QStringLiteral("https://github.com/logos-co/logos-modules-release/"
+                                  "releases/download/index/abc123.png"));
+        model.replaceCatalog({row});
+        QCOMPARE(iconUrlOf(model, "wallet_ui", "repo1"), QString());
+    }
+
+    void catalogRemoteIconKeepsInstalledLocalIcon()
+    {
+        AppsModel model;
+        model.replaceCatalog({makeCatalogRow("repo1", "wallet_ui", "1.0", "H")});
+        model.markInstalled("wallet_ui", "1.0", "H");
+        model.setIconUrl("wallet_ui", "file:///installed/assets/icon.png", "0.3.0");
+        QVariantMap row = makeCatalogRow("repo1", "wallet_ui", "1.0", "H");
+        row.insert(QStringLiteral("icon"),
+                   QStringLiteral("https://example.org/icon.png"));
+        model.replaceCatalog({row});
+        QCOMPARE(iconUrlOf(model, "wallet_ui", "repo1"),
+                 QStringLiteral("file:///installed/assets/icon.png"));
+    }
+
     // An installed row's resolved file:// icon comes from the binary on disk
     // via setIconUrl(). A later catalog refresh carrying no usable icon must
     // not wipe it.

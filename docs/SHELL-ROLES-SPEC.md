@@ -290,7 +290,7 @@ so the icon becomes a `https://github.com/logos-co/logos-modules-release/release
 URL, and Basecamp's Applications loads it directly in a QML `Image`. Packages, by contrast, list
 storage-network sources first (`logos:logos.dev:<cid>`, then HTTPS). So browsing the catalog sends
 one request per icon to GitHub (IP and "browsing the Logos catalog"), and the `sha256` is not
-checked on that path. The role apps don't repeat it. A fix belongs upstream: icons with storage
+checked on that path. Basecamp no longer does it anywhere: the catalog model keeps `file:` icons only, so Applications, the welcome page's search and Add Application show letters for apps that aren't installed ([ADR-071](adr/0071-role-apps-show-local-icons-only.md)). A fix belongs upstream: icons with storage
 sources like packages, fetched storage-first, verified against `sha256`, and cached.
 
 **Open**

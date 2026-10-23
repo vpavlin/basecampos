@@ -27,10 +27,15 @@ bool manifestSupportsFullBleedIconImpl(const QString& manifestVersion)
     return major == 0 && minor >= 4;
 }
 
+// Local files only. The downloader resolves a catalog icon against the index
+// URL, so for the official catalog it is a GitHub release asset; loading it
+// would tell GitHub who is browsing the catalog, unverified against the
+// index's sha256 (logos-package-downloader#55). Without a local icon the tile
+// shows the app's letters, as it does for third-party repositories.
 QString catalogIconUrl(const QVariantMap& row)
 {
     const QString raw = row.value("icon").toString();
-    return raw.contains(QLatin1String("://")) ? raw : QString();
+    return raw.startsWith(QLatin1String("file:")) ? raw : QString();
 }
 
 // ── Availability on this host ───────────────────────────────────────────────

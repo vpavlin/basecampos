@@ -119,9 +119,9 @@ Dialog {
         readonly property string targetDisplayName: root.metadata.displayName || root.metadata.name || ""
         readonly property string targetIcon: {
             const raw = root.metadata.icon || ""
-            if (raw.length === 0)       return ""
-            if (raw.indexOf("://") < 0) return ""
-            return raw
+            // Local files only (see catalogIconUrl in AppsModel.cpp); no icon
+            // shows the letters.
+            return raw.startsWith("file:") ? raw : ""
         }
         readonly property int tileSize: 64
 
