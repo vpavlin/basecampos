@@ -38,7 +38,7 @@ Item {
                 // bare version string, not the prefix.
                 RowLayout {
                     Layout.fillWidth: true
-                    visible: backend.buildVersion.length > 0
+                    visible: shell.buildVersion.length > 0
                     spacing: 6
 
                     LogosText {
@@ -49,7 +49,7 @@ Item {
 
                     LogosSelectableText {
                         Layout.fillWidth: true
-                        text: backend.buildVersion
+                        text: shell.buildVersion
                         font.pixelSize: 18
                         color: Theme.tokenOr("text", "#ffffff")
                         wrapMode: TextEdit.WrapAnywhere
@@ -57,7 +57,7 @@ Item {
                 }
 
                 LogosText {
-                    text: backend.isPortableBuild ? "Portable build" : "Dev build"
+                    text: shell.isPortableBuild ? "Portable build" : "Dev build"
                     font.pixelSize: 14
                     color: Theme.tokenOr("textSecondary", "#a0a0a0")
                 }
@@ -77,7 +77,7 @@ Item {
                 }
 
                 Repeater {
-                    model: backend.buildCommits
+                    model: shell.buildCommits
                     delegate: GridLayout {
                         Layout.fillWidth: true
                         Layout.bottomMargin: root.narrow ? 6 : 0

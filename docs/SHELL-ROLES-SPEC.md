@@ -2,7 +2,7 @@
 
 Status: draft, 2026-10-23, branch `shell-roles`. Decision: [ADR-067](adr/0067-system-apps-are-roles.md).
 Based on logos-basecamp `master` (intents as in `docs/app-to-app-intents.md`) plus the Basecampium
-branches (`mobile-ironfox`). **Step 1 (Package Manager) is built** (§9); steps 2 and 3 and Part B are not.
+branches (`mobile-ironfox`). **Steps 1 (Package Manager) and 2 (Settings) are built** (§9, §10); step 3 and Part B are not.
 
 ## TL;DR
 
@@ -189,6 +189,61 @@ branch `shell-roles`); test app in `experiments/roles-test-app/` ("Alt Packages"
   design-system header the harness lacks, since the theming commits).
 - **No UI yet to assign roles** (Settings → Default apps is step 2); today it's `backend.assignRole`
   or `[ShellRoles] packages=<app>` in `LogosBasecamp.conf`.
+
+## 10. Step 2: built
+
+Settings is an ordinary app, `basecamp_settings` (bundled, QML-only, `apps/basecamp_settings/` in
+the Basecamp tree), filling the `settings` role. The shell no longer contains any Settings code.
+
+**Design change from §4.** The draft planned one restricted intent per operation. Settings needs
+about 25 operations and two **live** models (the inspectors), and intents are one request, one
+answer. Instead:
+
+- **A role-gated object, `shell` (`SettingsApi`),** is injected into the QML engine of the app
+  holding `settings`, and of no other app, next to `logos`. It is a narrow, named surface:
+  repositories, the inspectors' models and load/unload, notification switches, build info, Default
+  apps, and the shell's preferences. It is not the host's `backend`, which can install and
+  uninstall without asking.
+- **Checked on every read and call,** not only at injection. Give the role away and the object
+  goes inert at once; Basecamp's Settings then shows "Another app is set as Settings" instead of
+  half-working, and comes back the moment the role returns.
+- **The shell's preferences** (layout, shell, wallpaper, restart, file picker) live in the shell
+  plugin. The shell hands them to the host (`IShellHost::setShellPreferences`, ABI 3 → 4), which
+  passes them to the settings holder only.
+- **Icons:** the sandbox blocks reading other apps' files, so the host serves `image://basecamp/…`
+  (other apps' icons, wallpaper previews) to the settings holder's engine, and the sandbox lets
+  `image://` through only for providers the host registered on that engine (unit-tested). This
+  answers §4's "icon provider" question.
+- This also answers §8 "Subscriptions" for role apps: a role-gated object carries live models and
+  signals; intents stay for one-shot asks from any app.
+- Packaging: `apps/*` are copied into the bundle's `plugins/` like Package Manager.
+
+**Default apps** is a new Settings section: each role, the apps that can fill it (Basecamp's marked),
+the one in use; a tap reassigns.
+
+**Verified** (headless; Basecampium at 390 and 1280, the built-in sidebar shell at 1280; 0 QML
+errors): Settings opens as an app tab from ⋮ / the sidebar; every section works with live data
+(Dashboard, inspectors, Customisation, Notifications, Default apps, Repositories); "Manage
+repositories" from elsewhere opens Settings on Repositories, including a cold start; choosing
+Alt Packages as Settings in Default apps moves the shell's Settings entry to it and Basecamp's
+Settings explains it lost the role; resetting restores it live; a theme picked inside the Settings
+app switches the whole window (the design system's theme state is process-wide). Unit tests: 31/31
+(plus the old `workspace_area_test`, still excluded).
+
+![Settings as an app; Default apps; opened on Repositories; after giving the role away](shell-roles/step2-phone.png)
+![A theme chosen in the Settings app switches the shell too (1280)](shell-roles/step2-theme-1280.png)
+
+**Open**
+- **Density** is stored per QML engine: changing it in Settings changes Settings, not the shell,
+  until restart. Themes don't have this problem.
+- **Load time:** Settings now starts like any app (a fresh engine) instead of being instant. Not
+  noticeable headless; worth a look on real hardware.
+- `tests/ui-tests.mjs` (the integration suite) drives the old in-shell Settings; not updated or run.
+- Basecamp's Settings imports the shell's `Basecamp.Backend` / `Basecamp.Common` QML types
+  (registered process-wide by the shell). Fine for the bundled app; a third-party Settings would
+  need those as public API or its own copies.
+- The developer inspectors (load/unload any module, call any core method) ride on the same role.
+  Splitting them into a separate developer app with its own role is a candidate.
 
 ---
 

@@ -76,6 +76,11 @@ void ShellHostAdapter::setCurrentVisibleApp(const QString& name)
     if (m_backend) m_backend->setCurrentVisibleApp(name);
 }
 
+void ShellHostAdapter::setShellPreferences(QObject* prefs)
+{
+    if (m_backend) m_backend->setShellPreferences(prefs);
+}
+
 QString ShellHostAdapter::displayNameFor(const QString& name) const
 {
     return m_backend ? m_backend->displayNameFor(name) : name;

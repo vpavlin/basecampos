@@ -85,7 +85,8 @@ Rectangle {
         readonly property int sectionModuleInspector: 2
         readonly property int sectionAppearance:      3
         readonly property int sectionNotifications:   4
-        readonly property int sectionRepositories:    5
+        readonly property int sectionDefaultApps:     5
+        readonly property int sectionRepositories:    6
 
         readonly property var sections: [
             { label: qsTr("Dashboard"),        hint: qsTr("Version and build commits") },
@@ -93,8 +94,9 @@ Rectangle {
             { label: qsTr("Module Inspector"), hint: qsTr("Core modules, CPU and memory") },
             { label: qsTr("Customisation"),    hint: qsTr("Theme, density and shell") },
             { label: qsTr("Notifications"),    hint: qsTr("Which apps may notify you") },
+            { label: qsTr("Default apps"),     hint: qsTr("Which app does each job") },
             { label: qsTr("Package Repositories"), hint: qsTr("Where apps come from") }
-        ].slice(0, root.repositoriesAvailable ? 6 : 5)   // Repositories must stay last
+        ].slice(0, root.repositoriesAvailable ? 7 : 6)   // Repositories must stay last
 
         property int selectedIndex: 0
 
@@ -418,7 +420,10 @@ Rectangle {
                     // 4 — Notifications (which apps may notify).
                     NotificationsView {}
 
-                    // 5 — Package Repositories (last: dropped when unavailable).
+                    // 5 — Default apps (shell roles, ADR-067).
+                    DefaultAppsView {}
+
+                    // 6 — Package Repositories (last: dropped when unavailable).
                     RepositoriesView {
                         id: repositoriesView
 

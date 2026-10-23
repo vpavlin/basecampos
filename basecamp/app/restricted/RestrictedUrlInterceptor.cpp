@@ -132,6 +132,11 @@ QUrl RestrictedUrlInterceptor::intercept(const QUrl& url, DataType type)
         return url;
     }
 
+    if (url.scheme() == QLatin1String("image") && type == UrlString
+        && m_imageProviders.contains(url.host())) {
+        return url;
+    }
+
     if (url.isLocalFile()) {
         const QString raw   = url.toLocalFile();
 

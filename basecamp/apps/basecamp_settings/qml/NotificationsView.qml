@@ -11,13 +11,13 @@ import Logos.Theme
 Item {
     id: root
 
-    readonly property var apps: backend && backend.notificationApps ? backend.notificationApps : []
+    readonly property var apps: shell ? shell.notificationApps : []
 
     // Responsive (RESPONSIVE.md §3.2): one column that stops at 720. Every
     // row is one tap target: tapping anywhere on it flips its switch, and the
     // switch itself is at least 44 x 44.
 
-    function setDesktop(on) { backend.notifications.desktop = on }
+    function setDesktop(on) { shell.desktopNotifications = on }
 
     ColumnLayout {
         anchors.top: parent.top
@@ -51,7 +51,7 @@ Item {
 
             MouseArea {
                 anchors.fill: parent
-                enabled: !!(backend && backend.notifications)
+                enabled: !!shell
                 onClicked: root.setDesktop(!desktopSwitch.checked)
             }
 
@@ -86,8 +86,8 @@ Item {
                     // The DS switch is 40 x 24; give it the 44 px hit area.
                     Layout.preferredWidth: Math.max(implicitWidth, Theme.minTouchTarget)
                     Layout.preferredHeight: Theme.minTouchTarget
-                    checked: backend && backend.notifications ? backend.notifications.desktop : false
-                    onToggled: backend.notifications.desktop = checked
+                    checked: shell ? shell.desktopNotifications : false
+                    onToggled: shell.desktopNotifications = checked
                 }
             }
         }
@@ -124,7 +124,7 @@ Item {
 
                 MouseArea {
                     anchors.fill: parent
-                    onClicked: backend.setNotificationsEnabled(appRow.modelData.name, !appRow.modelData.enabled)
+                    onClicked: shell.setNotificationsEnabled(appRow.modelData.name, !appRow.modelData.enabled)
                 }
 
                 RowLayout {
@@ -151,7 +151,7 @@ Item {
                         Layout.preferredWidth: Math.max(implicitWidth, Theme.minTouchTarget)
                         Layout.preferredHeight: Theme.minTouchTarget
                         checked: modelData.enabled
-                        onToggled: backend.setNotificationsEnabled(modelData.name, checked)
+                        onToggled: shell.setNotificationsEnabled(modelData.name, checked)
                     }
                 }
             }

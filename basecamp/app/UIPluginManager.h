@@ -9,6 +9,7 @@
 #include <QMap>
 #include <QPointer>
 #include <QSet>
+#include <functional>
 #include <memory>
 
 #include "utils/HostProfile.h"
@@ -18,6 +19,7 @@
 #include "IComponent.h"
 
 class QQuickWidget;
+class QQmlContext;
 class QTimer;
 class PluginLoader;
 class ViewModuleHost;
@@ -80,6 +82,7 @@ public:
     // Forwarded to PluginLoader, which attaches each ui_qml app's bridge as it
     // loads. Pass-through, so this class never has to know what an intent is.
     void setIntentAdapter(IntentBridgeAdapter* adapter);
+    void setContextDecorator(std::function<void(const QString&, QQmlContext*)> decorator);
 
     // Unmounts every in-process UI plugin widget. Must run WHILE the shell's
     // widget tree is still alive — the widgets are docked inside it — which is

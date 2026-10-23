@@ -43,6 +43,12 @@ public:
                                       const QString& pluginLabel = QString());
     QUrl intercept(const QUrl& url, DataType type) override;
 
+    // Let `image://<id>/…` through, for an image provider the HOST registered
+    // on this engine (the settings role's app gets "basecamp", ADR-067). Only
+    // for images: an image provider can't load code, and the host decides what
+    // each id serves. Anything else with the image: scheme stays blocked.
+    void allowImageProvider(const QString& id) { m_imageProviders.append(id); }
+
 private:
     bool isUnder(const QString& canonicalPath, const QStringList& roots) const;
     bool qmldirDeclaresNativePlugin(const QString& qmldirPath) const;
@@ -53,4 +59,5 @@ private:
     QStringList m_allowedRoots;
     QStringList m_untrustedRoots;
     QString m_pluginLabel;
+    QStringList m_imageProviders;
 };

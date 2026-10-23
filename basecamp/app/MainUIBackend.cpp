@@ -10,6 +10,13 @@
 #include "ShellIntentEndpoint.h"
 #include "ShellIntents.h"
 #include "ShellRoles.h"
+#include "SettingsApi.h"
+
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QQuickImageProvider>
+#include "restricted/RestrictedUrlInterceptor.h"
+#include <utility>
 #include "NotificationCenter.h"
 #include "DesktopNotifier.h"
 #include "links/LinkRequestCoordinator.h"
@@ -591,11 +598,27 @@ void MainUIBackend::wireIntents()
             return m_uiPluginManager
                 && m_uiPluginManager->uiPluginMetadataSnapshot().contains(name);
         },
-        { { QStringLiteral("packages"), ShellIntents::kPackageManagerAppName } },
+        { { QStringLiteral("packages"), ShellIntents::kPackageManagerAppName },
+          { QStringLiteral("settings"), QStringLiteral("basecamp_settings") } },
         this);
     m_intentRegistry->setRoleHolderResolver(
         [this](const QString& role) { return m_roles->holder(role); });
     connect(m_roles, &ShellRoles::changed, this, &MainUIBackend::rolesChanged);
+
+    // The settings role's app gets `shell` (SettingsApi) in its QML engine;
+    // nothing else gets anything beyond `logos`. Checked again on every call.
+    m_uiPluginManager->setContextDecorator([this](const QString& app, QQmlContext* context) {
+        if (!context || app.isEmpty() || roleHolder(QStringLiteral("settings")) != app)
+            return;
+        context->setContextProperty(QStringLiteral("shell"), new SettingsApi(this, app, context));
+        if (QQmlEngine* engine = context->engine()) {
+            engine->addImageProvider(QStringLiteral("basecamp"),
+                                     SettingsApi::createImageProvider(this, app));
+            for (QQmlAbstractUrlInterceptor* i : engine->urlInterceptors())
+                if (auto* sandbox = dynamic_cast<RestrictedUrlInterceptor*>(i))
+                    sandbox->allowImageProvider(QStringLiteral("basecamp"));
+        }
+    });
 
     rebuildIntentRegistry();
     m_intentRegistryBootstrapped = true;
@@ -638,6 +661,26 @@ bool MainUIBackend::assignRole(const QString& role, const QString& app)
 void MainUIBackend::resetRole(const QString& role)
 {
     if (m_roles) m_roles->reset(role);
+}
+
+bool MainUIBackend::requestSettingsSection(const QString& section)
+{
+    m_pendingSettingsSection = section;
+    const bool opened = openRole(QStringLiteral("settings"));
+    emit settingsSectionRequested(section);
+    return opened;
+}
+
+QString MainUIBackend::takePendingSettingsSection()
+{
+    return std::exchange(m_pendingSettingsSection, QString());
+}
+
+void MainUIBackend::setShellPreferences(QObject* prefs)
+{
+    if (m_shellPreferences == prefs) return;
+    m_shellPreferences = prefs;
+    emit shellPreferencesChanged();
 }
 
 bool MainUIBackend::openRole(const QString& role)

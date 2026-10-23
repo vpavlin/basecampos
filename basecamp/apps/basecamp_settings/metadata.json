@@ -1,0 +1,16 @@
+{
+  "author": "Logos",
+  "category": "system",
+  "dependencies": [],
+  "description": "Basecamp's settings: customisation, notifications, default apps, package repositories and developer inspectors.",
+  "display_name": "Settings",
+  "icon": "icon.svg",
+  "main": {},
+  "manifestVersion": "0.6.0",
+  "name": "basecamp_settings",
+  "type": "ui_qml",
+  "version": "0.1.0",
+  "view": "qml/Main.qml",
+  "roles": ["settings"],
+  "uses": [{ "intent": "basecamp.apps.launch" }]
+}

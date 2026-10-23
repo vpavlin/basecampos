@@ -183,7 +183,8 @@ Item {
                         Image {
                             anchors.centerIn: parent
                             visible: parent.hasIcon
-                            source: parent.hasIcon ? rowItem.iconPath : ""
+                            // Other apps' icons are outside this app's sandbox: the host serves them.
+                            source: parent.hasIcon ? "image://basecamp/appicon/" + rowItem.name : ""
                             sourceSize.width: 22
                             sourceSize.height: 22
                         }

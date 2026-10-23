@@ -149,28 +149,6 @@ qt_add_qml_module(basecamp_appmanager_qml
         Basecamp/AppManager/DownloadFormat.qml
 )
 
-qt_add_qml_module(basecamp_settings_qml
-    URI Basecamp.Settings
-    VERSION 1.0
-    STATIC
-    RESOURCE_PREFIX /qt/qml
-    OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Basecamp/Settings
-    QML_FILES
-        Basecamp/Settings/SettingsView.qml
-        Basecamp/Settings/DashboardView.qml
-        Basecamp/Settings/AppsInspectorView.qml
-        Basecamp/Settings/ModuleInspectorView.qml
-        Basecamp/Settings/InspectorPanelHeader.qml
-        Basecamp/Settings/InspectorCardList.qml
-        Basecamp/Settings/InspectorDetailSheet.qml
-        Basecamp/Settings/ModuleStatusBadge.qml
-        Basecamp/Settings/ModuleRowActions.qml
-        Basecamp/Settings/PluginInterfaceView.qml
-        Basecamp/Settings/RepositoriesView.qml
-        Basecamp/Settings/AppearanceView.qml
-        Basecamp/Settings/NotificationsView.qml
-)
-
 qt_add_qml_module(basecamp_shell_qml
     URI Basecamp.Shell
     VERSION 1.0
@@ -242,14 +220,12 @@ target_link_libraries(main_ui
         basecamp_common_qml
         basecamp_sidebar_qml
         basecamp_appmanager_qml
-        basecamp_settings_qml
         basecamp_shell_qml
         basecamp_icons_qml
         $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_backend_qmlplugin>
         $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_common_qmlplugin>
         $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_sidebar_qmlplugin>
         $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_appmanager_qmlplugin>
-        $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_settings_qmlplugin>
         $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_shell_qmlplugin>
         $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_icons_qmlplugin>
 )

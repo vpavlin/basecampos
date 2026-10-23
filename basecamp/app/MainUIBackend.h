@@ -11,6 +11,7 @@
 #include "utils/HostProfile.h"
 
 #include <QObject>
+#include <QPointer>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QStringList>
@@ -207,6 +208,18 @@ public:
     // Open whatever fills `role`, as an ordinary app. false when nothing can
     // (the shell then shows its own fallback for the role).
     Q_INVOKABLE bool openRole(const QString& role);
+
+    // Open Settings (whatever fills the `settings` role) at a section, e.g.
+    // "repositories". The section is kept until the app takes it, so a
+    // Settings app that is still loading still lands there.
+    Q_INVOKABLE bool requestSettingsSection(const QString& section);
+    QString pendingSettingsSection() const { return m_pendingSettingsSection; }
+    QString takePendingSettingsSection();
+
+    // The shell's preferences object, handed over through IShellHost and given
+    // only to the settings role's app (SettingsApi).
+    void setShellPreferences(QObject* prefs);
+    QObject* shellPreferences() const { return m_shellPreferences; }
     PackageCoordinator*    packageCoordinator()    const { return m_packageCoordinator; }
     // Base-typed on purpose — see the Q_PROPERTY comments above. Internal
     // code uses the concrete members directly and does not go through these.
@@ -352,6 +365,8 @@ public slots:
 signals:
     void notificationAppsChanged();
     void rolesChanged();
+    void shellPreferencesChanged();
+    void settingsSectionRequested(const QString& section);
     void currentActiveSectionIndexChanged();
 
     // App-Manager dialog + install lifecycle. See PackageCoordinator for
@@ -528,6 +543,8 @@ private:
     // order — see the comment there.
     IntentRegistry*      m_intentRegistry  = nullptr;
     class ShellRoles*    m_roles           = nullptr;
+    QPointer<QObject>    m_shellPreferences;
+    QString              m_pendingSettingsSection;
     LinkRequestCoordinator* m_linkRequests = nullptr;
     // False until wireIntents() has done its bootstrap rebuild, so the
     // cold-start link gate opens on a registry that has actually seen disk.

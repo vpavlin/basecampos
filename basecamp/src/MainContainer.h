@@ -120,7 +120,6 @@ private:
     bool m_desktopLayout = false;
     DesktopArea* m_desktop = nullptr;
     QQuickWidget* m_dockWidget = nullptr;
-    QQuickWidget* m_settingsWidget = nullptr;
     QQuickWidget* m_spotlight = nullptr;
     DesktopStatusBar* m_statusBar = nullptr;
     DesktopRoot* m_desktopRoot = nullptr;
@@ -147,6 +146,7 @@ private:
     // The `packages` role's page when no installed app can fill it (desktop and
     // tabs layouts; the sidebar layout keeps one in the content stack).
     QPointer<QWidget> m_packagesFallback;
+    QPointer<QWidget> m_settingsFallback;
 
     // Content views (QML for Dashboard, Modules, PackageManager, Settings)
     QQuickWidget* m_contentWidget;

@@ -34,7 +34,7 @@ class QWidget;
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Bump on ANY vtable change to IShellHost or IShellObserver.
-constexpr int IShellHost_abi = 3;
+constexpr int IShellHost_abi = 4;
 
 // Host → shell notifications. Implemented shell-side by MainContainer.
 //
@@ -84,6 +84,12 @@ public:
 
     // Human-readable label for a module name, falling back to the name itself.
     virtual QString displayNameFor(const QString& name) const = 0;
+
+    // The shell's own preferences object (layout, shell, wallpaper, restart…),
+    // owned by the shell. The host hands it to the app filling the `settings`
+    // role (ADR-067) and to nothing else. nullptr detaches: the shell MUST
+    // call this with nullptr before destroying the object.
+    virtual void setShellPreferences(QObject* prefs) = 0;
 
     // nullptr detaches. The shell MUST call setObserver(nullptr) before it is
     // destroyed: host-side callbacks are dispatched from a

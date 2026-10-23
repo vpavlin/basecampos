@@ -3,7 +3,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 import Basecamp.AppManager
-import Basecamp.Settings
 import Basecamp.Backend
 import Logos.Theme
 
@@ -13,7 +12,8 @@ Item {
     // Entry point for the shell: the welcome page's search routes a result
     // here and hands over the query that produced it.
     function applyAppSearch(query) { appManagerView.applySearch(query) }
-    function showRepositories() { settingsView.showRepositories() }
+    // Settings is an app filling the `settings` role now (ADR-067).
+    function showRepositories() { backend.requestSettingsSection("repositories") }
 
     // The desktop layout opens App Manager and Settings as two windows, each
     // an instance of this file pinned to one section; -1 follows the backend.
@@ -53,9 +53,6 @@ Item {
 
     Connections {
         target: backend
-        function onRepositoryOperationCompleted(operation, url, success, error) {
-            settingsView.reportRepositoryResult(operation, url, success, error)
-        }
         // Capabilities the shell itself provides *that are pure navigation* —
         // no state, no IPC, answerable on the spot. Adding the next one of
         // those is one more `case`. Anything unrecognised must still be
@@ -74,9 +71,7 @@ Item {
                 return
             switch (intent) {
             case "basecamp.repositories.manage":
-                backend.setCurrentActiveSectionIndex(root.sidebarSettings)
-                settingsView.showRepositories()
-                root.repositoriesRequested()
+                backend.requestSettingsSection("repositories")
                 backend.respondToShellIntent(requestId, true, ({}), "")
                 return
             case "basecamp.settings.open":
@@ -136,8 +131,9 @@ Item {
         id: contentStack
         anchors.fill: parent
 
-        // Map backend's sidebar index to this stack's two-entry layout.
-        currentIndex: root.section === root.sidebarSettings ? 1 : 0
+        // Settings left this stack: it is an app filling the `settings` role
+        // now (ADR-067), so only App Manager remains.
+        currentIndex: 0
 
         // App Manager (sidebar sidebarAppManager -> stack index 0)
         AppManagerView {
@@ -161,48 +157,8 @@ Item {
             onUninstallAppRequested: function(name, repositoryUrl) {
                 backend.uninstallApp(name, repositoryUrl)
             }
-            onNavigateToRepositories: {
-                backend.setCurrentActiveSectionIndex(root.sidebarSettings)
-                settingsView.showRepositories()
-                root.repositoriesRequested()
-            }
+            onNavigateToRepositories: backend.requestSettingsSection("repositories")
             onRefreshRequested: backend.refreshAppCatalog()
-        }
-
-        // Settings (backend index 3 -> internal index 1)
-        SettingsView {
-            id: settingsView
-            backgroundOpacity: root.pinnedSection >= 0 ? 0 : 1
-
-            repositories:        backend.repositories
-            repositoriesLoading: backend.repositoriesLoading
-            downloadSource:      backend.downloadSource
-            uiModulesModel:      backend.uiModulesModel
-            coreModulesModel:    backend.coreModulesModel
-            modulesLoading:      backend.modulesLoading
-            repositoriesAvailable: backend.repositoryManagement !== false
-
-            onRepositoryRefreshRequested: backend.refreshRepositories()
-            onRepositoryAddRequested:     url => backend.addRepository(url)
-            onRepositoryRemoveRequested:  url => backend.removeRepository(url)
-            onRepositoryEnabledRequested: (url, e) => backend.setRepositoryEnabled(url, e)
-            onDownloadSourceRequested:    source => backend.setDownloadSource(source)
-            onRepositoriesBecameVisible: {
-                Qt.callLater(backend.refreshRepositories)
-                Qt.callLater(backend.refreshDownloadSource)
-            }
-
-            // Apps Inspector (UI plugins). View-only — uninstall lives in PMUI.
-            onAppsRefreshRequested:       backend.refreshUiModules()
-            onAppLoadRequested:           name => backend.loadUiModule(name)
-            onAppUnloadRequested:         name => backend.unloadUiModule(name)
-            onAppsInspectorBecameVisible: Qt.callLater(backend.refreshUiModules)
-
-            // Module Inspector (core modules). View-only — uninstall lives in PMUI.
-            onModulesRefreshRequested:      backend.refreshCoreModules()
-            onModuleLoadRequested:          name => backend.loadCoreModule(name)
-            onModuleUnloadRequested:        name => backend.unloadCoreModule(name)
-            onModuleInspectorBecameVisible: Qt.callLater(backend.refreshCoreModules)
         }
     }
 }

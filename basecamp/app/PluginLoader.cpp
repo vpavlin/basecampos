@@ -524,6 +524,8 @@ void PluginLoader::finishUiQmlLoad(QQuickWidget* qmlWidget,
 
     qmlWidget->rootContext()->setContextProperty("logos", bridge);
     qmlWidget->rootContext()->setContextProperty("isActiveTab", true);
+    if (m_contextDecorator)
+        m_contextDecorator(request.name, qmlWidget->rootContext());
     qmlWidget->setSource(QUrl::fromLocalFile(request.qmlViewPath));
 
     if (!request.iconPath.isEmpty())
@@ -560,9 +562,11 @@ void PluginLoader::loadHotReloadView(const PluginLoadRequest& request,
 
     auto* view = new QmlHotReloadView(
         request.name, request.hotReloadDir, QUrl::fromLocalFile(request.qmlViewPath), bridge,
-        [request, bridge]() {
+        [this, request, bridge]() {
             QQuickWidget* qmlWidget = createSandboxedView(request);
             qmlWidget->rootContext()->setContextProperty("logos", bridge);
+            if (m_contextDecorator)
+                m_contextDecorator(request.name, qmlWidget->rootContext());
             return qmlWidget;
         });
     if (!request.iconPath.isEmpty())

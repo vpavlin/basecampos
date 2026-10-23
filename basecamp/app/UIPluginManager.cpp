@@ -601,6 +601,11 @@ void UIPluginManager::activateApp(const QString& appName)
 }
 
 
+void UIPluginManager::setContextDecorator(std::function<void(const QString&, QQmlContext*)> decorator)
+{
+    if (m_pluginLoader) m_pluginLoader->setContextDecorator(std::move(decorator));
+}
+
 void UIPluginManager::setIntentAdapter(IntentBridgeAdapter* adapter)
 {
     if (m_pluginLoader) m_pluginLoader->setIntentAdapter(adapter);

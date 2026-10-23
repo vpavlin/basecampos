@@ -35,6 +35,7 @@ public:
     void     unloadUiModule(const QString& name) override;
     void     setCurrentVisibleApp(const QString& name) override;
     QString  displayNameFor(const QString& name) const override;
+    void     setShellPreferences(QObject* prefs) override;
     void     setObserver(IShellObserver* observer) override;
 
 private:

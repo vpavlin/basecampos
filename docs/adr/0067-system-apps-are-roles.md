@@ -1,6 +1,6 @@
 # ADR-067: Applications, Package Manager and Settings are apps that fill roles
 
-**Status:** Proposed · 2026-10-23 · step 1 (Package Manager) built as an experiment · Builds on the shell-packages spec and upstream app-to-app intents.
+**Status:** Proposed · 2026-10-23 · steps 1 (Package Manager) and 2 (Settings) built as an experiment · Builds on the shell-packages spec and upstream app-to-app intents.
 
 ## Context
 Applications and Settings are QML compiled into the shell and read host internals through the `backend` object; Package Manager is its own module but the shell special-cases it. No other app can replace them, and the shell API they need is never written down. Upstream intents already let any app launch another (`basecamp.apps.launch`) but deliberately hide which apps are installed, so a launcher can't be an ordinary app today.

@@ -44,6 +44,16 @@ namespace {
 constexpr int kAppsStackIndex     = 0;  // WorkspaceArea (QDockWidget-based)
 constexpr int kContentStackIndex  = 1;  // ContentViews.qml (App Manager + Settings)
 constexpr int kModulesStackIndex  = 2;  // the `packages` role's fallback page
+constexpr int kSettingsFallbackIndex = 3;  // the `settings` role's fallback page
+
+// The shell's own entry points for roles ("sys:packages" in a menu or a saved
+// tab) and the role each opens (ADR-067). Empty: not a role.
+QString roleForSystemKey(const QString& key)
+{
+    if (key == QStringLiteral("sys:packages")) return QStringLiteral("packages");
+    if (key == QStringLiteral("sys:settings")) return QStringLiteral("settings");
+    return {};
+}
 
 // Shown when no installed app can fill a role (ADR-067, SHELL-ROLES-SPEC §5):
 // the shell never leaves someone without a way back, and never silently does
@@ -63,9 +73,13 @@ QWidget* makeRoleFallback(const QString& role, QWidget* parent)
     QString body = QObject::tr("Package Manager isn't installed, and no other installed app "
                                "is set to manage packages. Reinstall Basecamp's Package "
                                "Manager, or choose another app in Settings.");
-    if (role != QStringLiteral("packages")) {
+    if (role == QStringLiteral("settings")) {
+        title = QObject::tr("Settings isn't available");
+        body = QObject::tr("Basecamp's Settings app isn't installed, and no other installed "
+                           "app is set as Settings. Reinstalling Basecamp restores it.");
+    } else if (role != QStringLiteral("packages")) {
         title = QObject::tr("No app fills this role");
-        body = QObject::tr("Choose an app for \"%1\" in Settings.").arg(role);
+        body = QObject::tr("Choose an app for \"%1\" in Settings → Default apps.").arg(role);
     }
     QLabel* heading = new QLabel(title, page);
     heading->setAlignment(Qt::AlignCenter);
@@ -141,6 +155,9 @@ MainContainer::MainContainer(IShellHost* host, QWidget* parent)
     // on a metaobject, which is the coupling this boundary exists to avoid.
     // Detached again in detachFromHost().
     m_host->setObserver(this);
+    // Settings is an app now (ADR-067): the host gives these preferences to the
+    // app filling the `settings` role, and to nothing else.
+    m_host->setShellPreferences(m_prefs);
 
     // When user closes a plugin tab (× button), notify backend to unload.
     connect(m_workspaceArea, &WorkspaceArea::pluginClosed,
@@ -275,6 +292,7 @@ void MainContainer::detachFromHost()
     if (!m_host) {
         return;
     }
+    m_host->setShellPreferences(nullptr);
     m_host->setObserver(nullptr);
 }
 
@@ -299,10 +317,8 @@ void MainContainer::setupUi()
             m_sidebarWidget->setClearColor(bg);
         if (m_contentWidget && !m_desktopLayout)
             m_contentWidget->setClearColor(bg);
-        // Settings (desktop window / Basecampium tab) and the New tab page are
-        // separate views; their clear colour shows wherever QML draws nothing.
-        if (m_settingsWidget && !m_desktopLayout)
-            m_settingsWidget->setClearColor(bg);
+        // The New tab page is a separate view; its clear colour shows wherever
+        // QML draws nothing.
         if (m_newTabWidget)
             m_newTabWidget->setClearColor(bg);
         QWidget* top = window();
@@ -369,6 +385,8 @@ void MainContainer::setupUi()
     // Index 2: the `packages` role's fallback, shown only when no installed app
     // can manage packages. The package manager itself opens as an ordinary app.
     m_contentStack->addWidget(makeRoleFallback(QStringLiteral("packages"), m_contentStack));
+    // Index 3: the same for `settings`.
+    m_contentStack->addWidget(makeRoleFallback(QStringLiteral("settings"), m_contentStack));
 
     // Content stack fills the content area — the version footer that
     // used to live in a QML bottom toolbar is now inside SidebarPanel.qml.
@@ -609,7 +627,14 @@ void MainContainer::onSectionIndexChanged(int index)
         }
         break;
     case ShellSection::Settings:
-        m_contentStack->setCurrentIndex(kContentStackIndex);
+        // An app now (ADR-067), like Package Manager.
+        if (openRole(QStringLiteral("settings"))) {
+            QTimer::singleShot(0, this, [this]() {
+                m_host->setCurrentSectionIndex(ShellSection::Workspace);
+            });
+        } else {
+            m_contentStack->setCurrentIndex(kSettingsFallbackIndex);
+        }
         break;
     default: break;
     }
@@ -854,28 +879,10 @@ QWidget* MainContainer::systemAppContent(const QString& key)
         return m_packagesFallback;
     }
     if (key == QStringLiteral("sys:settings")) {
-        if (!m_settingsWidget) {
-            m_settingsWidget = new QQuickWidget(this);
-            m_settingsWidget->hide();
-            m_settingsWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
-            m_settingsWidget->setClearColor(
-                Logos::themeColor(QStringLiteral("background"), QColor("#171717")));
-            if (m_desktopRoot) {
-                m_settingsWidget->engine()->addImageProvider(QStringLiteral("backdrop"),
-                                                             new BackdropProvider(m_desktopRoot));
-                m_settingsWidget->rootContext()->setContextProperty(
-                    "glass", new GlassInfo(m_desktopRoot, m_settingsWidget, m_settingsWidget));
-            }
-            m_settingsWidget->rootContext()->setContextProperty("backend", m_host->backendObject());
-            m_settingsWidget->rootContext()->setContextProperty("shellPrefs", m_prefs);
-            ShellDevQml::load(m_settingsWidget,
-                QUrl(QStringLiteral("qrc:/qt/qml/Basecamp/Shell/Basecamp/Shell/ContentViews.qml")),
-                [](QObject* root) {
-                    root->setProperty("pinnedSection", int(ShellSection::Settings));
-                    root->setProperty("handlesIntents", false);
-                });
-        }
-        return m_settingsWidget;
+        // Only ever the fallback: Settings itself is an app.
+        if (!m_settingsFallback)
+            m_settingsFallback = makeRoleFallback(QStringLiteral("settings"), this);
+        return m_settingsFallback;
     }
     return nullptr;
 }
@@ -897,9 +904,9 @@ void MainContainer::openSystemApp(const QString& key)
     }
     if (!m_desktop)
         return;
-    // Package Manager is an app filling the `packages` role (ADR-067); the
-    // shell's own page for it exists only as the fallback.
-    if (key == QStringLiteral("sys:packages") && openRole(QStringLiteral("packages"))) {
+    // Package Manager and Settings are apps filling roles (ADR-067); the
+    // shell's own page for each exists only as the fallback.
+    if (const QString role = roleForSystemKey(key); !role.isEmpty() && openRole(role)) {
         if (AppWindow* w = m_desktop->window(key)) {
             QWidget* content = w->releaseContent();
             m_desktop->removeWindow(w);
@@ -933,9 +940,12 @@ void MainContainer::openSystemApp(const QString& key)
 
 void MainContainer::openSettingsRepositories()
 {
-    openSystemApp(QStringLiteral("sys:settings"));
-    if (m_settingsWidget && m_settingsWidget->rootObject())
-        QMetaObject::invokeMethod(m_settingsWidget->rootObject(), "showRepositories");
+    bool opened = false;
+    if (QObject* backend = m_host->backendObject())
+        QMetaObject::invokeMethod(backend, "requestSettingsSection", Q_RETURN_ARG(bool, opened),
+                                  Q_ARG(QString, QStringLiteral("repositories")));
+    if (!opened)
+        openSystemApp(QStringLiteral("sys:settings"));   // the fallback page
 }
 
 void MainContainer::launchFromDock(const QString& name)
@@ -1131,10 +1141,10 @@ void MainContainer::setupTabsUi()
 
 void MainContainer::openSystemTab(const QString& key)
 {
-    // Package Manager is an app filling the `packages` role (ADR-067); the
-    // shell's own page for it exists only as the fallback. Covers every way in:
-    // the ⋮ sheet, New tab, restored tabs, search.
-    if (key == QStringLiteral("sys:packages") && openRole(QStringLiteral("packages"))) {
+    // Package Manager and Settings are apps filling roles (ADR-067); the
+    // shell's own page for each exists only as the fallback. Covers every way
+    // in: the ⋮ sheet, New tab, restored tabs, search, Ctrl+,.
+    if (const QString role = roleForSystemKey(key); !role.isEmpty() && openRole(role)) {
         // A fallback tab left from before the app was (re)installed goes away.
         if (m_tabArea->hasKey(key)) {
             if (QWidget* w = m_tabArea->takeTab(key)) {

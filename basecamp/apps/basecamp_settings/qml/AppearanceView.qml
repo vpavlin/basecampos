@@ -90,7 +90,7 @@ Item {
 
     // Layout and wallpaper are shell preferences (MainContainer's ShellPrefs),
     // absent where the shell isn't the host (shell-preview, doctests).
-    readonly property var prefs: typeof shellPrefs !== "undefined" ? shellPrefs : null
+    readonly property var prefs: typeof shell !== "undefined" && shell ? shell.prefs : null
 
     FileDialog {
         id: wallpaperDialog
@@ -488,7 +488,7 @@ Item {
                         objectName: "appearance.wallpaper.basecamp"
                         wallpaperId: "basecamp"
                         text: qsTr("Basecamp")
-                        preview: root.prefs ? root.prefs.builtinWallpaperUrl : ""
+                        preview: root.prefs ? "image://basecamp/wallpaper/builtin" : ""
                     }
                     WallpaperChoice {
                         objectName: "appearance.wallpaper.plain"
@@ -500,7 +500,9 @@ Item {
                         wallpaperId: "custom"
                         visible: root.prefs && root.prefs.customWallpaperUrl.toString().length > 0
                         text: qsTr("Your image")
-                        preview: root.prefs ? root.prefs.customWallpaperUrl : ""
+                        // The path in the id makes a newly chosen file load, not the cached one.
+                        preview: root.prefs && root.prefs.customWallpaperUrl.toString().length > 0
+                                 ? "image://basecamp/wallpaper/custom/" + encodeURIComponent(root.prefs.customWallpaperUrl.toString()) : ""
                     }
                     LogosButton {
                         objectName: "appearance.wallpaper.choose"
@@ -644,7 +646,7 @@ Item {
             LogosButton {
                 text: qsTr("Open Package Manager")
                 variant: LogosButton.Variant.Primary
-                onClicked: { addShellDialog.close(); backend.setCurrentActiveSectionIndex(2) }
+                onClicked: { addShellDialog.close(); shell.openRole("packages") }
             }
         ]
     }

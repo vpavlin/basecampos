@@ -872,6 +872,17 @@ WRAPPER_EOF
       exit 1
     fi
 
+    # Basecamp's own apps that fill shell roles (ADR-067): plain QML apps from
+    # apps/, bundled like any pre-installed plugin. Settings is the first.
+    if [ -d "${src}/apps" ]; then
+      for _app in "${src}"/apps/*/; do
+        _name=$(basename "$_app")
+        mkdir -p "$out/plugins/$_name"
+        cp -r "$_app". "$out/plugins/$_name/"
+        echo "Bundled role app $_name"
+      done
+    fi
+
     # Copy pre-installed modules and plugins from bundled install outputs.
     # Each entry in installedModules has modules/ and/or plugins/ subdirectories.
     for installed in ${pkgs.lib.concatStringsSep " " (map toString installedModules)}; do

@@ -25,7 +25,7 @@ Item {
 
     function loadMethods() {
         if (pluginName.length > 0) {
-            let methodsJson = backend.getCoreModuleMethods(pluginName)
+            let methodsJson = shell.getCoreModuleMethods(pluginName)
             try {
                 methods = JSON.parse(methodsJson)
             } catch (e) {
@@ -40,7 +40,7 @@ Item {
 
     function loadEvents() {
         if (pluginName.length > 0) {
-            let eventsJson = backend.getCoreModuleEvents(pluginName)
+            let eventsJson = shell.getCoreModuleEvents(pluginName)
             try {
                 events = JSON.parse(eventsJson)
             } catch (e) {
@@ -190,7 +190,7 @@ Item {
 
                                             onClicked: {
                                                 let methodName = modelData.name || modelData
-                                                root.resultText = backend.callCoreModuleMethod(root.pluginName, methodName, "[]")
+                                                root.resultText = shell.callCoreModuleMethod(root.pluginName, methodName, "[]")
                                             }
                                         }
                                     }

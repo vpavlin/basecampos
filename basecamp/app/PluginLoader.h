@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QHash>
+#include <functional>
 #include <QObject>
 #include <QMutex>
 #include <QSet>
@@ -60,6 +61,12 @@ public:
     // LogosIntentRouter, because attaching is basecamp's concern — the runtime's
     // router treats bridge POINTERS as identity and has no registration method.
     void setIntentAdapter(IntentBridgeAdapter* adapter) { m_intentAdapter = adapter; }
+
+    // Called for every ui_qml app's root context just before its QML runs, so
+    // the host can add what that app is entitled to (the `shell` object for the
+    // settings role's holder, ADR-067). Nothing else is ever added.
+    using ContextDecorator = std::function<void(const QString& appName, class QQmlContext* context)>;
+    void setContextDecorator(ContextDecorator decorator) { m_contextDecorator = std::move(decorator); }
 
     explicit PluginLoader(LogosAPI* logosAPI,
                           CoreModuleManager* coreModuleManager,
@@ -131,6 +138,7 @@ private:
     LogosAPI* m_logosAPI;
 
     IntentBridgeAdapter* m_intentAdapter = nullptr;
+    ContextDecorator m_contextDecorator;
     CoreModuleManager* m_coreModuleManager;   // not owned
 
     // Runs each plugin's core dependencies off the GUI thread. Owned, and its
