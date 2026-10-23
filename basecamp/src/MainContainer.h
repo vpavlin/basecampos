@@ -81,6 +81,8 @@ private slots:
     // Basecampium (tabs): the New tab page's two signals.
     void tabOpenSystem(const QString& key);
     void tabLaunchApp(const QString& name);
+    void tabOpenRole(const QString& role);
+    void loadHomeApp();
     void onNotificationsChanged();
     void onNotifyLayerResized();
 
@@ -127,7 +129,13 @@ private:
 
     bool m_tabsLayout = false;
     TabArea* m_tabArea = nullptr;
-    QQuickWidget* m_newTabWidget = nullptr;
+    QWidget* m_newTabWidget = nullptr;          // New tab: hosts the home role's app
+    class QStackedLayout* m_homeStack = nullptr;
+    QPointer<QWidget> m_homeWidget;             // the home app's view, when loaded
+    QString m_homeApp;                          // the module filling `home`
+    QString m_homeQuery;                        // the one bar's text on home
+    QObject* homeRoot() const;
+    void adoptHomeWidget(QWidget* widget);
     QQuickWidget* m_notifyWidget = nullptr;
     QString m_pendingNewTab;      // the New tab an app was picked from
     QStringList m_closedKeys;     // for Ctrl+Shift+T
@@ -147,6 +155,7 @@ private:
     // tabs layouts; the sidebar layout keeps one in the content stack).
     QPointer<QWidget> m_packagesFallback;
     QPointer<QWidget> m_settingsFallback;
+    QPointer<QWidget> m_launcherFallback;
 
     // Content views (QML for Dashboard, Modules, PackageManager, Settings)
     QQuickWidget* m_contentWidget;

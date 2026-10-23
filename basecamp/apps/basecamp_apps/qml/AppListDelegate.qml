@@ -4,6 +4,8 @@ import QtQuick.Layouts
 import Logos.Controls
 import Logos.Icons
 import Logos.Theme
+// Shared with the shell (its welcome page and install dialog use them).
+import Basecamp.AppManager
 import Basecamp.Backend 1.0
 
 ItemDelegate {
@@ -65,7 +67,9 @@ ItemDelegate {
 
         readonly property string nameText:      root.appData ? (root.appData.name || "") : ""
         readonly property string displayName:   root.appData ? (root.appData.displayName || root.appData.name || "") : ""
-        readonly property string iconUrl:      root.appData ? (root.appData.iconUrl || "") : ""
+        // The sandbox can't read other apps' files: the host serves installed icons.
+        readonly property string iconUrl:      root.appData && root.appData.iconUrl
+                                               ? "image://basecamp/appicon/" + root.appData.name : ""
         readonly property string description:   root.appData ? (root.appData.description || "") : ""
         // 0.4.0+ guarantees a validated 256x256 icon, so it can fill the
         // tile. Older packages ship a small glyph that must stay inset.

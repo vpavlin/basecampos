@@ -10,7 +10,7 @@
 #include "ShellIntentEndpoint.h"
 #include "ShellIntents.h"
 #include "ShellRoles.h"
-#include "SettingsApi.h"
+#include "ShellApi.h"
 
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -599,21 +599,27 @@ void MainUIBackend::wireIntents()
                 && m_uiPluginManager->uiPluginMetadataSnapshot().contains(name);
         },
         { { QStringLiteral("packages"), ShellIntents::kPackageManagerAppName },
-          { QStringLiteral("settings"), QStringLiteral("basecamp_settings") } },
+          { QStringLiteral("settings"), QStringLiteral("basecamp_settings") },
+          { QStringLiteral("launcher"), QStringLiteral("basecamp_apps") },
+          { QStringLiteral("home"),     QStringLiteral("basecamp_home") } },
         this);
     m_intentRegistry->setRoleHolderResolver(
         [this](const QString& role) { return m_roles->holder(role); });
     connect(m_roles, &ShellRoles::changed, this, &MainUIBackend::rolesChanged);
 
-    // The settings role's app gets `shell` (SettingsApi) in its QML engine;
-    // nothing else gets anything beyond `logos`. Checked again on every call.
+    // Apps that claim or hold a role get `shell` (ShellApi) in their QML engine;
+    // nothing else gets anything beyond `logos`. Each member is checked against
+    // its role on every call, so claiming alone grants nothing.
     m_uiPluginManager->setContextDecorator([this](const QString& app, QQmlContext* context) {
-        if (!context || app.isEmpty() || roleHolder(QStringLiteral("settings")) != app)
-            return;
-        context->setContextProperty(QStringLiteral("shell"), new SettingsApi(this, app, context));
+        if (!context || app.isEmpty()) return;
+        bool roleApp = false;
+        for (const QString& role : IntentRegistry::knownRoles())
+            roleApp = roleApp || roleHolder(role) == app || m_intentRegistry->declaresRole(app, role);
+        if (!roleApp) return;
+        context->setContextProperty(QStringLiteral("shell"), new ShellApi(this, app, context));
         if (QQmlEngine* engine = context->engine()) {
             engine->addImageProvider(QStringLiteral("basecamp"),
-                                     SettingsApi::createImageProvider(this, app));
+                                     ShellApi::createImageProvider(this, app));
             for (QQmlAbstractUrlInterceptor* i : engine->urlInterceptors())
                 if (auto* sandbox = dynamic_cast<RestrictedUrlInterceptor*>(i))
                     sandbox->allowImageProvider(QStringLiteral("basecamp"));
@@ -669,6 +675,27 @@ bool MainUIBackend::requestSettingsSection(const QString& section)
     const bool opened = openRole(QStringLiteral("settings"));
     emit settingsSectionRequested(section);
     return opened;
+}
+
+bool MainUIBackend::requestLauncherSearch(const QString& query)
+{
+    m_pendingLauncherSearch = query;
+    const bool opened = openRole(QStringLiteral("launcher"));
+    emit launcherSearchRequested(query);
+    return opened;
+}
+
+QString MainUIBackend::takePendingLauncherSearch()
+{
+    return std::exchange(m_pendingLauncherSearch, QString());
+}
+
+void MainUIBackend::setHomeQuery(const QString& text, bool inBar)
+{
+    if (m_homeQuery == text && m_homeSearchInBar == inBar) return;
+    m_homeQuery = text;
+    m_homeSearchInBar = inBar;
+    emit homeQueryChanged();
 }
 
 QString MainUIBackend::takePendingSettingsSection()

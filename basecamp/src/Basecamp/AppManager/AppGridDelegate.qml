@@ -11,6 +11,9 @@ ItemDelegate {
 
     // ─── Public API ───
     property var appData: ({})
+    // An app outside the shell (Applications, ADR-067) can't read other apps'
+    // icon files from its sandbox; it passes the host-served image instead.
+    property string iconOverride: ""
     property int tileSize: 80
     property bool contextMenuEnabled: true
     // Touch: long-press opens the actions menu (right-click has no touch
@@ -61,7 +64,8 @@ ItemDelegate {
 
         readonly property string nameText:      root.appData ? (root.appData.name || "") : ""
         readonly property string displayName:   root.appData ? (root.appData.displayName || root.appData.name || "") : ""
-        readonly property string iconUrl:      root.appData ? (root.appData.iconUrl || "") : ""
+        readonly property string iconUrl:      root.iconOverride !== "" ? root.iconOverride
+                                               : root.appData ? (root.appData.iconUrl || "") : ""
         // 0.4.0+ guarantees a validated 256x256 icon, so it can fill the
         // tile. Older packages ship a small glyph that must stay inset.
         readonly property bool fullBleedIcon:

@@ -11,6 +11,7 @@
 
 #include <QGuiApplication>
 #include <QQuickWidget>
+#include <QStackedLayout>
 #include <QQmlEngine>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -45,6 +46,7 @@ constexpr int kAppsStackIndex     = 0;  // WorkspaceArea (QDockWidget-based)
 constexpr int kContentStackIndex  = 1;  // ContentViews.qml (App Manager + Settings)
 constexpr int kModulesStackIndex  = 2;  // the `packages` role's fallback page
 constexpr int kSettingsFallbackIndex = 3;  // the `settings` role's fallback page
+constexpr int kLauncherFallbackIndex = 4;  // the `launcher` role's fallback page
 
 // The shell's own entry points for roles ("sys:packages" in a menu or a saved
 // tab) and the role each opens (ADR-067). Empty: not a role.
@@ -52,6 +54,7 @@ QString roleForSystemKey(const QString& key)
 {
     if (key == QStringLiteral("sys:packages")) return QStringLiteral("packages");
     if (key == QStringLiteral("sys:settings")) return QStringLiteral("settings");
+    if (key == QStringLiteral("sys:applications")) return QStringLiteral("launcher");
     return {};
 }
 
@@ -77,6 +80,16 @@ QWidget* makeRoleFallback(const QString& role, QWidget* parent)
         title = QObject::tr("Settings isn't available");
         body = QObject::tr("Basecamp's Settings app isn't installed, and no other installed "
                            "app is set as Settings. Reinstalling Basecamp restores it.");
+    } else if (role == QStringLiteral("launcher")) {
+        title = QObject::tr("Applications isn't available");
+        body = QObject::tr("Basecamp's Applications app isn't installed, and no other installed "
+                           "app is set as your launcher. Choose one in Settings → Default apps, "
+                           "or reinstall Basecamp.");
+    } else if (role == QStringLiteral("home")) {
+        title = QObject::tr("No home page");
+        body = QObject::tr("Basecamp's Home app isn't installed, and no other installed app is "
+                           "set as Home. Choose one in Settings → Default apps, or reinstall "
+                           "Basecamp. Your open apps are in the tab list.");
     } else if (role != QStringLiteral("packages")) {
         title = QObject::tr("No app fills this role");
         body = QObject::tr("Choose an app for \"%1\" in Settings → Default apps.").arg(role);
@@ -233,10 +246,17 @@ void MainContainer::wireSidebar(QObject* sidebarRoot)
 // onSectionIndexChanged), so it never reads AppManager there.
 bool MainContainer::applicationsInFront() const
 {
-    static const QString key = QStringLiteral("sys:applications");
-    if (m_tabArea) return m_tabArea->currentKey() == key;
-    if (m_desktop) return m_desktop->activeKey() == key;
-    return m_host->currentSectionIndex() == ShellSection::AppManager;
+    // Applications is an app filling the `launcher` role (ADR-067).
+    QString holder;
+    if (QObject* backend = m_host->backendObject())
+        QMetaObject::invokeMethod(backend, "roleHolder", Q_RETURN_ARG(QString, holder),
+                                  Q_ARG(QString, QStringLiteral("launcher")));
+    if (holder.isEmpty()) return false;
+    if (m_tabArea) return m_tabArea->currentKey() == holder;
+    if (m_desktop) return m_desktop->activeKey() == holder;
+    QObject* backend = m_host->backendObject();
+    return backend && backend->property("currentVisibleApp").toString() == holder
+        && m_host->currentSectionIndex() == ShellSection::Workspace;
 }
 
 // The dialog opens over whatever is in front. Asked for from inside
@@ -269,13 +289,16 @@ void MainContainer::invokeOpenApp(const QString& name,
     }
 }
 
+// Applications is an app filling the `launcher` role (ADR-067): it opens (if
+// it isn't already) and takes the search through its own `shell`.
 void MainContainer::applyAppManagerSearch(const QString& query)
 {
-    if (!m_contentWidget) return;
-    if (QObject* contentRoot = m_contentWidget->rootObject()) {
-        QMetaObject::invokeMethod(contentRoot, "applyAppSearch",
-                                  Q_ARG(QVariant, QVariant(query)));
-    }
+    bool opened = false;
+    if (QObject* backend = m_host->backendObject())
+        QMetaObject::invokeMethod(backend, "requestLauncherSearch", Q_RETURN_ARG(bool, opened),
+                                  Q_ARG(QString, query));
+    if (!opened)
+        openSystemApp(QStringLiteral("sys:applications"));   // the fallback page
 }
 
 MainContainer::~MainContainer()
@@ -319,8 +342,6 @@ void MainContainer::setupUi()
             m_contentWidget->setClearColor(bg);
         // The New tab page is a separate view; its clear colour shows wherever
         // QML draws nothing.
-        if (m_newTabWidget)
-            m_newTabWidget->setClearColor(bg);
         QWidget* top = window();
         if (top && top != this) {
             QPalette tp = top->palette();
@@ -387,6 +408,8 @@ void MainContainer::setupUi()
     m_contentStack->addWidget(makeRoleFallback(QStringLiteral("packages"), m_contentStack));
     // Index 3: the same for `settings`.
     m_contentStack->addWidget(makeRoleFallback(QStringLiteral("settings"), m_contentStack));
+    // Index 4: the same for `launcher`.
+    m_contentStack->addWidget(makeRoleFallback(QStringLiteral("launcher"), m_contentStack));
 
     // Content stack fills the content area — the version footer that
     // used to live in a QML bottom toolbar is now inside SidebarPanel.qml.
@@ -416,16 +439,15 @@ void MainContainer::setupUi()
         m_mainLayout->setContentsMargins(0, 0, 0, 0);
         m_sidebarWidget->hide();
         contentArea->hide();
-        m_newTabWidget = new QQuickWidget(this);
-        m_newTabWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
-        m_newTabWidget->setClearColor(bgColor);
-        m_newTabWidget->rootContext()->setContextProperty("backend", m_host->backendObject());
-        ShellDevQml::load(m_newTabWidget,
-            QUrl(QStringLiteral("qrc:/qt/qml/Basecamp/Shell/Basecamp/Shell/NewTabPage.qml")),
-            [this](QObject* root) {
-                connect(root, SIGNAL(openSystemApp(QString)), this, SLOT(tabOpenSystem(QString)));
-                connect(root, SIGNAL(launchApp(QString)), this, SLOT(tabLaunchApp(QString)));
-            });
+        // New tab shows the app filling the `home` role (ADR-067): a container
+        // the shell owns, holding that app's view once it arrives. Blank while
+        // it loads; the role's fallback page when nothing can fill it.
+        m_newTabWidget = new QWidget(this);
+        m_newTabWidget->setObjectName(QStringLiteral("basecampium.homeHost"));
+        m_homeStack = new QStackedLayout(m_newTabWidget);
+        m_homeStack->setContentsMargins(0, 0, 0, 0);
+        m_homeStack->addWidget(new QWidget(m_newTabWidget));                          // loading
+        m_homeStack->addWidget(makeRoleFallback(QStringLiteral("home"), m_newTabWidget)); // none
         m_tabArea = new TabArea(m_newTabWidget, this);
         m_mainLayout->addWidget(m_tabArea, 1);
     } else {
@@ -613,7 +635,14 @@ void MainContainer::onSectionIndexChanged(int index)
         m_contentStack->setCurrentIndex(kAppsStackIndex);
         break;
     case ShellSection::AppManager:
-        m_contentStack->setCurrentIndex(kContentStackIndex);
+        // An app now (ADR-067), like Package Manager and Settings.
+        if (openRole(QStringLiteral("launcher"))) {
+            QTimer::singleShot(0, this, [this]() {
+                m_host->setCurrentSectionIndex(ShellSection::Workspace);
+            });
+        } else {
+            m_contentStack->setCurrentIndex(kLauncherFallbackIndex);
+        }
         break;
     case ShellSection::PackageManager:
         // An app now (ADR-067): it docks in the workspace like any other. Only
@@ -651,6 +680,11 @@ void MainContainer::onNavigateToApps()
 
 void MainContainer::onPluginWindowRequested(QWidget* widget, const QString& title)
 {
+    if (m_tabArea && widget && !m_homeApp.isEmpty() && title == m_homeApp) {
+        // The home role's app: it becomes the New tab's page, not a tab.
+        adoptHomeWidget(widget);
+        return;
+    }
     if ((m_desktopLayout || m_tabsLayout) && widget) {
         const QVariantMap entry = launcherEntry(title);
         const QString resolved = m_host->displayNameFor(title);
@@ -680,6 +714,12 @@ void MainContainer::onPluginWindowRequested(QWidget* widget, const QString& titl
 void MainContainer::onPluginWindowRemoveRequested(QWidget* widget)
 {
     if (m_tabArea) {
+        if (widget && widget == m_homeWidget) {
+            m_homeStack->removeWidget(widget);
+            m_homeWidget = nullptr;
+            m_homeStack->setCurrentIndex(m_homeApp.isEmpty() ? 1 : 0);
+            return;
+        }
         const QString key = m_tabArea->keyFor(widget);
         if (!key.isEmpty())
             m_tabArea->takeTab(key);
@@ -701,6 +741,10 @@ void MainContainer::onPresentAppRequested(QWidget* widget)
     if (!widget) return;
 
     if (m_tabArea) {
+        if (widget == m_homeWidget) {   // "open Home" means a New tab
+            m_tabArea->openHome();
+            return;
+        }
         const QString key = m_tabArea->keyFor(widget);
         if (!key.isEmpty()) {
             m_tabArea->activate(key);
@@ -870,8 +914,12 @@ QVariantMap MainContainer::launcherEntry(const QString& name) const
 
 QWidget* MainContainer::systemAppContent(const QString& key)
 {
-    if (key == QStringLiteral("sys:applications"))
-        return m_contentWidget;
+    if (key == QStringLiteral("sys:applications")) {
+        // Only ever the fallback: Applications itself is an app.
+        if (!m_launcherFallback)
+            m_launcherFallback = makeRoleFallback(QStringLiteral("launcher"), this);
+        return m_launcherFallback;
+    }
     if (key == QStringLiteral("sys:packages")) {
         // Only ever the fallback: the package manager itself is an app.
         if (!m_packagesFallback)
@@ -933,8 +981,6 @@ void MainContainer::openSystemApp(const QString& key)
         return;
     const auto& [title, icon] = meta.value(key);
     m_desktop->openWindow(key, title, icon, content);
-    if (key == QStringLiteral("sys:applications"))
-        QMetaObject::invokeMethod(m_host->backendObject(), "requestCatalog");
     updateDock();
 }
 
@@ -1098,31 +1144,39 @@ void MainContainer::setupTabsUi()
         saveTabs();
     });
     connect(m_tabArea, &TabArea::newTabShown, this, [this]() {
-        if (m_newTabWidget && m_newTabWidget->rootObject()) {
-            QMetaObject::invokeMethod(m_newTabWidget->rootObject(), "clearSearch");
+        if (QObject* root = homeRoot()) {
+            QMetaObject::invokeMethod(root, "clearSearch");
             // Compact: the search is the one bar's field (TabArea focuses it).
             if (m_tabArea->isCompact())
                 return;
-            m_newTabWidget->setFocus();
-            QMetaObject::invokeMethod(m_newTabWidget->rootObject(), "focusSearch");
+            if (m_homeWidget) m_homeWidget->setFocus();
+            QMetaObject::invokeMethod(root, "focusSearch");
         }
     });
-    // The one bar (compact): its field searches the New tab page, its menu
-    // reaches the shell's own apps and the closed tabs.
-    auto searchInBar = [this](bool compact) {
-        if (m_newTabWidget && m_newTabWidget->rootObject())
-            m_newTabWidget->rootObject()->setProperty("searchInBar", compact);
+    // The one bar (compact): its field searches the home page, through the
+    // host, which hands it to the home app's `shell` (ADR-067).
+    auto pushHomeQuery = [this]() {
+        if (QObject* backend = m_host->backendObject())
+            QMetaObject::invokeMethod(backend, "setHomeQuery", Q_ARG(QString, m_homeQuery),
+                                      Q_ARG(bool, m_tabArea->isCompact()));
     };
-    searchInBar(m_tabArea->isCompact());
-    connect(m_tabArea, &TabArea::compactChanged, this, searchInBar);
-    connect(m_tabArea, &TabArea::homeQueryChanged, this, [this](const QString& text) {
-        if (m_newTabWidget && m_newTabWidget->rootObject())
-            m_newTabWidget->rootObject()->setProperty("barQuery", text);
+    pushHomeQuery();
+    connect(m_tabArea, &TabArea::compactChanged, this, pushHomeQuery);
+    connect(m_tabArea, &TabArea::homeQueryChanged, this, [this, pushHomeQuery](const QString& text) {
+        m_homeQuery = text;
+        pushHomeQuery();
     });
     connect(m_tabArea, &TabArea::homeQueryAccepted, this, [this]() {
-        if (m_newTabWidget && m_newTabWidget->rootObject())
-            QMetaObject::invokeMethod(m_newTabWidget->rootObject(), "openFirst");
+        if (QObject* backend = m_host->backendObject())
+            QMetaObject::invokeMethod(backend, "acceptHomeQuery");
     });
+    // The home app asks the shell to turn the New tab into an app or a role.
+    connect(m_host->backendObject(), SIGNAL(homeLaunchRequested(QString)),
+            this, SLOT(tabLaunchApp(QString)));
+    connect(m_host->backendObject(), SIGNAL(homeRoleRequested(QString)),
+            this, SLOT(tabOpenRole(QString)));
+    connect(m_host->backendObject(), SIGNAL(rolesChanged()), this, SLOT(loadHomeApp()));
+    loadHomeApp();
     connect(m_tabArea, &TabArea::reopenClosedRequested, this, &MainContainer::reopenClosedTab);
     connect(m_tabArea, &TabArea::systemAppRequested, this, &MainContainer::tabOpenSystem);
 
@@ -1176,8 +1230,6 @@ void MainContainer::openSystemTab(const QString& key)
     const QString replace = m_pendingNewTab;
     m_pendingNewTab.clear();
     m_tabArea->openContent(key, title, icon, content, replace);
-    if (key == QStringLiteral("sys:applications"))
-        QMetaObject::invokeMethod(m_host->backendObject(), "requestCatalog");
 }
 
 void MainContainer::openAppTab(const QString& module, const QString& label,
@@ -1188,6 +1240,62 @@ void MainContainer::openAppTab(const QString& module, const QString& label,
     m_tabArea->openContent(module, label, icon, widget, replace);
     if (m_shortcutBridge)
         m_shortcutBridge->rebindDeferred();
+}
+
+QObject* MainContainer::homeRoot() const
+{
+    auto* view = qobject_cast<QQuickWidget*>(m_homeWidget.data());
+    return view ? view->rootObject() : nullptr;
+}
+
+// Loads whatever fills the `home` role into the New tab, and again whenever the
+// user assigns another app (Settings → Default apps).
+void MainContainer::loadHomeApp()
+{
+    if (!m_tabArea) return;
+    QString holder;
+    if (QObject* backend = m_host->backendObject())
+        QMetaObject::invokeMethod(backend, "roleHolder", Q_RETURN_ARG(QString, holder),
+                                  Q_ARG(QString, QStringLiteral("home")));
+    if (holder == m_homeApp && (m_homeWidget || holder.isEmpty())) {
+        m_homeStack->setCurrentIndex(m_homeWidget ? m_homeStack->indexOf(m_homeWidget)
+                                                  : (holder.isEmpty() ? 1 : 0));
+        return;
+    }
+    const QString previous = m_homeApp;
+    m_homeApp = holder;
+    if (!previous.isEmpty() && previous != holder)
+        m_host->unloadUiModule(previous);
+    if (holder.isEmpty()) {
+        m_homeStack->setCurrentIndex(1);
+        return;
+    }
+    m_homeStack->setCurrentIndex(0);
+    m_host->loadUiModule(holder);
+}
+
+void MainContainer::adoptHomeWidget(QWidget* widget)
+{
+    if (m_homeWidget && m_homeWidget != widget)
+        m_homeStack->removeWidget(m_homeWidget);
+    m_homeWidget = widget;
+    widget->setParent(m_newTabWidget);
+    m_homeStack->addWidget(widget);
+    m_homeStack->setCurrentWidget(widget);
+    widget->show();
+    if (m_shortcutBridge)
+        m_shortcutBridge->rebindDeferred();
+}
+
+void MainContainer::tabOpenRole(const QString& role)
+{
+    static const QHash<QString, QString> keys = {
+        { QStringLiteral("launcher"), QStringLiteral("sys:applications") },
+        { QStringLiteral("settings"), QStringLiteral("sys:settings") },
+        { QStringLiteral("packages"), QStringLiteral("sys:packages") },
+    };
+    if (keys.contains(role))
+        tabOpenSystem(keys.value(role));
 }
 
 void MainContainer::tabOpenSystem(const QString& key)
@@ -1372,8 +1480,8 @@ bool MainContainer::tabsKey(QKeyEvent* e)
     if (ctrl && key >= Qt::Key_1 && key <= Qt::Key_8) { m_tabArea->goToTab(key - Qt::Key_1); return true; }
     if (ctrl && key == Qt::Key_9) { m_tabArea->goToTab(-1); return true; }
     if (ctrl && key == Qt::Key_K) {
-        if (TabArea::isNewTabKey(m_tabArea->currentKey()) && m_newTabWidget->rootObject())
-            QMetaObject::invokeMethod(m_newTabWidget->rootObject(), "focusSearch");
+        if (TabArea::isNewTabKey(m_tabArea->currentKey()) && homeRoot())
+            QMetaObject::invokeMethod(homeRoot(), "focusSearch");
         else
             m_tabArea->addNewTab();
         return true;

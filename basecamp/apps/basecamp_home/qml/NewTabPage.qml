@@ -6,9 +6,10 @@ import Logos.Theme
 import Logos.Controls
 import Basecamp.Icons
 
-// Basecampium's New tab: search, then the shell's own apps, a divider and the
-// installed apps. Picking a tile asks the shell to turn the current New tab
-// into that app.
+// Basecamp's home page (the `home` role, ADR-067): what a New tab shows.
+// Search, then the shell's own apps, a divider and the installed apps. Picking a
+// tile asks the shell to turn the current New tab into that app. It reads only
+// `shell`, the role-gated object the host injects.
 Rectangle {
     id: root
 
@@ -36,7 +37,10 @@ Rectangle {
         { key: "sys:packages",     name: qsTr("Package Manager"), icon: BasecampIcons.modules }
     ]
     readonly property var apps: {
-        const list = (backend.launcherApps || []).slice()
+        // Apps that fill a role are already in the row above (or are this page).
+        const roles = shell.roles || ({})
+        const roleApps = Object.keys(roles).map(r => roles[r])
+        const list = (shell.installedApps || []).filter(a => roleApps.indexOf(a.name) < 0)
         list.sort((a, b) => (a.displayName || a.name).localeCompare(b.displayName || b.name))
         return list
     }
@@ -164,7 +168,7 @@ Rectangle {
                     label: modelData.displayName || modelData.name
                     artwork: modelData.iconPath || ""
                     fullBleed: modelData.supportsFullBleedIcon === true
-                    loading: (backend.loadingModules || []).indexOf(modelData.name) >= 0
+                    loading: (shell.loadingModules || []).indexOf(modelData.name) >= 0
                     onActivated: root.launchApp(modelData.name)
                 }
             }

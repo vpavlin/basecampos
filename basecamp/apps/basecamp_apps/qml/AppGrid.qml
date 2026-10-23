@@ -3,6 +3,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Logos.Controls
 import Logos.Theme
+// Shared with the shell (its welcome page and install dialog use them).
+import Basecamp.AppManager
 
 Item {
     id: root
@@ -66,6 +68,8 @@ Item {
             width:  GridView.view.cellWidth
             height: GridView.view.cellHeight
             appData: model
+            // The sandbox can't read other apps' files: the host serves installed icons.
+            iconOverride: model.iconUrl ? "image://basecamp/appicon/" + model.name : ""
             touch: root.touch
             onAppClicked: function(name, repoUrl) {
                 root.appClicked(name, repoUrl)

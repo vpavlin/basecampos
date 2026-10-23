@@ -325,7 +325,7 @@ set(PROJECT_SOURCES
     links/SingleInstanceGuard.cpp
     IntentRegistry.cpp
     ShellRoles.cpp
-    SettingsApi.cpp
+    ShellApi.cpp
     IntentBroker.cpp
     IntentBridgeAdapter.cpp
     UIPluginPresenter.cpp

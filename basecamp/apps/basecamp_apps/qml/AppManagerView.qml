@@ -5,6 +5,8 @@ import QtQuick.Layouts
 import Logos.Controls
 import Logos.Icons
 import Logos.Theme
+// Shared with the shell (its welcome page and install dialog use them).
+import Basecamp.AppManager
 
 import Basecamp.Backend
 import Basecamp.Common

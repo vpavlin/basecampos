@@ -2,7 +2,7 @@
 
 Status: draft, 2026-10-23, branch `shell-roles`. Decision: [ADR-067](adr/0067-system-apps-are-roles.md).
 Based on logos-basecamp `master` (intents as in `docs/app-to-app-intents.md`) plus the Basecampium
-branches (`mobile-ironfox`). **Steps 1 (Package Manager) and 2 (Settings) are built** (§9, §10); step 3 and Part B are not.
+branches (`mobile-ironfox`). **All three steps are built** (§9 Package Manager, §10 Settings, §11 Applications and New tab); Part B is not.
 
 ## TL;DR
 
@@ -244,6 +244,53 @@ app switches the whole window (the design system's theme state is process-wide).
   need those as public API or its own copies.
 - The developer inspectors (load/unload any module, call any core method) ride on the same role.
   Splitting them into a separate developer app with its own role is a candidate.
+
+## 11. Step 3: built
+
+Applications is `basecamp_apps` (the `launcher` role) and the New tab page is `basecamp_home` (the
+`home` role), both bundled QML-only apps in `apps/`. All four roles now have an app; the shell keeps
+the frame, the confirmation dialogs and a fallback page per role.
+
+- **One role object for every role app.** Step 2's `SettingsApi` became `ShellApi`, still injected
+  as `shell`, with each member gated by its own role (settings, launcher, home). It is now injected
+  into every app that *claims* a role too, so assigning a role later works without reloading the
+  app; claiming alone still grants nothing.
+- **Launcher:** the catalog model, open / install / uninstall, repositories, and a search hand-off
+  (`requestLauncherSearch`, used by the shell's search and the welcome page). Installing and
+  uninstalling still open the shell's own dialogs.
+- **Home:** Basecampium loads the home app at start and hosts its view inside every New tab instead
+  of opening it as a tab. The one bar's text reaches it through `shell.homeQuery`, Enter through
+  `homeQueryAccepted`; `shell.launch(name)` and `shell.openRole(role)` turn the New tab into that app.
+  Apps holding a role are left out of its grid: they're in the row of shell apps already (this
+  closes the duplicate noted in §9).
+- **Icons:** installed apps' icons are served by name (`image://basecamp/appicon/<name>`). The
+  catalog itself carries no icon URLs (an entry's `icon` is a path inside the package), so nothing
+  is fetched from the network; uninstalled apps show a placeholder, as before. The shared app tile
+  (`AppGridDelegate`) takes an `iconOverride`.
+- **Shared, not moved:** the app tile, its context menu and the install dialog's pieces stay in the
+  shell (its welcome page and dialogs use them); the apps import them like the design system.
+- The shell's `ContentViews` is now only its navigation-intent handler; `basecamp.apps.open` /
+  `settings.open` / `packages.open` open the roles.
+
+**Verified** (headless; Basecampium at 390 and 1280, the sidebar shell at 1280; no QML errors):
+New tab shows the home app with served icons; typing in the bar filters it; Enter opens the first
+result; a tile turns the New tab into that app (count 0 → 1 → 2, no stray New tab); ⋮ → Applications
+opens the launcher app with the catalog; a search handed from the shell lands in it; tapping an
+uninstalled app opens the shell's Add Application dialog (nothing was installed); in the sidebar
+shell, Applications opens as an app tab.
+
+![Home in the New tab, bar search, a tile opens Chat, Applications, the shell's install dialog](shell-roles/step3-phone.png)
+![Home at 1280; Applications in the sidebar shell](shell-roles/step3-1280.png)
+
+**Open**
+- **Home is Basecampium-only.** The sidebar and desktop layouts have their own welcome page /
+  desktop, so `home` does nothing there yet, and Basecamp's Home app shows up in their app list.
+- The home app counts as a loaded app to the host (it is in the running list), though it is never
+  a tab.
+- Role apps' own pages (Settings, Applications, Home) currently also show in the sidebar shell's app
+  list. A "system app" flag in the manifest could hide them where the shell already has buttons.
+- Not tried: assigning `launcher` / `home` to another app (same mechanism as `settings`, verified in
+  step 2); uninstall from Applications (opens the shell's confirmation, step 1's dialog).
 
 ---
 

@@ -216,8 +216,21 @@ public:
     QString pendingSettingsSection() const { return m_pendingSettingsSection; }
     QString takePendingSettingsSection();
 
+    // Applications (the `launcher` role) opened on a search, e.g. from the
+    // shell's own search. Kept until the app takes it, like the Settings section.
+    Q_INVOKABLE bool requestLauncherSearch(const QString& query);
+    QString pendingLauncherSearch() const { return m_pendingLauncherSearch; }
+    QString takePendingLauncherSearch();
+
+    // The New tab's home page (the `home` role): the shell's bar feeds it its
+    // search text when the bar is the search (Basecampium phone layout).
+    Q_INVOKABLE void setHomeQuery(const QString& text, bool inBar);
+    Q_INVOKABLE void acceptHomeQuery() { emit homeQueryAccepted(); }
+    QString homeQuery() const { return m_homeQuery; }
+    bool homeSearchInBar() const { return m_homeSearchInBar; }
+
     // The shell's preferences object, handed over through IShellHost and given
-    // only to the settings role's app (SettingsApi).
+    // only to the settings role's app (ShellApi).
     void setShellPreferences(QObject* prefs);
     QObject* shellPreferences() const { return m_shellPreferences; }
     PackageCoordinator*    packageCoordinator()    const { return m_packageCoordinator; }
@@ -367,6 +380,12 @@ signals:
     void rolesChanged();
     void shellPreferencesChanged();
     void settingsSectionRequested(const QString& section);
+    void launcherSearchRequested(const QString& query);
+    void homeQueryChanged();
+    void homeQueryAccepted();
+    // From the home app: the shell turns the New tab into this app / role.
+    void homeLaunchRequested(const QString& name);
+    void homeRoleRequested(const QString& role);
     void currentActiveSectionIndexChanged();
 
     // App-Manager dialog + install lifecycle. See PackageCoordinator for
@@ -545,6 +564,9 @@ private:
     class ShellRoles*    m_roles           = nullptr;
     QPointer<QObject>    m_shellPreferences;
     QString              m_pendingSettingsSection;
+    QString              m_pendingLauncherSearch;
+    QString              m_homeQuery;
+    bool                 m_homeSearchInBar = false;
     LinkRequestCoordinator* m_linkRequests = nullptr;
     // False until wireIntents() has done its bootstrap rebuild, so the
     // cold-start link gate opens on a registry that has actually seen disk.

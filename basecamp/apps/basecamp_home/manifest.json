@@ -1,0 +1,17 @@
+{
+  "author": "Logos",
+  "category": "system",
+  "dependencies": [],
+  "description": "Basecamp's New tab: search and your apps.",
+  "display_name": "Home",
+  "icon": "icon.svg",
+  "main": {},
+  "manifestVersion": "0.6.0",
+  "name": "basecamp_home",
+  "type": "ui_qml",
+  "version": "0.1.0",
+  "view": "qml/Main.qml",
+  "roles": [
+    "home"
+  ]
+}

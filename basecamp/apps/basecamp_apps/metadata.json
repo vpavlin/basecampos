@@ -1,0 +1,17 @@
+{
+  "author": "Logos",
+  "category": "system",
+  "dependencies": [],
+  "description": "Basecamp's app launcher: installed apps and the catalog, by category, with install and uninstall.",
+  "display_name": "Applications",
+  "icon": "icon.svg",
+  "main": {},
+  "manifestVersion": "0.6.0",
+  "name": "basecamp_apps",
+  "type": "ui_qml",
+  "version": "0.1.0",
+  "view": "qml/Main.qml",
+  "roles": [
+    "launcher"
+  ]
+}

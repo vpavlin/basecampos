@@ -3,6 +3,8 @@ import QtQuick.Layouts
 
 import Logos.Controls
 import Logos.Theme
+// Shared with the shell (its welcome page and install dialog use them).
+import Basecamp.AppManager
 
 ColumnLayout {
     id: root
