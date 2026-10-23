@@ -9,6 +9,7 @@
 #include "ShellIntentInstaller.h"
 #include "ShellIntentEndpoint.h"
 #include "ShellIntents.h"
+#include "ShellRoles.h"
 #include "NotificationCenter.h"
 #include "DesktopNotifier.h"
 #include "links/LinkRequestCoordinator.h"
@@ -581,8 +582,71 @@ void MainUIBackend::wireIntents()
         });
     }
 
+    // Roles (SHELL-ROLES-SPEC.md): Basecamp's bundled apps are the defaults; the
+    // user may assign any installed app that claims the role. Restricted intents
+    // read the holder at request time, so reassigning moves the grant.
+    m_roles = new ShellRoles(
+        m_intentRegistry,
+        [this](const QString& name) {
+            return m_uiPluginManager
+                && m_uiPluginManager->uiPluginMetadataSnapshot().contains(name);
+        },
+        { { QStringLiteral("packages"), ShellIntents::kPackageManagerAppName } },
+        this);
+    m_intentRegistry->setRoleHolderResolver(
+        [this](const QString& role) { return m_roles->holder(role); });
+    connect(m_roles, &ShellRoles::changed, this, &MainUIBackend::rolesChanged);
+
     rebuildIntentRegistry();
     m_intentRegistryBootstrapped = true;
+}
+
+QVariantMap MainUIBackend::roles() const
+{
+    return m_roles ? m_roles->holders() : QVariantMap();
+}
+
+QString MainUIBackend::roleHolder(const QString& role) const
+{
+    return m_roles ? m_roles->holder(role) : QString();
+}
+
+QVariantList MainUIBackend::roleCandidates(const QString& role) const
+{
+    QVariantList out;
+    if (!m_roles) return out;
+    const QString current = m_roles->holder(role);
+    const QString fallback = m_roles->defaultFor(role);
+    for (const QString& name : m_roles->candidates(role)) {
+        out.append(QVariantMap{
+            { QStringLiteral("name"), name },
+            { QStringLiteral("displayName"), displayNameFor(name) },
+            { QStringLiteral("icon"),
+              m_uiPluginManager ? m_uiPluginManager->pluginIconUrl(name) : QString() },
+            { QStringLiteral("current"), name == current },
+            { QStringLiteral("isDefault"), name == fallback },
+        });
+    }
+    return out;
+}
+
+bool MainUIBackend::assignRole(const QString& role, const QString& app)
+{
+    return m_roles && m_roles->assign(role, app);
+}
+
+void MainUIBackend::resetRole(const QString& role)
+{
+    if (m_roles) m_roles->reset(role);
+}
+
+bool MainUIBackend::openRole(const QString& role)
+{
+    const QString app = roleHolder(role);
+    if (app.isEmpty())
+        return false;
+    onAppLauncherClicked(app);
+    return true;
 }
 
 void MainUIBackend::rebuildIntentRegistry()
@@ -598,6 +662,8 @@ void MainUIBackend::rebuildIntentRegistry()
     // Surface what was skipped or refused. Without this a malformed `uses`
     // block is invisible: the app's request comes back `not_declared` and the
     // only clue is on the requester's side, which cannot see why.
+    if (m_roles) m_roles->reevaluate();
+
     const QStringList problems = m_intentRegistry->diagnostics();
     for (const QString& problem : problems)
         qWarning().noquote() << "IntentRegistry:" << problem;
@@ -885,9 +951,8 @@ int MainUIBackend::beginAppLaunch(const QString& dispatchId,
     const bool known = m_uiPluginManager
                     && m_uiPluginManager->uiPluginMetadataSnapshot().contains(appName);
 
-    if (appName == kPackageManagerAppName) {
-        setCurrentActiveSectionIndex(ShellSection::PackageManager);
-    } else if (!appName.isEmpty() && m_intentPresenter) {
+    // The package manager is an ordinary app now (ADR-067): no section to jump to.
+    if (!appName.isEmpty() && m_intentPresenter) {
         m_intentPresenter->ensureAppLoaded(appName);
         m_intentPresenter->presentApp(appName);
 

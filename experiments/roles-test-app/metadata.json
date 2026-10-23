@@ -1,0 +1,16 @@
+{
+  "author": "Alisher (xAlisher)",
+  "category": "development",
+  "dependencies": [],
+  "description": "Test app for shell roles: claims the packages role and tries a role-restricted intent.",
+  "display_name": "Alt Packages",
+  "icon": "icon.png",
+  "main": {},
+  "manifestVersion": "0.6.0",
+  "name": "alt_packages",
+  "type": "ui_qml",
+  "version": "0.1.0",
+  "view": "qml/Main.qml",
+  "roles": ["packages"],
+  "uses": [{ "intent": "basecamp.packages.confirm_uninstall" }]
+}

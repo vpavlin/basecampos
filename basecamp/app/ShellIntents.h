@@ -13,7 +13,10 @@ inline const QStringList kPackageConfirmIntents = {
     QStringLiteral("basecamp.packages.confirm_upgrade"),
 };
 
-// Of those, the ones no third party has a legitimate reason to raise.
+// Of those, the ones no third party has a legitimate reason to raise. Restricted
+// to whichever app holds the `packages` role (ADR-067) — the user's assignment,
+// not a self-declared module name. The default holder is package_manager_ui.
+inline const QString kPackagesRole = QStringLiteral("packages");
 inline const QStringList kRestrictedToPackageManagerUi = {
     QStringLiteral("basecamp.packages.confirm_uninstall"),
     QStringLiteral("basecamp.packages.confirm_upgrade"),

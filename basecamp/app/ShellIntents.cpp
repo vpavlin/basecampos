@@ -23,8 +23,7 @@ void registerWith(IntentRegistry* registry,
                                     kNavigationIntents, displayName, iconSource);
 
     for (const QString& destructive : kRestrictedToPackageManagerUi)
-        registry->restrictIntentToRequesters(
-            destructive, { QStringLiteral("package_manager_ui") });
+        registry->restrictIntentToRole(destructive, kPackagesRole);
 }
 
 } // namespace ShellIntents

@@ -570,7 +570,7 @@ void UIPluginManager::unloadUiModuleImpl(const QString& moduleName)
     //     all as "recently closed" and evict the ones actually closed by hand.
     //     Restoring what was open at exit is a different feature.
     //   * teardownUiPluginWidgetNow — uninstall; a removed app is not "recent".
-    //   * shell internals (main_ui / package_manager_ui) — never launchable.
+    //   * shell internals (main_ui) — never launchable.
     if (m_recentlyClosed && !m_shuttingDown && !isShellInternalApp(moduleName)) {
         m_recentlyClosed->record(moduleName);
         emit recentlyClosedAppsChanged();
@@ -736,7 +736,6 @@ void UIPluginManager::refreshUiModules()
 bool UIPluginManager::isShellInternalApp(const QString& name) const
 {
     if (name == "main_ui") return true;
-    if (name == "package_manager_ui") return m_hostProfile.packageManagerUiIsSection();
     return false;
 }
 

@@ -147,7 +147,6 @@ private slots:
         QVERIFY(p.useUserModules && p.packageCatalog && p.registerUrlScheme && p.singleInstance);
         QVERIFY(!p.devHost);
         QVERIFY(p.enforceDependencyVersions);
-        QVERIFY(p.packageManagerUiIsSection());
     }
 
     void standaloneProfileDropsCatalogueAndUserState()
@@ -166,7 +165,6 @@ private slots:
         QCOMPARE(p.applicationName, QStringLiteral("LogosBasecampStandalone"));
         QVERIFY(p.devHost);
         QVERIFY(!p.enforceDependencyVersions);
-        QVERIFY(!p.packageManagerUiIsSection());
     }
 
     // package_manager_ui under development keeps its section — and only it.
@@ -178,7 +176,6 @@ private slots:
         QCOMPARE(p.availableSections(),
                  (QList<int>{ShellSection::Workspace, ShellSection::PackageManager,
                              ShellSection::Settings}));
-        QVERIFY(p.packageManagerUiIsSection());
     }
 
     void qmlSourceNeedsNameAndExistingDir()

@@ -2,7 +2,7 @@
 
 Status: draft, 2026-10-23, branch `shell-roles`. Decision: [ADR-067](adr/0067-system-apps-are-roles.md).
 Based on logos-basecamp `master` (intents as in `docs/app-to-app-intents.md`) plus the Basecampium
-branches (`mobile-ironfox`). Nothing here is built yet.
+branches (`mobile-ironfox`). **Step 1 (Package Manager) is built** (§9); steps 2 and 3 and Part B are not.
 
 ## TL;DR
 
@@ -150,6 +150,45 @@ Each step is verified headlessly (390 and 1280, `headless-basecamp-ui`) and gets
   discussed with them; prior art checked: logos-basecamp issues (none on roles or system apps),
   `docs/app-to-app-intents.md`, logos-basecamp#150 (third-party modules can't call other modules,
   relevant if a launcher wants more than the shell's intents).
+
+## 9. Step 1: built
+
+Package Manager is an ordinary app filling the `packages` role. Code in `basecamp/` (mirrors bc-v2
+branch `shell-roles`); test app in `experiments/roles-test-app/` ("Alt Packages", claims the role).
+
+- **Host:** `IntentRegistry` reads `"roles"` from each app's `metadata.json` (closed set; unknown
+  roles are reported) and can restrict an intent to a role's current holder, failing closed.
+  `ShellRoles` keeps the user's assignments (QSettings `[ShellRoles]`) over bundled defaults
+  (`packages` → `package_manager_ui`). The backend exposes `roles`, `roleHolder`, `roleCandidates`,
+  `assignRole`, `resetRole`, `openRole`.
+- **Grant moved from name to role:** `confirm_uninstall` / `confirm_upgrade` go to whoever holds
+  `packages`.
+- **Shell:** no layout hoists `package_manager_ui` into a fixed slot any more. Every way in (⋮ sheet,
+  New tab, sidebar, search, restored tabs, `basecamp.apps.launch`) opens the role holder as an
+  ordinary app; a shell page explains when nothing can fill the role.
+- **Verified** (headless, 390 / 1280, Basecampium and the built-in sidebar shell; 0 QML errors):
+  Package Manager opens as a normal tab, counted; Alt Packages, not holding the role, asks for
+  `confirm_uninstall` and gets `unavailable`; after `assignRole("packages", "alt_packages")` the
+  same request reaches the shell's confirmation dialog ("Requested by Alt Packages") and cancelling
+  answers `cancelled`; Packages then opens Alt Packages; `resetRole` returns it to Package Manager.
+  Unit tests: `shell_roles_test` (8 cases) and the existing suite pass.
+
+![Package Manager as a tab; Alt Packages refused; Alt Packages as holder gets the dialog](shell-roles/step1-phone.png)
+
+**Found along the way**
+- Package Manager now shows in the app grid and the sidebar like any app, next to the shell's own
+  Packages button: two ways to the same place. Decide in step 3 (launcher) whether role apps stay in
+  the grid.
+- The uninstall confirmation dialog overflows at 390 (its buttons are off-screen). Not new, but now
+  reachable from more apps.
+- **Not verified live:** the fallback page. Package Manager is embedded in the AppImage, so it can't
+  be uninstalled to trigger it; the "nothing holds the role" logic is unit-tested.
+- Still name-based: `UIPluginManager` connects to `package_manager_ui`'s install-failure signal by
+  name. Harmless, but it should become role- or intent-based.
+- Pre-existing: `workspace_area_test` doesn't build in the unit-test harness (it includes a
+  design-system header the harness lacks, since the theming commits).
+- **No UI yet to assign roles** (Settings → Default apps is step 2); today it's `backend.assignRole`
+  or `[ShellRoles] packages=<app>` in `LogosBasecamp.conf`.
 
 ---
 

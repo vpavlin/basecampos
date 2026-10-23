@@ -38,11 +38,9 @@ struct HostProfile {
 
     QList<int> availableSections() const;  // ShellSection values
 
-    // package_manager_ui is the Package Manager section — shell furniture, not
-    // an app — wherever that section is offered: always in the desktop app,
-    // and in standalone mode when it is one of the apps opened (`--module`).
-    // Elsewhere (loaded only as a dependency) it is docked like any app.
-    bool packageManagerUiIsSection() const;
+    // The Package Manager section is a navigation entry only: it opens whatever
+    // app holds the `packages` role, as an ordinary app (ADR-067). It used to
+    // hoist package_manager_ui into the shell as furniture.
 };
 
 } // namespace LogosBasecamp

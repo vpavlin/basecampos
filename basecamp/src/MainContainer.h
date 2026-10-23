@@ -66,6 +66,8 @@ private slots:
     void onAddApplicationDialogRequested(const QVariantMap& metadata);
     // Desktop layout: the dock's two signals.
     void openSystemApp(const QString& key);
+    // Open whatever app fills `role` (ADR-067). false: nothing can.
+    bool openRole(const QString& role);
     void launchFromDock(const QString& name);
     void openSettingsRepositories();
     void showSpotlight();
@@ -122,7 +124,6 @@ private:
     QQuickWidget* m_spotlight = nullptr;
     DesktopStatusBar* m_statusBar = nullptr;
     DesktopRoot* m_desktopRoot = nullptr;
-    bool m_packagesPending = false;
     bool m_wentFullScreen = false;
 
     bool m_tabsLayout = false;
@@ -143,14 +144,9 @@ private:
     // Workspace (QDockWidget-based, replaces the old QMdiArea workspace)
     WorkspaceArea* m_workspaceArea;
 
-    // QPointer, not a raw pointer: this widget is owned by the HOST side, which
-    // deleteLater()s it on unload (UIPluginManager::unloadUiModuleImpl and
-    // ::teardownUiPluginWidget both do). As a raw pointer it was read at four
-    // sites after the widget had been freed, and `!m_pmuiWidget` stayed false
-    // forever, so the Package Manager section could never reload. Same guard the
-    // host applies to its own widget maps.
-    QPointer<QWidget> m_pmuiWidget;
-    bool m_suppressNextNavToApps = false;
+    // The `packages` role's page when no installed app can fill it (desktop and
+    // tabs layouts; the sidebar layout keeps one in the content stack).
+    QPointer<QWidget> m_packagesFallback;
 
     // Content views (QML for Dashboard, Modules, PackageManager, Settings)
     QQuickWidget* m_contentWidget;

@@ -128,6 +128,7 @@ void IntentRegistry::reset()
     m_entries.clear();
     m_diagnostics.clear();
     m_webReachable.clear();
+    m_roles.clear();
 }
 
 void IntentRegistry::rebuild(const QMap<QString, QVariantMap>& plugins,
@@ -345,6 +346,20 @@ void IntentRegistry::ingestRecord(const QString& moduleName,
         }
     }
 
+    // Roles: plain strings from a closed set. Anything else is ignored with a
+    // diagnostic, so a typo can't silently claim nothing (or something new).
+    QStringList roles;
+    for (const QVariant& raw : onDisk.value(QStringLiteral("roles")).toList()) {
+        const QString role = raw.typeId() == QMetaType::QString ? raw.toString() : QString();
+        if (knownRoles().contains(role)) {
+            if (!roles.contains(role)) roles.append(role);
+        } else {
+            m_diagnostics.append(
+                QStringLiteral("%1: unknown role '%2' ignored").arg(moduleName, raw.toString()));
+        }
+    }
+    if (!roles.isEmpty()) m_roles.insert(moduleName, roles);
+
     if (provides.isEmpty() && uses.isEmpty())
         return;
 
@@ -528,13 +543,61 @@ void IntentRegistry::restrictIntentToRequesters(const QString& intent,
     m_restrictedIntents.insert(intent, requesters);
 }
 
+void IntentRegistry::setRoleHolderResolver(const RoleHolderFn& holderOf)
+{
+    m_roleHolderOf = holderOf;
+}
+
+void IntentRegistry::restrictIntentToRole(const QString& intent, const QString& role)
+{
+    if (intent.isEmpty() || !knownRoles().contains(role)) {
+        m_diagnostics.append(
+            QStringLiteral("shell: refusing role restriction '%1' -> '%2'").arg(intent, role));
+        return;
+    }
+    m_roleRestrictedIntents.insert(intent, role);
+}
+
 bool IntentRegistry::requesterAllowed(const QString& intent,
                                       const QString& requesterName) const
 {
-    const auto it = m_restrictedIntents.constFind(intent);
-    if (it == m_restrictedIntents.cend())
+    const auto byRole = m_roleRestrictedIntents.constFind(intent);
+    const auto byName = m_restrictedIntents.constFind(intent);
+    if (byRole == m_roleRestrictedIntents.cend() && byName == m_restrictedIntents.cend())
         return true;
-    return it.value().contains(requesterName);
+
+    if (byName != m_restrictedIntents.cend() && byName.value().contains(requesterName))
+        return true;
+
+    // Fails closed: no resolver or an empty holder grants nothing, and an empty
+    // requester name never matches an empty holder.
+    if (byRole != m_roleRestrictedIntents.cend() && m_roleHolderOf && !requesterName.isEmpty())
+        return m_roleHolderOf(byRole.value()) == requesterName;
+
+    return false;
+}
+
+const QStringList& IntentRegistry::knownRoles()
+{
+    static const QStringList roles = {
+        QStringLiteral("home"), QStringLiteral("launcher"),
+        QStringLiteral("packages"), QStringLiteral("settings"),
+    };
+    return roles;
+}
+
+bool IntentRegistry::declaresRole(const QString& moduleName, const QString& role) const
+{
+    return m_roles.value(moduleName).contains(role);
+}
+
+QStringList IntentRegistry::modulesDeclaringRole(const QString& role) const
+{
+    QStringList out;
+    for (auto it = m_roles.cbegin(); it != m_roles.cend(); ++it)
+        if (it.value().contains(role))
+            out.append(it.key());
+    return out;   // QMap iterates in key order: already sorted
 }
 
 IntentRegistry::Resolution IntentRegistry::resolve(const QString& intent) const

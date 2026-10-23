@@ -128,8 +128,8 @@ public:
     // icon gate on both the sidebar and App Manager paths.
     QString pluginManifestVersion(const QString& moduleName) const;
 
-    // main_ui, and package_manager_ui where it is the Package Manager section
-    // (HostProfile::packageManagerUiIsSection) — shell furniture, not apps.
+    // main_ui — shell furniture, not an app. The package manager used to be one
+    // too; it is an ordinary app filling the `packages` role now (ADR-067).
     bool isShellInternalApp(const QString& name) const;
 
     // By value, not by reference: the registry rebuilds by clear-and-refill, so

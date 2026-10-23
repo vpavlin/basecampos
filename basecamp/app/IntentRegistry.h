@@ -94,9 +94,27 @@ public:
     void restrictIntentToRequesters(const QString& intent,
                                     const QStringList& requesters);
 
-    // True when `intent` is unrestricted, or `requesterName` is on its list.
+    // Limit `intent` to whichever app currently holds `role` (SHELL-ROLES-SPEC
+    // §4). The holder is the user's assignment, read through the resolver at
+    // the moment of the request, so reassigning a role moves the grant with it.
+    // No resolver, or nobody holding the role, means nobody may ask.
+    using RoleHolderFn = std::function<QString(const QString& role)>;
+    void setRoleHolderResolver(const RoleHolderFn& holderOf);
+    void restrictIntentToRole(const QString& intent, const QString& role);
+
+    // True when `intent` is unrestricted, or `requesterName` is on its list,
+    // or `requesterName` holds the role it is restricted to.
     bool requesterAllowed(const QString& intent,
                           const QString& requesterName) const;
+
+    // ── Roles (SHELL-ROLES-SPEC.md) ─────────────────────────────────────
+    // What each installed app's metadata.json claims it can fill: `"roles":
+    // ["packages"]`. A claim, never a grant: the user assigns roles, and the
+    // shell reads the assignment elsewhere (ShellRoles).
+    static const QStringList& knownRoles();
+    bool declaresRole(const QString& moduleName, const QString& role) const;
+    // Every installed module declaring `role`, sorted.
+    QStringList modulesDeclaringRole(const QString& role) const;
 
     Resolution resolve(const QString& intent) const;
 
@@ -198,6 +216,12 @@ private:
     // intent -> requesters permitted to ask. Absent = unrestricted. Not cleared
     // by reset(), like m_shellModuleName: declared in code, not read from disk.
     QHash<QString, QStringList> m_restrictedIntents;
+    // intent -> role whose holder alone may ask. Code-declared, survives reset().
+    QHash<QString, QString> m_roleRestrictedIntents;
+    RoleHolderFn m_roleHolderOf;
+
+    // moduleName -> roles its metadata.json declares. Rebuilt with the rest.
+    QMap<QString, QStringList> m_roles;
 
     // (moduleName, intent) -> [{name,type,required,description}]
     QHash<QString, QVariantList> m_paramsSpec;

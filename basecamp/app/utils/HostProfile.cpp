@@ -16,9 +16,4 @@ QList<int> HostProfile::availableSections() const
     return sections;
 }
 
-bool HostProfile::packageManagerUiIsSection() const
-{
-    return availableSections().contains(ShellSection::PackageManager);
-}
-
 } // namespace LogosBasecamp

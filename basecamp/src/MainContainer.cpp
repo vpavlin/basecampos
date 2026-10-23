@@ -43,23 +43,44 @@
 namespace {
 constexpr int kAppsStackIndex     = 0;  // WorkspaceArea (QDockWidget-based)
 constexpr int kContentStackIndex  = 1;  // ContentViews.qml (App Manager + Settings)
-constexpr int kModulesStackIndex  = 2;  // package_manager_ui (sandboxed QQuickWidget)
+constexpr int kModulesStackIndex  = 2;  // the `packages` role's fallback page
 
-// The Package Manager page before package_manager_ui arrives -- and again after
-// it goes away. Built in two places, so it lives here: the stack must keep all
-// three pages at all times, because every section switch below indexes into it
-// by constant.
-QWidget* makePmuiPlaceholder(QWidget* parent)
+// Shown when no installed app can fill a role (ADR-067, SHELL-ROLES-SPEC §5):
+// the shell never leaves someone without a way back, and never silently does
+// nothing when a button is pressed.
+QWidget* makeRoleFallback(const QString& role, QWidget* parent)
 {
-    QWidget* ph = new QWidget(parent);
-    ph->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    QVBoxLayout* phLayout = new QVBoxLayout(ph);
-    phLayout->setAlignment(Qt::AlignCenter);
-    QLabel* loadingLabel = new QLabel(QStringLiteral("Loading Package Manager…"), ph);
-    loadingLabel->setAlignment(Qt::AlignCenter);
-    loadingLabel->setStyleSheet(QStringLiteral("color: #a0a0a0; font-size: 14px;"));
-    phLayout->addWidget(loadingLabel);
-    return ph;
+    QWidget* page = new QWidget(parent);
+    page->setObjectName(QStringLiteral("basecampium.roleFallback.") + role);
+    page->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    page->setAttribute(Qt::WA_StyledBackground, true);
+    page->setStyleSheet(QStringLiteral("background: %1;")
+        .arg(Logos::themeColor(QStringLiteral("background"), QColor("#171717")).name()));
+    QVBoxLayout* layout = new QVBoxLayout(page);
+    layout->setAlignment(Qt::AlignCenter);
+    layout->setContentsMargins(24, 24, 24, 24);
+    QString title = QObject::tr("No app manages packages");
+    QString body = QObject::tr("Package Manager isn't installed, and no other installed app "
+                               "is set to manage packages. Reinstall Basecamp's Package "
+                               "Manager, or choose another app in Settings.");
+    if (role != QStringLiteral("packages")) {
+        title = QObject::tr("No app fills this role");
+        body = QObject::tr("Choose an app for \"%1\" in Settings.").arg(role);
+    }
+    QLabel* heading = new QLabel(title, page);
+    heading->setAlignment(Qt::AlignCenter);
+    heading->setStyleSheet(QStringLiteral("color: %1; font-size: 18px; font-weight: 600;")
+        .arg(Logos::themeColor(QStringLiteral("text"), QColor("#f0f0f0")).name()));
+    QLabel* text = new QLabel(body, page);
+    text->setAlignment(Qt::AlignCenter);
+    text->setWordWrap(true);
+    text->setMaximumWidth(420);
+    text->setStyleSheet(QStringLiteral("color: %1; font-size: 14px;")
+        .arg(Logos::themeColor(QStringLiteral("textSecondary"), QColor("#a0a0a0")).name()));
+    layout->addWidget(heading, 0, Qt::AlignHCenter);
+    layout->addSpacing(8);
+    layout->addWidget(text, 0, Qt::AlignHCenter);
+    return page;
 }
 
 } // namespace
@@ -345,10 +366,9 @@ void MainContainer::setupUi()
         });
     m_contentStack->addWidget(m_contentWidget);
 
-    // Index 2: placeholder for package_manager_ui — shows a centered
-    // "Loading…" label until PMUI's QQuickWidget arrives via the
-    // pluginWindowRequested intercept
-    m_contentStack->addWidget(makePmuiPlaceholder(m_contentStack));
+    // Index 2: the `packages` role's fallback, shown only when no installed app
+    // can manage packages. The package manager itself opens as an ordinary app.
+    m_contentStack->addWidget(makeRoleFallback(QStringLiteral("packages"), m_contentStack));
 
     // Content stack fills the content area — the version footer that
     // used to live in a QML bottom toolbar is now inside SidebarPanel.qml.
@@ -554,7 +574,7 @@ void MainContainer::onSectionIndexChanged(int index)
     if (m_desktopLayout || m_tabsLayout) {
         switch (sectionIndex) {
         case ShellSection::AppManager:     openSystemApp(QStringLiteral("sys:applications")); break;
-        case ShellSection::PackageManager: openSystemApp(QStringLiteral("sys:packages")); break;
+        case ShellSection::PackageManager: openRole(QStringLiteral("packages")); break;
         case ShellSection::Settings:       openSystemApp(QStringLiteral("sys:settings")); break;
         default: return;
         }
@@ -578,10 +598,15 @@ void MainContainer::onSectionIndexChanged(int index)
         m_contentStack->setCurrentIndex(kContentStackIndex);
         break;
     case ShellSection::PackageManager:
-        if (!m_pmuiWidget) {
-            m_host->loadUiModule(QStringLiteral("package_manager_ui"));
+        // An app now (ADR-067): it docks in the workspace like any other. Only
+        // when nothing can fill the role does this section show a page itself.
+        if (openRole(QStringLiteral("packages"))) {
+            QTimer::singleShot(0, this, [this]() {
+                m_host->setCurrentSectionIndex(ShellSection::Workspace);
+            });
+        } else {
+            m_contentStack->setCurrentIndex(kModulesStackIndex);
         }
-        m_contentStack->setCurrentIndex(kModulesStackIndex);
         break;
     case ShellSection::Settings:
         m_contentStack->setCurrentIndex(kContentStackIndex);
@@ -592,14 +617,6 @@ void MainContainer::onSectionIndexChanged(int index)
 
 void MainContainer::onNavigateToApps()
 {
-    // Suppressed exactly once after package_manager_ui is folded into the
-    // content stack — that path installs the pane itself and must not also
-    // bounce the user to the Apps view.
-    if (m_suppressNextNavToApps) {
-        m_suppressNextNavToApps = false;
-        return;
-    }
-
     // This is called when an app is loaded and we need to switch to Apps view.
     // The desktop has no such view: the app's window is already in front.
     if (m_desktopLayout || m_tabsLayout)
@@ -610,17 +627,6 @@ void MainContainer::onNavigateToApps()
 void MainContainer::onPluginWindowRequested(QWidget* widget, const QString& title)
 {
     if ((m_desktopLayout || m_tabsLayout) && widget) {
-        if (title == QStringLiteral("package_manager_ui") && !m_pmuiWidget
-            && offersSection(ShellSection::PackageManager)) {
-            // Preloaded in the background: keep it until Package Manager is opened.
-            m_pmuiWidget = widget;
-            widget->setParent(this);
-            widget->hide();
-            m_suppressNextNavToApps = true;
-            if (m_packagesPending)
-                openSystemApp(QStringLiteral("sys:packages"));
-            return;
-        }
         const QVariantMap entry = launcherEntry(title);
         const QString resolved = m_host->displayNameFor(title);
         QString icon = entry.value(QStringLiteral("iconPath")).toString();
@@ -634,32 +640,6 @@ void MainContainer::onPluginWindowRequested(QWidget* widget, const QString& titl
         }
         m_desktop->openWindow(title, resolved.isEmpty() ? title : resolved, icon, widget);
         updateDock();
-        return;
-    }
-
-    // package_manager_ui is not a dock: it becomes the Package Manager page of
-    // the content stack, replacing the placeholder that sits there at startup.
-    // Only where that section exists — a host without it (standalone mode)
-    // docks it like any other app.
-    if (title == QStringLiteral("package_manager_ui") && !m_pmuiWidget
-        && offersSection(ShellSection::PackageManager)) {
-        m_pmuiWidget = widget;
-        QWidget* placeholder = m_contentStack->widget(kModulesStackIndex);
-        widget->setParent(m_contentStack);
-        m_contentStack->insertWidget(kModulesStackIndex, widget);
-        if (placeholder) {
-            m_contentStack->removeWidget(placeholder);
-            placeholder->deleteLater();
-        }
-        // A new pane's QML just materialised — ask the bridge to pick up any
-        // Shortcut { } blocks inside it. Deferred, so the QML tree has time to
-        // instantiate.
-        if (m_shortcutBridge) m_shortcutBridge->rebindDeferred();
-        m_suppressNextNavToApps = true;
-        // Standalone mode opening it as the app under development: show it.
-        if (QObject* backend = m_host->backendObject();
-            backend && backend->property("currentVisibleApp").toString() == title)
-            m_host->setCurrentSectionIndex(ShellSection::PackageManager);
         return;
     }
 
@@ -678,30 +658,13 @@ void MainContainer::onPluginWindowRemoveRequested(QWidget* widget)
         const QString key = m_tabArea->keyFor(widget);
         if (!key.isEmpty())
             m_tabArea->takeTab(key);
-        if (widget && widget == m_pmuiWidget)
-            m_pmuiWidget = nullptr;
         saveTabs();
         return;
     }
     if (m_desktopLayout) {
         if (AppWindow* w = m_desktop->windowFor(widget))
             m_desktop->removeWindow(w);
-        if (widget && widget == m_pmuiWidget)
-            m_pmuiWidget = nullptr;
         updateDock();
-        return;
-    }
-    if (widget && widget == m_pmuiWidget) {
-        // package_manager_ui is the Package Manager PAGE, not a dock, so it must
-        // not reach removePluginDock() -- but it cannot simply be left in the
-        // stack either: the host deleteLater()s it the moment this returns.
-        // Taking a page out without putting one back leaves a two-page stack
-        // that every `setCurrentIndex(kModulesStackIndex)` then indexes past the
-        // end of, and the section is dead for the rest of the session.
-        m_contentStack->removeWidget(widget);
-        m_contentStack->insertWidget(kModulesStackIndex,
-                                     makePmuiPlaceholder(m_contentStack));
-        m_pmuiWidget = nullptr;
         return;
     }
     if (m_workspaceArea && widget)
@@ -713,31 +676,18 @@ void MainContainer::onPresentAppRequested(QWidget* widget)
     if (!widget) return;
 
     if (m_tabArea) {
-        if (widget == m_pmuiWidget) {
-            openSystemApp(QStringLiteral("sys:packages"));
-        } else {
-            const QString key = m_tabArea->keyFor(widget);
-            if (!key.isEmpty()) {
-                m_tabArea->activate(key);
-                dropPendingNewTab();
-            }
+        const QString key = m_tabArea->keyFor(widget);
+        if (!key.isEmpty()) {
+            m_tabArea->activate(key);
+            dropPendingNewTab();
         }
         return;
     }
 
     if (m_desktopLayout) {
-        if (widget == m_pmuiWidget)
-            openSystemApp(QStringLiteral("sys:packages"));
-        else if (AppWindow* w = m_desktop->windowFor(widget))
+        if (AppWindow* w = m_desktop->windowFor(widget))
             m_desktop->restoreAndRaise(w);
         updateDock();
-        return;
-    }
-
-    // Hoisted into the content stack, not docked, so "to the front" means
-    // selecting its section rather than raising a tab.
-    if (widget == m_pmuiWidget) {
-        m_host->setCurrentSectionIndex(ShellSection::PackageManager);
         return;
     }
 
@@ -897,8 +847,12 @@ QWidget* MainContainer::systemAppContent(const QString& key)
 {
     if (key == QStringLiteral("sys:applications"))
         return m_contentWidget;
-    if (key == QStringLiteral("sys:packages"))
-        return m_pmuiWidget;
+    if (key == QStringLiteral("sys:packages")) {
+        // Only ever the fallback: the package manager itself is an app.
+        if (!m_packagesFallback)
+            m_packagesFallback = makeRoleFallback(QStringLiteral("packages"), this);
+        return m_packagesFallback;
+    }
     if (key == QStringLiteral("sys:settings")) {
         if (!m_settingsWidget) {
             m_settingsWidget = new QQuickWidget(this);
@@ -926,6 +880,15 @@ QWidget* MainContainer::systemAppContent(const QString& key)
     return nullptr;
 }
 
+bool MainContainer::openRole(const QString& role)
+{
+    bool opened = false;
+    if (QObject* backend = m_host->backendObject())
+        QMetaObject::invokeMethod(backend, "openRole", Q_RETURN_ARG(bool, opened),
+                                  Q_ARG(QString, role));
+    return opened;
+}
+
 void MainContainer::openSystemApp(const QString& key)
 {
     if (m_tabArea) {
@@ -934,6 +897,16 @@ void MainContainer::openSystemApp(const QString& key)
     }
     if (!m_desktop)
         return;
+    // Package Manager is an app filling the `packages` role (ADR-067); the
+    // shell's own page for it exists only as the fallback.
+    if (key == QStringLiteral("sys:packages") && openRole(QStringLiteral("packages"))) {
+        if (AppWindow* w = m_desktop->window(key)) {
+            QWidget* content = w->releaseContent();
+            m_desktop->removeWindow(w);
+            if (content) { content->setParent(this); content->hide(); }
+        }
+        return;
+    }
     if (AppWindow* w = m_desktop->window(key)) {
         m_desktop->restoreAndRaise(w);
         return;
@@ -949,18 +922,8 @@ void MainContainer::openSystemApp(const QString& key)
     if (!meta.contains(key))
         return;
     QWidget* content = systemAppContent(key);
-    if (!content) {
-        // Package Manager arrives from the host; open it when it does.
-        if (key == QStringLiteral("sys:packages")) {
-            m_packagesPending = true;
-            m_host->loadUiModule(QStringLiteral("package_manager_ui"));
-        }
+    if (!content)
         return;
-    }
-    if (key == QStringLiteral("sys:packages")) {
-        m_packagesPending = false;
-        applyGlass(content);
-    }
     const auto& [title, icon] = meta.value(key);
     m_desktop->openWindow(key, title, icon, content);
     if (key == QStringLiteral("sys:applications"))
@@ -1168,6 +1131,19 @@ void MainContainer::setupTabsUi()
 
 void MainContainer::openSystemTab(const QString& key)
 {
+    // Package Manager is an app filling the `packages` role (ADR-067); the
+    // shell's own page for it exists only as the fallback. Covers every way in:
+    // the ⋮ sheet, New tab, restored tabs, search.
+    if (key == QStringLiteral("sys:packages") && openRole(QStringLiteral("packages"))) {
+        // A fallback tab left from before the app was (re)installed goes away.
+        if (m_tabArea->hasKey(key)) {
+            if (QWidget* w = m_tabArea->takeTab(key)) {
+                w->setParent(this);
+                w->hide();
+            }
+        }
+        return;
+    }
     static const QHash<QString, std::pair<QString, QString>> meta = {
         { QStringLiteral("sys:applications"),
           { tr("Applications"), QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/dashboard.svg") } },
@@ -1184,16 +1160,8 @@ void MainContainer::openSystemTab(const QString& key)
         return;
     }
     QWidget* content = systemAppContent(key);
-    if (!content) {
-        // Package Manager arrives from the host; opened when it does.
-        if (key == QStringLiteral("sys:packages")) {
-            m_packagesPending = true;
-            m_host->loadUiModule(QStringLiteral("package_manager_ui"));
-        }
+    if (!content)
         return;
-    }
-    if (key == QStringLiteral("sys:packages"))
-        m_packagesPending = false;
     const auto& [title, icon] = meta.value(key);
     const QString replace = m_pendingNewTab;
     m_pendingNewTab.clear();

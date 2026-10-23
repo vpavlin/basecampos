@@ -102,6 +102,9 @@ class MainUIBackend : public QObject {
     Q_PROPERTY(QVariantList notificationApps READ notificationApps NOTIFY notificationAppsChanged)
     // Most-recently-closed apps, persisted across restarts.
     Q_PROPERTY(QVariantList recentlyClosedApps READ recentlyClosedApps NOTIFY recentlyClosedAppsChanged)
+    // role -> the app filling it ("" when nothing can): home, launcher, packages,
+    // settings (SHELL-ROLES-SPEC.md). The shell opens roles, not apps.
+    Q_PROPERTY(QVariantMap roles READ roles NOTIFY rolesChanged)
     Q_PROPERTY(QString currentVisibleApp READ currentVisibleApp NOTIFY currentVisibleAppChanged)
     Q_PROPERTY(QStringList loadingModules READ loadingModules NOTIFY loadingModulesChanged)
 
@@ -193,6 +196,17 @@ public:
     QObject* notifications() const;
     QVariantList notificationApps() const;
     Q_INVOKABLE void setNotificationsEnabled(const QString& app, bool enabled);
+
+    // ── Roles ───────────────────────────────────────────────────────────
+    QVariantMap roles() const;
+    Q_INVOKABLE QString roleHolder(const QString& role) const;
+    // [{ name, displayName, icon, current, isDefault }] for a role.
+    Q_INVOKABLE QVariantList roleCandidates(const QString& role) const;
+    Q_INVOKABLE bool assignRole(const QString& role, const QString& app);
+    Q_INVOKABLE void resetRole(const QString& role);
+    // Open whatever fills `role`, as an ordinary app. false when nothing can
+    // (the shell then shows its own fallback for the role).
+    Q_INVOKABLE bool openRole(const QString& role);
     PackageCoordinator*    packageCoordinator()    const { return m_packageCoordinator; }
     // Base-typed on purpose — see the Q_PROPERTY comments above. Internal
     // code uses the concrete members directly and does not go through these.
@@ -337,6 +351,7 @@ public slots:
 
 signals:
     void notificationAppsChanged();
+    void rolesChanged();
     void currentActiveSectionIndexChanged();
 
     // App-Manager dialog + install lifecycle. See PackageCoordinator for
@@ -512,6 +527,7 @@ private:
     // Intents. Construction order in the ctor is what decides destruction
     // order — see the comment there.
     IntentRegistry*      m_intentRegistry  = nullptr;
+    class ShellRoles*    m_roles           = nullptr;
     LinkRequestCoordinator* m_linkRequests = nullptr;
     // False until wireIntents() has done its bootstrap rebuild, so the
     // cold-start link gate opens on a registry that has actually seen disk.
