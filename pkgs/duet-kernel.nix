@@ -4,7 +4,8 @@
 # config for exactly that release. NixOS then carries modules that match.
 # The camera drivers (vpavlin/mt8183-camera: config fragment, patches, DT, out-
 # of-tree modules) are not in yet.
-{ lib, fetchurl, linuxManualConfig, hexkernel }:
+# `...`: linuxPackagesFor re-calls this with features/randstructSeed overrides.
+{ lib, fetchurl, linuxManualConfig, hexkernel, ... }:
 
 let
   patchDir = "${hexkernel}/misc.cbm/patches/v6.12";
