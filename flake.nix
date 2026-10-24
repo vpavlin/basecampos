@@ -28,11 +28,17 @@
       flake = false;
     };
 
+    # The Duet's kernel: hexdump0815's mt81xx config + patches (see pkgs/duet-kernel.nix).
+    hexkernel = {
+      url = "github:hexdump0815/linux-mainline-mediatek-mt81xx-kernel/ce826155326213122772ffc035221356077dd8cd";
+      flake = false;
+    };
+
     # Builds BasecampOS's own Basecamp apps (apps/*).
     logos-module-builder.url = "github:logos-co/logos-module-builder";
   };
 
-  outputs = { self, nixpkgs, basecamp, shrooms, logos-module-builder, duet-kit, ... }:
+  outputs = { self, nixpkgs, basecamp, shrooms, logos-module-builder, duet-kit, hexkernel, ... }:
     let
       lib = nixpkgs.lib;
       systems = [ "x86_64-linux" "aarch64-linux" ];
@@ -151,8 +157,8 @@
       arm = forSystem "aarch64-linux";
       mkHost = system: modules: nixpkgs.lib.nixosSystem {
         inherit system;
-        # Only the dev VM's agent uses it (the QML inspector's MCP server).
-        specialArgs = { logosQtMcp = basecamp.packages.${system}.logos-qt-mcp; };
+        # logosQtMcp: the dev VM's agent (QML inspector MCP); hexkernel: the Duet's kernel.
+        specialArgs = { logosQtMcp = basecamp.packages.${system}.logos-qt-mcp; inherit hexkernel; };
         modules = (forSystem system).common ++ modules;
       };
     in
@@ -174,6 +180,7 @@
         # Generic arm64 desktop (UEFI): the whole aarch64 closure, built on CI.
         basecampos-arm = mkHost "aarch64-linux" [ ./hosts/desktop.nix { basecampos.shell.session = "sway"; } ];
         basecampos-duet = mkHost "aarch64-linux" [ ./hosts/duet.nix ];
+        basecampos-duet-usb = mkHost "aarch64-linux" [ ./hosts/duet.nix { basecampos.duet.boot = "usb"; } ];
       };
 
       packages.x86_64-linux = x86.packages // {
@@ -190,8 +197,10 @@
       packages.aarch64-linux = arm.packages // {
         toplevel = self.nixosConfigurations.basecampos-arm.config.system.build.toplevel;
         duet-toplevel = self.nixosConfigurations.basecampos-duet.config.system.build.toplevel;
-        duet-kpart = self.nixosConfigurations.basecampos-duet.config.system.build.depthchargeKpart;
-        duet-image = self.nixosConfigurations.basecampos-duet.config.system.build.depthchargeImage;
+        duet-kernel = self.nixosConfigurations.basecampos-duet.config.boot.kernelPackages.kernel;
+        duet-rootfs = self.nixosConfigurations.basecampos-duet.config.system.build.duetRootfs;
+        duet-kpart = self.nixosConfigurations.basecampos-duet-usb.config.system.build.depthchargeKpart;
+        duet-image = self.nixosConfigurations.basecampos-duet-usb.config.system.build.depthchargeImage;
         disk-image = self.nixosConfigurations.basecampos-arm.config.system.build.images.raw-efi;
       };
 

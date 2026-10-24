@@ -61,18 +61,31 @@ jobs:
           nix build -L .#packages.aarch64-linux.duet-toplevel -o duet
           nix path-info -Sh ./duet
 
-      - name: Build the Duet USB image (depthcharge)
+      - name: ARMv8.0 check (no LSE atomics on the Duet's MT8183)
         run: |
-          nix build -L .#packages.aarch64-linux.duet-image -o duet-image
-          ls -la duet-image/
-          cat duet-image/verify.txt duet-image/cmdline
-          mkdir -p out-duet && cp duet-image/* out-duet/
+          scripts/check-lse.sh ./duet || true
+          n=$(wc -l < lse-report.txt)
+          [ "$n" -eq 0 ] || echo "::warning::$n files in the Duet closure use LSE atomics (see lse-report.txt)"
+
+      - name: Duet rootfs tarball + kernel (Image, dtbs) for signing
+        run: |
+          rm -rf system
+          nix build -L .#packages.aarch64-linux.duet-rootfs -o duet-rootfs
+          nix build -L .#packages.aarch64-linux.duet-kernel -o duet-kernel
+          mkdir -p out-duet/kernel
+          cp duet-rootfs/* lse-report.txt out-duet/
+          cp duet-kernel/Image out-duet/kernel/
+          cp duet-kernel/dtbs/mediatek/mt8183-kukui-krane-sku*.dtb out-duet/kernel/
+          ls duet-kernel/lib/modules > out-duet/kernel/modules-version.txt
+          sha256sum out-duet/kernel/* > out-duet/kernel/SHA256SUMS
+          ls -laR out-duet
 
       - uses: actions/upload-artifact@v4
         with:
-          name: basecampos-duet-image-${{ github.sha }}
+          name: basecampos-duet-rootfs-${{ github.sha }}
           path: out-duet/
           retention-days: 14
+          compression-level: 0
 
       - uses: actions/upload-artifact@v4
         with:

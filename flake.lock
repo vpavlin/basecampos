@@ -352,6 +352,23 @@
         "type": "github"
       }
     },
+    "hexkernel": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1780989588,
+        "narHash": "sha256-yK4X/Pv147TuqMV9Csfe6lPHiY507fi85GmWXdQWYp0=",
+        "owner": "hexdump0815",
+        "repo": "linux-mainline-mediatek-mt81xx-kernel",
+        "rev": "ce826155326213122772ffc035221356077dd8cd",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hexdump0815",
+        "repo": "linux-mainline-mediatek-mt81xx-kernel",
+        "rev": "ce826155326213122772ffc035221356077dd8cd",
+        "type": "github"
+      }
+    },
     "logos-capability-module": {
       "inputs": {
         "logos-module-builder": "logos-module-builder"
@@ -41938,6 +41955,7 @@
         "alisher-ds": "alisher-ds",
         "basecamp": "basecamp",
         "duet-kit": "duet-kit",
+        "hexkernel": "hexkernel",
         "logos-module-builder": "logos-module-builder_12",
         "nixpkgs": "nixpkgs_364",
         "shrooms": "shrooms"

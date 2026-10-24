@@ -150,7 +150,7 @@ in
     # The tablet's Sway rules (panel, touch, keyboard cover) and the kit's
     # session daemons, on top of BasecampOS's own Sway config.
     basecampos.shell.swayExtraConfig = ''
-      output DSI-1 transform 270 scale 1.25
+      output DSI-1 transform 270 scale 1.2
       input type:touch map_to_output DSI-1
       input type:tablet_tool map_to_output DSI-1
       input type:keyboard {

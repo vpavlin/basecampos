@@ -1,6 +1,6 @@
 # Booting on a ChromeOS device in developer mode (the Duet): depthcharge loads
 # a kernel partition (GPT type "ChromeOS kernel") holding a vbutil_kernel blob.
-# On arm64 that blob wraps a FIT with the kernel, the device tree and the
+# On arm64 that blob wraps a FIT with the (lzma) kernel, the device tree and the
 # initrd, and the kernel command line is signed in with it. Developer mode with
 # dev_boot_signed_only=0 accepts the public ChromeOS dev keys, which ship with
 # vboot_reference, so the image is signed here.
@@ -28,9 +28,10 @@ let
   devkeys = "${pkgs.vboot_reference}/share/vboot/devkeys";
 
   kpart = pkgs.runCommand "depthcharge-kpart" {
-    nativeBuildInputs = [ pkgs.ubootTools pkgs.lz4 pkgs.vboot_reference pkgs.dtc ];
+    nativeBuildInputs = [ pkgs.ubootTools pkgs.xz pkgs.vboot_reference pkgs.dtc ];
   } ''
-    lz4 -9 -c ${kernel}/${config.system.boot.loader.kernelFile} > Image.lz4
+    # lzma, like the blob the Duet boots today (lz4 is untested on krane).
+    xz --format=lzma -9 -c ${kernel}/${config.system.boot.loader.kernelFile} > Image.lzma
     cat > kernel.its <<EOF
     /dts-v1/;
     / {
@@ -39,11 +40,11 @@ let
       images {
         kernel-1 {
           description = "Linux ${kernel.version}";
-          data = /incbin/("Image.lz4");
+          data = /incbin/("Image.lzma");
           type = "kernel";
           arch = "arm64";
           os = "linux";
-          compression = "lz4";
+          compression = "lzma";
           load = <0>;
           entry = <0>;
         };
