@@ -307,7 +307,7 @@ sources like packages, fetched storage-first, verified against `sha256`, and cac
 
 # Part B (direction): apps publish, the shell searches
 
-Not for building yet; Part A comes first, and its intents are the start of this API.
+Superseded by [SHELL-OBJECTS-SPEC.md](SHELL-OBJECTS-SPEC.md) ([ADR-072](adr/0072-apps-publish-typed-objects.md)), which turns this direction into a spec: typed objects, a `search` role that ranks without drawing, views that draw by type. Kept here as the original sketch.
 
 ## B1. Model
 
