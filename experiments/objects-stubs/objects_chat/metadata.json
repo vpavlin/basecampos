@@ -1,0 +1,44 @@
+{
+  "author": "Alisher (xAlisher)",
+  "category": "development",
+  "dependencies": [],
+  "description": "Objects stub: publishes contacts, conversations and messages, and answers Reply.",
+  "display_name": "Stub Chat",
+  "icon": "icon.png",
+  "main": {},
+  "manifestVersion": "0.6.0",
+  "name": "objects_chat",
+  "type": "ui_qml",
+  "version": "0.1.0",
+  "view": "qml/Main.qml",
+  "uses": [
+    {
+      "intent": "basecamp.objects.publish"
+    },
+    {
+      "intent": "basecamp.objects.retract"
+    }
+  ],
+  "provides": [
+    {
+      "intent": "objects.action",
+      "params": [
+        {
+          "name": "key",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "action",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false
+        }
+      ]
+    }
+  ]
+}

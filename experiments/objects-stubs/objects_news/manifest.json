@@ -1,0 +1,27 @@
+{
+  "author": "Alisher (xAlisher)",
+  "category": "development",
+  "dependencies": [],
+  "description": "Objects stub: publishes news items.",
+  "display_name": "Stub News",
+  "icon": "icon.png",
+  "main": {},
+  "manifestVersion": "0.6.0",
+  "name": "objects_news",
+  "type": "ui_qml",
+  "version": "0.1.0",
+  "view": "qml/Main.qml",
+  "uses": [
+    {
+      "intent": "basecamp.objects.publish"
+    },
+    {
+      "intent": "basecamp.objects.retract"
+    }
+  ],
+  "provides": [
+    {
+      "intent": "objects.action"
+    }
+  ]
+}

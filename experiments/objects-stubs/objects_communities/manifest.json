@@ -1,0 +1,27 @@
+{
+  "author": "Alisher (xAlisher)",
+  "category": "development",
+  "dependencies": [],
+  "description": "Objects stub: publishes communities and posts, and answers Join, Vote and Like.",
+  "display_name": "Stub Communities",
+  "icon": "icon.png",
+  "main": {},
+  "manifestVersion": "0.6.0",
+  "name": "objects_communities",
+  "type": "ui_qml",
+  "version": "0.1.0",
+  "view": "qml/Main.qml",
+  "uses": [
+    {
+      "intent": "basecamp.objects.publish"
+    },
+    {
+      "intent": "basecamp.objects.retract"
+    }
+  ],
+  "provides": [
+    {
+      "intent": "objects.action"
+    }
+  ]
+}
