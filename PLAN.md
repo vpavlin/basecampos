@@ -37,6 +37,12 @@ Findings to share back (Alisher / Basecamp team):
 2026-10-24). Options: a GitHub Actions `ubuntu-24.04-arm` runner (needs this repo published, Václav's
 call) or an arm64 builder from Václav. the dev host rules: VMs ≤4 GB, nix max-jobs 2 / cores 4.
 
+**Direction (2026-10-24): Basecamp is the only UI.** `session = "sway"`: a bar-less Sway runs Basecamp full
+screen (desktop layout) on workspace 1; native apps (Brave, foot) start from Basecamp's dock through the
+System core module and live alone on their own workspaces; Super+Esc / 3-finger swipe returns. The System
+app absorbs the tablet panels (display, Bluetooth, battery, rotation, on-screen keyboard, mirroring). On the
+Duet, duet-kit supplies hardware fixes and tablet daemons only. arm64 builds run on GitHub Actions.
+
 Next:
 - ~~Boot-test the ISO~~ (done: boots under UEFI into Basecamp + System); then an installer path (disk image + `nixos-install` flow).
 - Try Alisher's `shell-roles` branch (Settings/Packages/Applications as role apps). System could become
