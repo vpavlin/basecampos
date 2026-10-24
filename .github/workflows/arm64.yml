@@ -7,8 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# contents: write only to publish the Duet test build as a (pre)release: release
+# assets download without a GitHub login, Actions artifacts don't.
 permissions:
-  contents: read
+  contents: write
 
 # Queue rather than cancel: a full build takes long, and every run starts cold.
 concurrency:
@@ -58,7 +60,7 @@ jobs:
 
       - name: Build the Duet system (basecampos-duet)
         run: |
-          nix build -L .#packages.aarch64-linux.duet-toplevel -o duet
+          nix build -L .#packages.aarch64-linux.duet-test-toplevel -o duet
           nix path-info -Sh ./duet
 
       - name: ARMv8.0 check (no LSE atomics on the Duet's MT8183)
@@ -71,8 +73,8 @@ jobs:
         run: |
           df -h / /nix
           rm -rf system
-          nix build -L .#packages.aarch64-linux.duet-rootfs -o duet-rootfs
-          nix build -L .#packages.aarch64-linux.duet-kernel -o duet-kernel
+          nix build -L .#packages.aarch64-linux.duet-test-rootfs -o duet-rootfs
+          nix build -L .#packages.aarch64-linux.duet-test-kernel -o duet-kernel
           mkdir -p out-duet/kernel
           cp duet-rootfs/* lse-report.txt out-duet/
           cp duet-kernel/Image out-duet/kernel/
@@ -80,6 +82,21 @@ jobs:
           ls duet-kernel/lib/modules > out-duet/kernel/modules-version.txt
           sha256sum out-duet/kernel/* > out-duet/kernel/SHA256SUMS
           ls -laR out-duet
+
+      - name: Publish the Duet test build as a prerelease (no login needed to download)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=duet-test-${GITHUB_SHA::7}
+          mkdir rel
+          cp out-duet/kernel/Image out-duet/kernel/*.dtb out-duet/kernel/modules-version.txt rel/
+          cp out-duet/lse-report.txt out-duet/README.txt rel/
+          # release assets are limited to 2 GB each
+          split -b 1900M -d out-duet/basecampos-duet-rootfs.tar.zst rel/basecampos-duet-rootfs.tar.zst.part
+          (cd rel && sha256sum * > SHA256SUMS)
+          gh release create "$tag" rel/* --prerelease --target "$GITHUB_SHA" \
+            --title "Duet test build ${GITHUB_SHA::7}" \
+            --notes "Unattended first test on the Duet (watchdog, 20-minute test window, reports in /var/log/basecampos-test). Rootfs parts: cat basecampos-duet-rootfs.tar.zst.part* > basecampos-duet-rootfs.tar.zst. Kernel modules: $(cat rel/modules-version.txt)."
           df -h / /nix
 
       - name: Diagnostics (always)

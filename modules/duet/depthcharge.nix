@@ -76,9 +76,11 @@ let
     EOF
     mkimage -f kernel.its kernel.itb
     echo -n '${cmdline}' > cmdline
-    dd if=/dev/zero of=bootloader.bin bs=512 count=1
+    # 4096-byte zero stub and body load address 0x100000, as in the blob the
+    # Duet boots today (verified there by the Duet agent).
+    dd if=/dev/zero of=bootloader.bin bs=4096 count=1
     mkdir $out
-    vbutil_kernel --pack $out/kpart.bin --version 1 --arch aarch64 \
+    vbutil_kernel --pack $out/kpart.bin --version 1 --arch arm --kloadaddr 0x100000 \
       --keyblock ${devkeys}/kernel.keyblock --signprivate ${devkeys}/kernel_data_key.vbprivk \
       --config cmdline --bootloader bootloader.bin --vmlinuz kernel.itb
     vbutil_kernel --verify $out/kpart.bin --verbose > $out/verify.txt

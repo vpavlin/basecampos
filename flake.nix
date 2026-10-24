@@ -180,6 +180,8 @@
         # Generic arm64 desktop (UEFI): the whole aarch64 closure, built on CI.
         basecampos-arm = mkHost "aarch64-linux" [ ./hosts/desktop.nix { basecampos.shell.session = "sway"; } ];
         basecampos-duet = mkHost "aarch64-linux" [ ./hosts/duet.nix ];
+        # The unattended first test on the tablet (watchdog, 20-min window, reports).
+        basecampos-duet-test = mkHost "aarch64-linux" [ ./hosts/duet.nix { basecampos.duet.testMode = true; } ];
         basecampos-duet-usb = mkHost "aarch64-linux" [ ./hosts/duet.nix { basecampos.duet.boot = "usb"; } ];
       };
 
@@ -199,6 +201,9 @@
         duet-toplevel = self.nixosConfigurations.basecampos-duet.config.system.build.toplevel;
         duet-kernel = self.nixosConfigurations.basecampos-duet.config.boot.kernelPackages.kernel;
         duet-rootfs = self.nixosConfigurations.basecampos-duet.config.system.build.duetRootfs;
+        duet-test-rootfs = self.nixosConfigurations.basecampos-duet-test.config.system.build.duetRootfs;
+        duet-test-kernel = self.nixosConfigurations.basecampos-duet-test.config.boot.kernelPackages.kernel;
+        duet-test-toplevel = self.nixosConfigurations.basecampos-duet-test.config.system.build.toplevel;
         duet-kpart = self.nixosConfigurations.basecampos-duet-usb.config.system.build.depthchargeKpart;
         duet-image = self.nixosConfigurations.basecampos-duet-usb.config.system.build.depthchargeImage;
         disk-image = self.nixosConfigurations.basecampos-arm.config.system.build.images.raw-efi;
