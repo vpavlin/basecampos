@@ -69,6 +69,7 @@ jobs:
 
       - name: Duet rootfs tarball + kernel (Image, dtbs) for signing
         run: |
+          df -h / /nix
           rm -rf system
           nix build -L .#packages.aarch64-linux.duet-rootfs -o duet-rootfs
           nix build -L .#packages.aarch64-linux.duet-kernel -o duet-kernel
@@ -79,6 +80,22 @@ jobs:
           ls duet-kernel/lib/modules > out-duet/kernel/modules-version.txt
           sha256sum out-duet/kernel/* > out-duet/kernel/SHA256SUMS
           ls -laR out-duet
+          df -h / /nix
+
+      - name: Diagnostics (always)
+        if: always()
+        run: |
+          mkdir -p diag
+          df -h > diag/df.txt 2>&1 || true
+          cp lse-report.txt diag/ 2>/dev/null || true
+          ls -la duet-kernel/ duet-kernel/dtbs/mediatek 2>/dev/null | head -50 > diag/kernel-ls.txt || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostics-${{ github.sha }}
+          path: diag/
+          retention-days: 7
 
       - uses: actions/upload-artifact@v4
         with:

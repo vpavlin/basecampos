@@ -79,11 +79,12 @@ in
         cp ${closure}/registration root/nix-path-registration
         touch root/etc/NIXOS
         mkdir $out
-        # The store paths go in as /nix/store/...; the rest from root/.
-        tar --sort=name --owner=0 --group=0 --numeric-owner -C root -cf rootfs.tar .
-        tar --sort=name --owner=0 --group=0 --numeric-owner -rf rootfs.tar $(cat ${closure}/store-paths)
-        zstd -T0 -12 rootfs.tar -o $out/basecampos-duet-rootfs.tar.zst
-        rm rootfs.tar
+        # One stream: root/ first, then the store paths (as nix/store/...),
+        # straight into zstd - an uncompressed tar of the closure would not fit
+        # on a CI runner's disk.
+        sed 's|^/||' ${closure}/store-paths > paths
+        tar --sort=name --owner=0 --group=0 --numeric-owner -cf - -C root . -C / -T paths |
+          zstd -T0 -12 -o $out/basecampos-duet-rootfs.tar.zst
         cat > $out/README.txt <<EOF
         BasecampOS for the Duet: unpack into an empty btrfs subvolume, e.g.
           btrfs subvolume create /home/@basecampos
