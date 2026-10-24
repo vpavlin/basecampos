@@ -1,6 +1,6 @@
 # Shell objects: apps publish, search ranks, views draw
 
-Status: draft, 2026-10-24, not built. Decision: [ADR-072](adr/0072-apps-publish-typed-objects.md).
+Status: draft, 2026-10-24. Steps 1 and 2 built (§11); 3 to 5 not yet. Decision: [ADR-072](adr/0072-apps-publish-typed-objects.md).
 Grows out of [SHELL-ROLES-SPEC.md](SHELL-ROLES-SPEC.md) Part B and generalises
 [NOTIFICATIONS-SPEC.md](NOTIFICATIONS-SPEC.md).
 
@@ -116,9 +116,16 @@ logos.request("basecamp.objects.retract", { keys: ["tx:0x91…"] }, res => {})  
 - Answers as for notifications: `ok`, `not_declared`, `bad_request` (with the first bad object's
   index), `failed` (limit). **A switched-off app still gets `ok`.**
 - Batches are all-or-nothing.
-- **Actions come back** as `basecamp.objects.action` to the publisher: `{ key, action, text? }`.
-  The app declares that it handles it (`"provides"`), so only the publisher of `key` receives it.
-  `open` is always delivered and the app is brought to front first.
+- **Actions come back** as `objects.action` to the publisher: `{ key, action, text? }` (`text`
+  only for `input: "text"` actions, at most 1000 characters). The app declares it in `"provides"`.
+  It can't be `basecamp.objects.action`: the registry refuses apps that provide a `basecamp.*`
+  intent. Two rules keep it shell-only:
+  - the shell sends it with a **targeted submit** (`IntentBroker::submitTo`) to the publisher of
+    `key` alone, with no chooser, even when several apps provide `objects.action`;
+  - **only the shell may request it** (`restrictIntentToRequesters`); an app that declares it in
+    `"uses"` gets `unavailable`. Publishers should still accept it only from requester `main_ui`.
+  `open` is always delivered and the app is brought to front first. An action the object doesn't
+  list, or an unknown id, is refused before anything is sent.
 
 ### Search role
 
@@ -176,8 +183,20 @@ while a transfer has an address; something has to say "this address belongs to t
 - **Settings → Search:** one row per app that declares `basecamp.objects.publish`, with a switch,
   as for notifications. **Off removes everything that app published at once**; while off, new
   publishes are dropped (still answering `ok`). Uninstalling an app removes its objects.
-- Limits per app: 500 objects (oldest `time` evicted first), 20 publish requests per 10 s,
-  `fields` at most 2 KB per object. Over the limit answers `failed`.
+- Limits per app:
+  - 500 objects: past that the oldest by `time` are evicted and the publish still answers `ok`;
+    a single batch of more than 500 answers `failed`;
+  - 20 publish requests per 10 s (the 21st answers `failed`; retract is not limited);
+  - `fields` at most 2 KB per object (`failed`);
+  - `time`, `expires` and `progress` must be finite numbers, times at most 8.64e15 ms
+    (`bad_request`).
+- One intent payload is capped at 1000 nodes by the bridge, so about 50 objects fit in a request;
+  a 1000-object flood takes about 20 requests and meets the rate limit.
+- **Switching an app back on tells it nothing:** its objects stay missing until it publishes
+  again. Apps should republish what is current on start and when it changes; whether the shell
+  should send an "enabled again" signal is open (§9).
+- Settings rows are announced at most once a second and only when a row changes, so other apps
+  can't time each other's publishes from it.
 - **v0 keeps everything in memory** and loses it on restart; apps republish what is current when
   they start. Nothing is written to disk and nothing leaves the device.
 - Only the `search` holder reads across apps; views read only their results; publishers read
@@ -203,6 +222,8 @@ while a transfer has an address; something has to say "this address belongs to t
   (ADR-071).
 - **Ranking signals:** recency, frequency of opening, unseen, pinned pills; which belong to the
   search role and which to the view.
+- **Switching back on:** should the shell tell an app it was switched on again, so it
+  republishes, or is "republish on start and on change" enough?
 - **Type list ownership:** who adds a type; how an app type (`x.<app>.<name>`) graduates.
 - **Layouts:** home and modules are Basecampium-only today (ADR-070); the sidebar and desktop
   layouts need their own views.
@@ -211,8 +232,9 @@ while a transfer has an address; something has to say "this address belongs to t
 
 ## 10. Plan
 
-1. **Store and intents (host).** `ObjectStore`, `basecamp.objects.publish/retract/action`, limits,
-   Settings → Search with switches; notifications become a type internally, their intent stays.
+1. **Store and intents (host).** `ObjectStore`, `basecamp.objects.publish/retract`, `objects.action`,
+   limits, Settings → Search with switches; notifications become a type internally, their intent
+   stays (not done yet).
    Unit-tested; verified with a test app.
 2. **Stub publishers** (`experiments/objects-stubs/`), backends stubbed, each with a "flood" button
    (1000 objects):
@@ -226,3 +248,25 @@ while a transfer has an address; something has to say "this address belongs to t
    everywhere in Basecampium.
 5. **Experiments:** grid vs. feed densities; "N new since"; a module per saved filter; replacing the
    search app; flood performance at 390 and 1280; the same data with content vs. pointer.
+
+## 11. Steps 1 and 2: built
+
+Issues #22, #23, #24. Host code in `basecamp/app/` (`ObjectStore`, `IntentBroker::submitTo`,
+`ShellIntents`, `MainUIBackend::raiseObjectAction`, `ShellApi`) and
+`basecamp/apps/basecamp_settings/qml/SearchView.qml`; stubs in `experiments/objects-stubs/`.
+
+- **Unit tests:** 32 of 32 pass, among them `object_store_test` (validation, upsert keeps `seen`,
+  retract, eviction, rate window, 2 KB cap, switch, expiry, retain on uninstall) and the targeted
+  submit and shell-only requester tests.
+- **Headless, the five stubs on one shell:** 60 objects across 9 types with exact counts per app;
+  pending transfers move 20 → 60 % in place; flood stops at 500; retract all empties one app only;
+  Join flips a community and Vote raises a score; Reply with text adds an outgoing message; actions
+  never reach another app, even one publishing the same `key`; an app declaring `objects.action`
+  in `"uses"` is refused; `open` brings the publisher to the front; Settings → Search off deletes
+  at once and switching on again restores nothing until the app republishes.
+- **Not tested end to end:** uninstall deleting objects (unit-tested through `retainApps` only).
+- **Found on the way:** two `ui_qml` apps that ship a QML file with the same name collide; the
+  second app loads the first one's file and the sandbox blocks it ("Type StubApp unavailable"). The
+  stubs use per-app file names.
+
+![Settings → Search at 390](shell-objects/settings-search-390.png)

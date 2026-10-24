@@ -2,7 +2,7 @@
   "author": "Logos",
   "category": "system",
   "dependencies": [],
-  "description": "Basecamp's settings: customisation, notifications, default apps, package repositories and developer inspectors.",
+  "description": "Basecamp's settings: customisation, notifications, search, default apps, package repositories and developer inspectors.",
   "display_name": "Settings",
   "icon": "icon.svg",
   "main": {},

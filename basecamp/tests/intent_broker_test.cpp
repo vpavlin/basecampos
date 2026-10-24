@@ -231,6 +231,13 @@ private slots:
     void testSecondChoiceQueuesInsteadOfRepointingTheDialog();
     void testAmbiguousWithChooserAsksAndRoutesTheChoice();
 
+    // ── Targeted submit (shell objects' actions) ────────────────────────
+    void testTargetedSubmitReachesOnlyTheTarget();
+    void testTargetedSubmitPresentsOnlyWhenAsked();
+    void testTargetedSubmitToANonProviderIsUnavailable();
+    void testTargetedSubmitFromAnAppIsRefused();
+    void testUntargetedActionFromAnAppIsRefused();
+
     // ── Auto-return ─────────────────────────────────────────────────────
     void testProviderResponseReturnsToRequester();
     void testCancelledResponseAlsoReturns();
@@ -2100,6 +2107,147 @@ void TestIntentBroker::testChooserAnsweringDuringDismissIsSafe()
     QCOMPARE(chatEndpoint.error(), QStringLiteral("cancelled"));
     QVERIFY(walletEndpoint.requests.isEmpty());
     QCOMPARE(broker.pendingCount(), 0);
+}
+
+// ── Targeted submit ──────────────────────────────────────────────────────────
+//
+// An object's action goes back to the app that published it and nobody else
+// (SHELL-OBJECTS-SPEC §5): two apps providing `objects.action` must never mean
+// a chooser, or one app hearing another's actions.
+namespace {
+
+struct TargetedWorld {
+    QTemporaryDir root;
+    IntentRegistry registry;
+    FakePresenter presenter;
+    FakeChooser chooser;
+    FakeEndpoint shell, wa, wb, chat;
+    std::unique_ptr<IntentBroker> broker;
+
+    TargetedWorld()
+    {
+        const QString a = writeApp(root, QStringLiteral("wa"),
+            R"({"provides":[{"intent":"objects.action"}]})");
+        const QString b = writeApp(root, QStringLiteral("wb"),
+            R"({"provides":[{"intent":"objects.action"}]})");
+        const QString c = writeApp(root, QStringLiteral("chat"),
+            R"({"uses":[{"intent":"objects.action"}]})");
+        registry.rebuild({ { QStringLiteral("wallet_a"), plugin(a) },
+                           { QStringLiteral("wallet_b"), plugin(b) },
+                           { QStringLiteral("chat_ui"), plugin(c) } },
+                         nullptr, nullptr);
+        registry.registerShellUses(QStringLiteral("main_ui"), { QStringLiteral("objects.action") });
+        // As ShellIntents::registerWith declares it: the shell is the only
+        // requester. Survives the rebuild above (and any later one).
+        registry.restrictIntentToRequesters(QStringLiteral("objects.action"), { QStringLiteral("main_ui") });
+        presenter.loaded << QStringLiteral("wallet_a") << QStringLiteral("wallet_b")
+                         << QStringLiteral("chat_ui");
+        broker = std::make_unique<IntentBroker>(&registry, &presenter);
+        broker->setTimeouts(1000, 1000, 20);
+        broker->setChooser(&chooser);
+        broker->registerEndpoint(QStringLiteral("main_ui"), &shell);
+        broker->registerEndpoint(QStringLiteral("wallet_a"), &wa);
+        broker->registerEndpoint(QStringLiteral("wallet_b"), &wb);
+        broker->registerEndpoint(QStringLiteral("chat_ui"), &chat);
+    }
+};
+
+QVariantMap actionParams()
+{
+    return { { QStringLiteral("key"), QStringLiteral("tx:1") },
+             { QStringLiteral("action"), QStringLiteral("view") } };
+}
+
+} // namespace
+
+void TestIntentBroker::testTargetedSubmitReachesOnlyTheTarget()
+{
+    TargetedWorld w;
+    // Untargeted, two providers would ask the user. Targeted, nobody is asked.
+    w.broker->submitTo(&w.shell, QStringLiteral("shell-object-1"), QStringLiteral("objects.action"),
+                       actionParams(), QStringLiteral("wallet_b"), /*present=*/false);
+    spin(80);
+    QCOMPARE(w.chooser.presented.size(), 0);
+    QCOMPARE(w.wa.requests.size(), 0);
+    QCOMPARE(w.wb.requests.size(), 1);
+    QCOMPARE(w.wb.requests.first().requesterName, QStringLiteral("main_ui"));
+    QCOMPARE(w.wb.requests.first().params.value(QStringLiteral("key")).toString(), QStringLiteral("tx:1"));
+
+    // The answer comes back to the shell under its own id.
+    QVERIFY(w.broker->submitResponse(&w.wb, w.wb.requests.first().dispatchId, true, QVariant(), QString()));
+    QCOMPARE(w.shell.results.size(), 1);
+    QCOMPARE(w.shell.results.first().first, QStringLiteral("shell-object-1"));
+    QVERIFY(w.shell.ok());
+}
+
+void TestIntentBroker::testTargetedSubmitPresentsOnlyWhenAsked()
+{
+    TargetedWorld w;
+    w.broker->submitTo(&w.shell, QStringLiteral("a"), QStringLiteral("objects.action"),
+                       actionParams(), QStringLiteral("wallet_a"), /*present=*/false);
+    spin(80);
+    QCOMPARE(w.wa.requests.size(), 1);
+    QVERIFY(w.presenter.presented.isEmpty());   // Join from a view: the user stays put
+
+    w.broker->submitTo(&w.shell, QStringLiteral("b"), QStringLiteral("objects.action"),
+                       actionParams(), QStringLiteral("wallet_a"), /*present=*/true);
+    spin(80);
+    QCOMPARE(w.wa.requests.size(), 2);
+    QCOMPARE(w.presenter.presented, QStringList{ QStringLiteral("wallet_a") });
+
+    // An unloaded target is activated, like any provider, then delivered to.
+    w.presenter.loaded.removeAll(QStringLiteral("wallet_b"));
+    w.broker->submitTo(&w.shell, QStringLiteral("c"), QStringLiteral("objects.action"),
+                       actionParams(), QStringLiteral("wallet_b"), /*present=*/false);
+    spin(80);
+    QCOMPARE(w.presenter.ensureCalls, QStringList{ QStringLiteral("wallet_b") });
+    QCOMPARE(w.wb.requests.size(), 0);
+    w.broker->onAppReady(QStringLiteral("wallet_b"));
+    QCOMPARE(w.wb.requests.size(), 1);
+}
+
+void TestIntentBroker::testTargetedSubmitToANonProviderIsUnavailable()
+{
+    TargetedWorld w;
+    // chat_ui publishes nothing it handles: it does not provide the intent.
+    w.broker->submitTo(&w.shell, QStringLiteral("x"), QStringLiteral("objects.action"),
+                       actionParams(), QStringLiteral("chat_ui"), /*present=*/false);
+    spin(80);
+    QCOMPARE(w.chat.requests.size(), 0);
+    QCOMPARE(w.wa.requests.size() + w.wb.requests.size(), 0);
+    QCOMPARE(w.chooser.presented.size(), 0);
+    QCOMPARE(w.shell.results.size(), 1);
+    QCOMPARE(w.shell.error(), QStringLiteral("unavailable"));
+}
+
+void TestIntentBroker::testTargetedSubmitFromAnAppIsRefused()
+{
+    TargetedWorld w;
+    // Naming the provider skips the user's choice; only the shell may.
+    w.broker->submitTo(&w.chat, QStringLiteral("x"), QStringLiteral("objects.action"),
+                       actionParams(), QStringLiteral("wallet_a"), /*present=*/false);
+    spin(80);
+    QCOMPARE(w.wa.requests.size(), 0);
+    QCOMPARE(w.chooser.presented.size(), 0);
+    QCOMPARE(w.chat.results.size(), 1);
+    QCOMPARE(w.chat.error(), QStringLiteral("unavailable"));
+}
+
+void TestIntentBroker::testUntargetedActionFromAnAppIsRefused()
+{
+    TargetedWorld w;
+    // The ordinary path: chat_ui declares `uses: objects.action` and asks with
+    // a forged join. Without the requester restriction this would reach a
+    // chooser listing both publishers, one tap from looking like an action the
+    // user raised. It must reach nobody and ask nobody.
+    QVariantMap forged{ { QStringLiteral("key"), QStringLiteral("com:1") },
+                        { QStringLiteral("action"), QStringLiteral("join") } };
+    w.broker->submit(&w.chat, QStringLiteral("x"), QStringLiteral("objects.action"), forged);
+    spin(80);
+    QCOMPARE(w.wa.requests.size() + w.wb.requests.size(), 0);
+    QCOMPARE(w.chooser.presented.size(), 0);
+    QCOMPARE(w.chat.results.size(), 1);
+    QCOMPARE(w.chat.error(), QStringLiteral("unavailable"));
 }
 
 QTEST_MAIN(TestIntentBroker)

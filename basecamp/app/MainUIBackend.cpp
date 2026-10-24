@@ -18,6 +18,7 @@
 #include "restricted/RestrictedUrlInterceptor.h"
 #include <utility>
 #include "NotificationCenter.h"
+#include "ObjectStore.h"
 #include "DesktopNotifier.h"
 #include "links/LinkRequestCoordinator.h"
 #include "UIPluginPresenter.h"
@@ -103,6 +104,31 @@ MainUIBackend::MainUIBackend(LogosAPI* logosAPI, ICoreRuntime* core,
         if (app == NotificationCenter::kBasecampApp)
             return QStringLiteral("qrc:/qt/qml/Basecamp/Icons/Basecamp/Icons/logos-lambda.svg");
         return m_uiPluginManager->pluginIconUrl(app);
+    });
+    // Shell objects (SHELL-OBJECTS-SPEC.md): kept here, beside notifications,
+    // and drawn with the same per-app icon. Ranking and drawing are not ours.
+    m_objects = new ObjectStore(this);
+    m_objects->setIconResolver([this](const QString& app) {
+        return m_uiPluginManager->pluginIconUrl(app);
+    });
+    // NOT a per-publish signal. ObjectStore::changed fires on every publish,
+    // retract, expiry and markSeen by any app, and searchAppsChanged reaches
+    // QML (ShellApi::searchChanged) — forwarded as is, it would be a clock of
+    // other apps' activity: when a message or a payment arrived, when the user
+    // read it. So store activity is coalesced (one look per second at most)
+    // and announced only when a Settings row really changed — an app's switch,
+    // the set of publishing apps, or its count. A same-key update, a markSeen
+    // or a publish-then-retract inside the window says nothing. The switch
+    // itself is the user's own act and is answered at once.
+    m_searchAppsTimer = new QTimer(this);
+    m_searchAppsTimer->setSingleShot(true);
+    m_searchAppsTimer->setInterval(1000);
+    connect(m_searchAppsTimer, &QTimer::timeout, this, &MainUIBackend::refreshSearchApps);
+    connect(m_objects, &ObjectStore::disabledAppsChanged,
+            this, &MainUIBackend::refreshSearchApps);
+    connect(m_objects, &ObjectStore::changed, this, [this]() {
+        if (!m_searchAppsTimer->isActive())
+            m_searchAppsTimer->start();
     });
     // While Basecamp is in the background, the desktop shows them too.
     auto* desktop = new DesktopNotifier(m_notifications, this);
@@ -530,6 +556,27 @@ void MainUIBackend::wireIntents()
                 return 1;
             }
 
+            // Shell objects: the same shape. The requester name is the
+            // broker's attested one, so an app can only ever write its own
+            // objects. A switched-off app is answered ok (ObjectStore). The
+            // failing index of a bad batch goes to the log with the reason:
+            // the envelope carries a code and no data on failure.
+            if (intent == kObjectsPublishIntent || intent == kObjectsRetractIntent) {
+                QStringList ids;
+                const QString error = intent == kObjectsPublishIntent
+                    ? m_objects->publish(requesterName, params, nullptr, &ids)
+                    : m_objects->retract(requesterName, params);
+                // A QVariantList, not the QStringList: the broker refuses any
+                // answer outside the canonical payload types, and QStringList
+                // is outside them (the app would hear `failed`).
+                const QVariantList idList(ids.cbegin(), ids.cend());
+                QTimer::singleShot(0, this, [this, dispatchId, idList, error]() {
+                    respondToShellIntent(dispatchId, error.isEmpty(),
+                                         QVariantMap{ { QStringLiteral("ids"), idList } }, error);
+                });
+                return 1;
+            }
+
             if (kPackageConfirmIntents.contains(intent)) {
                 return m_packageCoordinator
                     && m_packageCoordinator->beginPackageConfirmation(
@@ -541,6 +588,17 @@ void MainUIBackend::wireIntents()
             if (receivers > 0)
                 emit shellIntentRequested(dispatchId, intent, params, requesterName);
             return receivers;
+        },
+        // Answers to what the shell itself asked. Only object actions are
+        // listened for; the package hand-offs are fire and forget.
+        [this](const QString& requestId, const QVariantMap& envelope) {
+            if (!requestId.startsWith(QStringLiteral("shell-object-")))
+                return;
+            const bool ok = envelope.value(QStringLiteral("ok")).toBool();
+            const QString error = envelope.value(QStringLiteral("error")).toString();
+            qInfo().noquote() << "Object action" << requestId << "answered"
+                              << (ok ? QStringLiteral("ok") : error);
+            emit objectActionAnswered(requestId, ok, error);
         });
     m_intentBroker->registerEndpoint(QStringLiteral("main_ui"), m_shellEndpoint.get());
 
@@ -738,6 +796,12 @@ void MainUIBackend::rebuildIntentRegistry()
     for (const QString& problem : problems)
         qWarning().noquote() << "IntentRegistry:" << problem;
     emit notificationAppsChanged();
+
+    // Uninstalled (or updated to stop publishing): its objects go with it.
+    // After the bootstrap only — the constructor-time rebuild sees no apps.
+    if (m_objects && m_intentRegistryBootstrapped)
+        m_objects->retainApps(m_intentRegistry->modulesUsing(kObjectsPublishIntent));
+    refreshSearchApps();
 
     // THE COLD-START GATE, and it must skip the bootstrap call above.
     //
@@ -1206,4 +1270,102 @@ void MainUIBackend::setNotificationsEnabled(const QString& app, bool enabled)
 {
     if (m_notifications)
         m_notifications->setMuted(app, !enabled);
+}
+
+QObject* MainUIBackend::objectStore() const
+{
+    return m_objects;
+}
+
+QVariantList MainUIBackend::searchApps() const
+{
+    QVariantList out;
+    if (!m_intentRegistry || !m_objects)
+        return out;
+    for (const QString& name : m_intentRegistry->modulesUsing(kObjectsPublishIntent)) {
+        const QString display = displayNameFor(name);
+        out << QVariantMap{
+            { QStringLiteral("name"), name },
+            { QStringLiteral("displayName"), display.isEmpty() ? name : display },
+            { QStringLiteral("icon"), m_uiPluginManager->pluginIconUrl(name) },
+            { QStringLiteral("enabled"), m_objects->isEnabled(name) },
+            { QStringLiteral("count"), m_objects->count(name) },
+        };
+    }
+    return out;
+}
+
+void MainUIBackend::refreshSearchApps()
+{
+    const QVariantList rows = searchApps();
+    if (rows == m_lastSearchApps)
+        return;
+    m_lastSearchApps = rows;
+    emit searchAppsChanged();
+}
+
+void MainUIBackend::setSearchEnabled(const QString& app, bool enabled)
+{
+    if (m_objects)
+        m_objects->setEnabled(app, enabled);
+}
+
+QString MainUIBackend::raiseObjectAction(const QString& id, const QString& action,
+                                         const QString& text)
+{
+    if (!m_objects || !m_intentBroker || !m_shellEndpoint || !m_intentRegistry)
+        return QString();
+    const QVariantMap object = m_objects->get(id);
+    if (object.isEmpty()) {
+        qWarning().noquote() << "Object action: no object" << id;
+        return QString();
+    }
+    const QString app = object.value(QStringLiteral("app")).toString();
+    const bool open = action == QLatin1String("open");
+
+    // Only the actions the publisher listed, and `open`. A view cannot invent
+    // a verb the app never offered.
+    bool wantsText = false;
+    if (!open) {
+        bool listed = false;
+        for (const QVariant& v : object.value(QStringLiteral("actions")).toList()) {
+            const QVariantMap a = v.toMap();
+            if (a.value(QStringLiteral("id")).toString() == action) {
+                listed = true;
+                wantsText = a.value(QStringLiteral("input")).toString() == QLatin1String("text");
+            }
+        }
+        if (!listed) {
+            qWarning().noquote() << "Object action:" << action << "is not an action of" << id;
+            return QString();
+        }
+    }
+
+    // `open` is always deliverable: the app comes forward first, whether or
+    // not it listens for actions, exactly as launching it would.
+    if (open && m_intentPresenter) {
+        m_intentPresenter->ensureAppLoaded(app);
+        m_intentPresenter->presentApp(app);
+    }
+
+    if (!m_intentRegistry->declaresProvide(app, kObjectsActionIntent)) {
+        if (!open)
+            qWarning().noquote() << "Object action:" << app << "does not provide"
+                                 << kObjectsActionIntent << "— nothing sent";
+        return open ? QStringLiteral("shell-object-open-") + id : QString();
+    }
+
+    QVariantMap params{ { QStringLiteral("key"), object.value(QStringLiteral("key")) },
+                        { QStringLiteral("action"), action } };
+    if (wantsText)
+        params.insert(QStringLiteral("text"), text.left(ObjectStore::kMaxText));
+
+    const QString requestId = QStringLiteral("shell-object-%1").arg(++m_nextObjectAction);
+    qInfo().noquote() << "Object action" << requestId << action << "on"
+                      << object.value(QStringLiteral("key")).toString() << "→" << app;
+    // Present only for `open`, which has already done so above; an action
+    // button in a view leaves the user where they are.
+    m_intentBroker->submitTo(m_shellEndpoint.get(), requestId, kObjectsActionIntent,
+                             params, app, /*present=*/open);
+    return requestId;
 }

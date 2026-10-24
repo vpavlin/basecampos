@@ -128,6 +128,13 @@ QString IntentBroker::nameForEndpoint(IntentEndpoint* endpoint) const
 void IntentBroker::submit(IntentEndpoint* from, const QString& requestId,
                           const QString& intent, const QVariantMap& params)
 {
+    submitTo(from, requestId, intent, params, QString(), true);
+}
+
+void IntentBroker::submitTo(IntentEndpoint* from, const QString& requestId,
+                            const QString& intent, const QVariantMap& params,
+                            const QString& target, bool present)
+{
     if (!from)
         return;
 
@@ -155,7 +162,8 @@ void IntentBroker::submit(IntentEndpoint* from, const QString& requestId,
     request.phase = Phase::Accepted;
     request.acceptedAtMs = nowMs();
     request.phaseSinceMs = request.acceptedAtMs;
-
+    request.target = target;
+    request.present = present;
 
     m_pending.insert(request.dispatchId, request);
 
@@ -207,6 +215,28 @@ void IntentBroker::startRequest(const QString& dispatchId)
             << "IntentBroker: refusing" << intent << "from" << requesterName
             << "— not a permitted requester";
         failWithFloor(dispatchId, logos::intent::errUnavailable());
+        return;
+    }
+
+    // TARGETED (submitTo): the shell names the provider, so there is nothing
+    // to resolve and nobody to ask. Still only to an app that says it handles
+    // the intent: an object's publisher that never declared `objects.action`
+    // gets nothing, and the shell learns `unavailable` like anyone would.
+    if (!it->target.isEmpty()) {
+        const QString target = it->target;
+        if (!isShellProvider(requesterName)) {
+            qWarning().noquote() << "IntentBroker: refusing a targeted" << intent
+                                 << "from" << requesterName << "— only the shell may name a provider";
+            failWithFloor(dispatchId, logos::intent::errUnavailable());
+            return;
+        }
+        if (!m_registry->declaresProvide(target, intent)) {
+            qWarning().noquote() << "IntentBroker:" << target << "does not provide" << intent
+                                 << "— targeted request answered unavailable";
+            failWithFloor(dispatchId, logos::intent::errUnavailable());
+            return;
+        }
+        chooseProvider(dispatchId, target);
         return;
     }
 
@@ -583,7 +613,7 @@ void IntentBroker::dispatchTo(const QString& dispatchId)
     // Not for the shell: it has no widget to raise, and its handler does its
     // own navigating (the repositories intent lands the user on Settings).
     // Calling presentApp here would either no-op or fight that.
-    if (m_presenter && !isShellProvider(providerName)) {
+    if (m_presenter && !isShellProvider(providerName) && it->present) {
         m_presenter->presentApp(providerName);
         it = m_pending.find(dispatchId);
         if (it == m_pending.end())

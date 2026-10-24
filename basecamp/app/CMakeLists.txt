@@ -312,6 +312,7 @@ set(PROJECT_SOURCES
 
     MainUIBackend.cpp
     NotificationCenter.cpp
+    ObjectStore.cpp
     DesktopNotifier.cpp
     ShellIntents.cpp
 

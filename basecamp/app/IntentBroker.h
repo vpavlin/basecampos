@@ -108,6 +108,24 @@ public:
     // ── Called by the router adapter ────────────────────────────────────
     void submit(IntentEndpoint* from, const QString& requestId,
                 const QString& intent, const QVariantMap& params);
+
+    // The shell sending a request to ONE named app, with no chooser: an object's
+    // action goes back to the app that published it (SHELL-OBJECTS-SPEC §5) and
+    // to nobody else, however many apps provide the same intent. Everything
+    // else is the ordinary path: the requester must declare the use, `target`
+    // must provide the intent (otherwise `unavailable`, on the usual floor), and
+    // an unloaded target is activated first.
+    //
+    // SHELL ONLY. Skipping the user's choice is exactly what the chooser exists
+    // to prevent, so a targeted submit from any other requester is refused as
+    // `unavailable`; the bridge adapter never exposes this to apps anyway.
+    //
+    // `present` false delivers without bringing the target forward (Join, a
+    // reply), so a click in a view does not yank the user into another app. An
+    // unloaded target still has to be loaded to hear it, and loading shows it.
+    void submitTo(IntentEndpoint* from, const QString& requestId,
+                  const QString& intent, const QVariantMap& params,
+                  const QString& target, bool present = true);
     // Returns whether the response was accepted. False means the dispatch had
     // already ended (requester gone, timed out) and nobody heard the answer —
     // a provider that performed side effects needs to know that.
@@ -202,6 +220,8 @@ private:
         bool didNavigate = false;
         qint64 navigatedAtMs = 0;
         bool isHandoff = false;
+        QString target;          // submitTo(): the only provider allowed
+        bool present = true;     // bring the provider forward on dispatch
     };
 
     void startRequest(const QString& dispatchId);

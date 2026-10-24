@@ -31,6 +31,7 @@ private slots:
     void testAppLaunchTakesTheAppNameAsAParameter();
     void testPreRenameNamesAreGone();
     void testAppsCannotClaimTheNewNavigationIntents();
+    void testObjectsActionIsRequestableByTheShellAlone();
 
 private:
     static IntentRegistry* freshRegistry(QObject* parent)
@@ -227,6 +228,36 @@ void TestShellIntents::testAppsCannotClaimTheNewNavigationIntents()
         QCOMPARE(resolution.found.size(), 1);
         QCOMPARE(resolution.found.first().moduleName, QStringLiteral("main_ui"));
     }
+}
+
+void TestShellIntents::testObjectsActionIsRequestableByTheShellAlone()
+{
+    // An action reaches a publisher as `objects.action` { key, action, text? }.
+    // Apps provide it, so the namespace no longer keeps them from asking for
+    // it: the requester restriction is what does, and it is code-declared
+    // policy that must survive the registry re-reading what is installed.
+    QTemporaryDir root;
+    const QString dir = root.filePath(QStringLiteral("forger"));
+    QVERIFY(QDir().mkpath(dir));
+    QFile meta(QDir(dir).filePath(QStringLiteral("metadata.json")));
+    QVERIFY(meta.open(QIODevice::WriteOnly));
+    meta.write(R"({"uses":[{"intent":"objects.action"}]})");
+    meta.close();
+
+    QObject owner;
+    IntentRegistry* registry = freshRegistry(&owner);
+    QVERIFY(registry->requesterAllowed(ShellIntents::kObjectsActionIntent, QStringLiteral("main_ui")));
+    QVERIFY(!registry->requesterAllowed(ShellIntents::kObjectsActionIntent, QStringLiteral("forger_ui")));
+
+    registry->rebuild({ { QStringLiteral("forger_ui"),
+                          QVariantMap{ { QStringLiteral("installDir"), dir },
+                                       { QStringLiteral("type"),
+                                         QStringLiteral("ui_qml") } } } },
+                      nullptr, nullptr);
+    QVERIFY(registry->declaresUse(QStringLiteral("forger_ui"), ShellIntents::kObjectsActionIntent));
+    QVERIFY(!registry->requesterAllowed(ShellIntents::kObjectsActionIntent, QStringLiteral("forger_ui")));
+    QVERIFY(registry->requesterAllowed(ShellIntents::kObjectsActionIntent, QStringLiteral("main_ui")));
+    QVERIFY(!registry->requesterAllowed(ShellIntents::kObjectsActionIntent, QString()));
 }
 
 QTEST_MAIN(TestShellIntents)

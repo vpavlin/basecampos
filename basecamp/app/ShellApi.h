@@ -42,6 +42,9 @@ class ShellApi : public QObject {
     Q_PROPERTY(QVariantList buildCommits READ buildCommits CONSTANT)
     Q_PROPERTY(QVariantList notificationApps READ notificationApps NOTIFY notificationsChanged)
     Q_PROPERTY(bool desktopNotifications READ desktopNotifications WRITE setDesktopNotifications NOTIFY notificationsChanged)
+    // Settings → Search: apps that publish objects, { name, displayName, icon,
+    // enabled, count } (SHELL-OBJECTS-SPEC §8).
+    Q_PROPERTY(QVariantList searchApps READ searchApps NOTIFY searchChanged)
     // The shell's own preferences (layout, shell, wallpaper, restart, file
     // picker), handed over by the shell. null under a shell that has none.
     Q_PROPERTY(QObject* prefs READ prefs NOTIFY prefsChanged)
@@ -93,6 +96,7 @@ public:
     QVariantList notificationApps() const;
     bool desktopNotifications() const;
     void setDesktopNotifications(bool on);
+    QVariantList searchApps() const;
     QObject* prefs() const;
     QString pendingSection() const;
 
@@ -124,6 +128,7 @@ public:
     Q_INVOKABLE QString callCoreModuleMethod(const QString& name, const QString& method,
                                              const QString& argsJson);
     Q_INVOKABLE void setNotificationsEnabled(const QString& app, bool enabled);
+    Q_INVOKABLE void setSearchEnabled(const QString& app, bool enabled);
     Q_INVOKABLE QVariantList roleCandidates(const QString& role) const;
     Q_INVOKABLE bool assignRole(const QString& role, const QString& app);
     Q_INVOKABLE void resetRole(const QString& role);
@@ -153,6 +158,7 @@ signals:
                                       bool success, const QString& error);
     void modulesChanged();
     void notificationsChanged();
+    void searchChanged();
     void prefsChanged();
     void sectionRequested(const QString& section);
     void appsChanged();

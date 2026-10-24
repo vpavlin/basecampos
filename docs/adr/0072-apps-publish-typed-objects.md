@@ -9,7 +9,7 @@ The shell can show notifications from apps but nothing else: it can't find a tra
 - **Apps publish objects** through intents (`basecamp.objects.publish` / `retract`). An object has an app-chosen `key` (same key replaces), a **type from a shared list** (account, asset, transaction, message, post, community, contact, news, notification; `x.<app>.<name>` for an app's own), a `kind`, plain-text title, typed `fields`, `subjects`, `refs`, up to three `actions`, optional `progress` and `time`.
 - **Types, not apps, organise what the user sees:** two apps publishing `transaction` fill one Transactions card.
 - **Split the jobs:** the host stores and enforces; the **`search` role ranks** (query + filter → ids) and draws nothing; **views draw by type** (home, launcher, the switcher) with shared per-type cards and a generic fallback. A host ranker answers when no app holds `search`.
-- **Actions go back to the publisher** (`basecamp.objects.action`), including text for reply.
+- **Actions go back to the publisher** as `objects.action` (apps can't provide `basecamp.*`), sent by a targeted submit to that publisher alone and requestable by the shell only; text flows back for reply.
 - **Objects join by subject** (`logos:pk:…`, `<network>:<address>`), never by display name.
 - **Revocation is real:** switching an app off in Settings → Search, or uninstalling it, deletes what it published. v0 keeps everything in memory, on the device.
 - **The privacy boundary is left open**, but every type field is marked *label* or *content* now, so the decision (content in the object, pointer, or per field) can be applied without changing the types.

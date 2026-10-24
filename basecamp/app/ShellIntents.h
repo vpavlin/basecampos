@@ -38,6 +38,26 @@ inline const QStringList kNavigationIntents = {
 inline const QString kNotificationsPostIntent =
     QStringLiteral("basecamp.notifications.post");
 
+// Shell objects (SHELL-OBJECTS-SPEC.md, ADR-072). Publish `{ objects: [ … ] }`
+// and retract `{ keys: [ … ] }` or `{ all: true }`, answered in C++ like
+// notifications (ObjectStore). Not navigation either.
+inline const QString kObjectsPublishIntent =
+    QStringLiteral("basecamp.objects.publish");
+inline const QString kObjectsRetractIntent =
+    QStringLiteral("basecamp.objects.retract");
+
+// An action on an object, sent back to the app that published it alone:
+// `{ key, action, text? }`. NOT "basecamp.*": the shell is the requester here
+// and the publishing app the provider, and the registry refuses that
+// namespace from any app's `provides`. A publisher that wants actions declares
+// it in "provides"; the shell names it as the only provider (submitTo), so a
+// second app providing the same intent never hears another app's actions.
+// And the shell is its only permitted REQUESTER (registerWith restricts it):
+// an app declaring it in `uses` is answered `unavailable`. A publisher should
+// still accept it only from requester "main_ui" — belt and braces, and the
+// rule an app can check on its own side.
+inline const QString kObjectsActionIntent = QStringLiteral("objects.action");
+
 // Bring a named app forward: `{ "app": "wallet_ui" }`.
 inline const QString kAppLaunchIntent = QStringLiteral("basecamp.apps.launch");
 inline const QString kPackageManagerAppName =

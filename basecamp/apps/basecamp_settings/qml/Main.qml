@@ -55,6 +55,7 @@ Rectangle {
 
             function showSection(section) {
                 if (section === "repositories") showRepositories()
+                else if (section === "search") showSearch()
             }
 
             Connections {
