@@ -1,0 +1,96 @@
+{
+  "repositories": [
+    "https://raw.githubusercontent.com/logos-co/logos-modules-release/refs/heads/main/logos-repo.json",
+    "https://apps.vpavlin.xyz/logos-repo.json"
+  ],
+  "requested": [
+    "accounts_ui",
+    "chat_ui",
+    "blockchain_ui",
+    "storage_ui",
+    "shrooms",
+    "shrooms_agents"
+  ],
+  "packages": [
+    {
+      "name": "accounts_ui",
+      "version": "0.3.0",
+      "type": "ui_qml",
+      "repo": "logos-modules-official",
+      "url": "https://github.com/logos-co/logos-modules-release/releases/download/accounts_ui-v0.3.0/accounts_ui-0.3.0.lgx",
+      "sha256": "f5a5fecb0bb80e590ee13ace43f12f08dc59ea9fcd1eec8c0447cd35e91bd364"
+    },
+    {
+      "name": "delivery_module",
+      "version": "0.4.0",
+      "type": "core",
+      "repo": "logos-modules-official",
+      "url": "https://github.com/logos-co/logos-modules-release/releases/download/delivery_module-v0.4.0/delivery_module-0.4.0.lgx",
+      "sha256": "cfecd6f216c152e9185c5e631983b6e5b5ceefa30952e131bf010324f9b3b410"
+    },
+    {
+      "name": "chat_module",
+      "version": "0.3.0",
+      "type": "core",
+      "repo": "logos-modules-official",
+      "url": "https://github.com/logos-co/logos-modules-release/releases/download/chat_module-v0.3.0/chat_module-0.3.0.lgx",
+      "sha256": "4bf1b4ce8067f6dbab48355ae62319ed3e70b56a24e38049ecf138d420324425"
+    },
+    {
+      "name": "chat_ui",
+      "version": "0.3.0",
+      "type": "ui_qml",
+      "repo": "logos-modules-official",
+      "url": "https://github.com/logos-co/logos-modules-release/releases/download/chat_ui-v0.3.0/chat_ui-0.3.0.lgx",
+      "sha256": "af3a8b4941073c427a01694e865a3fcc0aa6cbcf56ed3ed45afbb6e2c8c30c4d"
+    },
+    {
+      "name": "blockchain_module",
+      "version": "0.3.2",
+      "type": "core",
+      "repo": "logos-modules-official",
+      "url": "https://github.com/logos-co/logos-modules-release/releases/download/blockchain_module-v0.3.2/blockchain_module-0.3.2.lgx",
+      "sha256": "08f6a5e7a3ad45fbcd6ba6262c4b84ca5be5325376d273fd7fb0143bcab02d41"
+    },
+    {
+      "name": "blockchain_ui",
+      "version": "0.3.2",
+      "type": "ui_qml",
+      "repo": "logos-modules-official",
+      "url": "https://github.com/logos-co/logos-modules-release/releases/download/blockchain_ui-v0.3.2/blockchain_ui-0.3.2.lgx",
+      "sha256": "f7300897146809a7993a58e30851263f1b5c8b5e7515dc13430b00c4d5e7e459"
+    },
+    {
+      "name": "storage_ui",
+      "version": "3.0.2",
+      "type": "ui_qml",
+      "repo": "logos-modules-official",
+      "url": "https://github.com/logos-co/logos-modules-release/releases/download/storage_ui-v3.0.2/storage_ui-3.0.2.lgx",
+      "sha256": "3adbed3020e0ab8a9daaad902928141f2a3c680ebd171319c9bb686ef01b15b2"
+    },
+    {
+      "name": "shrooms_core",
+      "version": "0.26.0",
+      "type": "core",
+      "repo": "vpavlin-modules",
+      "url": "https://github.com/vpavlin/logos-basecamp-modules/releases/download/shrooms_core-v0.26.0/shrooms_core-0.26.0.lgx",
+      "sha256": "b4b4fc05250eb4b5b63fbfb16f1a7bbea6d9ae00472185b2e8a30b045b4a7166"
+    },
+    {
+      "name": "shrooms",
+      "version": "0.14.0",
+      "type": "ui_qml",
+      "repo": "vpavlin-modules",
+      "url": "https://github.com/vpavlin/logos-basecamp-modules/releases/download/shrooms-v0.14.0/shrooms-0.14.0.lgx",
+      "sha256": "b44c68d8c3b3010143ff167583075491dba383fa0d216c34edb2cd19e750b207"
+    },
+    {
+      "name": "shrooms_agents",
+      "version": "0.52.0",
+      "type": "ui_qml",
+      "repo": "vpavlin-modules",
+      "url": "https://github.com/vpavlin/logos-basecamp-modules/releases/download/shrooms_agents-v0.52.0/shrooms_agents-0.52.0.lgx",
+      "sha256": "875abe774a21ec5b8e82a8bc7ac10c5a50e0f0dd9529326a5d25e38273f26e09"
+    }
+  ]
+}

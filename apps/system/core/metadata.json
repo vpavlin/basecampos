@@ -1,0 +1,24 @@
+{
+  "name": "basecampos_system",
+  "display_name": "BasecampOS System",
+  "version": "0.1.0",
+  "type": "core",
+  "interface": "universal",
+  "category": "system",
+  "description": "The operating system under Basecamp: power off, restart and suspend through logind, Wi-Fi and network state through NetworkManager, volume through PipeWire, and facts about the machine. Exists because a ui_qml app is sandboxed and cannot run a program; this runs in its own process and can. Every method returns JSON, with an error field when something failed.",
+  "main": "basecampos_system_plugin",
+  "dependencies": [],
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}

@@ -1,0 +1,6 @@
+/src/
+result*
+/logs/
+*.qcow2
+/vm/
+/gallery/

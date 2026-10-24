@@ -1,0 +1,18 @@
+{
+  "name": "basecampos_system_ui",
+  "display_name": "System",
+  "version": "0.1.0",
+  "type": "ui_qml",
+  "category": "system",
+  "description": "BasecampOS system settings: shut down, restart and sleep; volume; network and Wi-Fi. Works through the basecampos_system core module, since a view cannot run programs itself.",
+  "view": "Main.qml",
+  "icon": "icon.png",
+  "dependencies": [
+    "basecampos_system"
+  ],
+  "nix": {
+    "packages": { "build": [], "runtime": [] },
+    "external_libraries": [],
+    "cmake": { "find_packages": [] }
+  }
+}
