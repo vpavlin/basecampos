@@ -337,28 +337,47 @@ std::string BasecamposSystemImpl::wifiRadio(const std::string& state)
     return okOrError(run({ "nmcli", "radio", "wifi", state }));
 }
 
+// PipeWire (wpctl) where it runs the sound, PulseAudio (pactl) otherwise: the
+// Duet keeps PulseAudio for sound and runs PipeWire only for its cameras.
 std::string BasecamposSystemImpl::volume()
 {
     // "Volume: 0.40" or "Volume: 0.40 [MUTED]"
     Result r = run({ "wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@" });
-    if (r.code != 0)
+    if (r.code == 0) {
+        double v = 0;
+        std::sscanf(r.out.c_str(), "Volume: %lf", &v);
+        bool muted = r.out.find("MUTED") != std::string::npos;
+        return "{\"percent\":" + std::to_string(static_cast<int>(v * 100 + 0.5))
+            + ",\"muted\":" + (muted ? "true" : "false") + "}";
+    }
+    // "Volume: front-left: 26214 /  40% / ..." and "Mute: no"
+    Result p = run({ "pactl", "get-sink-volume", "@DEFAULT_SINK@" });
+    if (p.code != 0)
         return error(r.out.empty() ? "no audio output" : r.out);
-    double v = 0;
-    std::sscanf(r.out.c_str(), "Volume: %lf", &v);
-    bool muted = r.out.find("MUTED") != std::string::npos;
-    return "{\"percent\":" + std::to_string(static_cast<int>(v * 100 + 0.5))
-        + ",\"muted\":" + (muted ? "true" : "false") + "}";
+    int pct = 0;
+    auto slash = p.out.find('/');
+    if (slash != std::string::npos)
+        pct = std::atoi(p.out.c_str() + slash + 1);
+    bool muted = run({ "pactl", "get-sink-mute", "@DEFAULT_SINK@" }).out.find("yes") != std::string::npos;
+    return "{\"percent\":" + std::to_string(pct) + ",\"muted\":" + (muted ? "true" : "false") + "}";
 }
 
 std::string BasecamposSystemImpl::setVolume(int64_t percent)
 {
     percent = std::clamp<int64_t>(percent, 0, 150);
-    return okOrError(run({ "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", std::to_string(percent) + "%" }));
+    std::string v = std::to_string(percent) + "%";
+    Result r = run({ "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", v });
+    if (r.code == 0)
+        return "{\"ok\":true}";
+    return okOrError(run({ "pactl", "set-sink-volume", "@DEFAULT_SINK@", v }));
 }
 
 std::string BasecamposSystemImpl::toggleMute()
 {
-    return okOrError(run({ "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle" }));
+    Result r = run({ "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle" });
+    if (r.code == 0)
+        return "{\"ok\":true}";
+    return okOrError(run({ "pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle" }));
 }
 
 // ---- native apps -----------------------------------------------------------

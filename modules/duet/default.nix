@@ -1,14 +1,16 @@
-# The Duet tablet session, from duet-kit (github.com/vpavlin/duet-kit).
+# The Lenovo IdeaPad Duet (krane, MT8183), from duet-kit (github.com/vpavlin/duet-kit).
 #
-# duet-kit stays the source of truth: the Duet agent keeps tuning it on the
-# device and BasecampOS picks it up with `nix flake update duet-kit`. This
-# module installs the kit's files as they are, rewriting only what is
-# Debian-specific (binary paths, the Basecamp AppImage, /home/linux), and maps
-# its /etc pieces onto NixOS.
+# Basecamp is the UI (basecampos.shell.session = "sway"): duet-kit's own UI
+# (waybar, launcher, quick-settings/Wi-Fi/Bluetooth/display panels, app tabs)
+# is NOT used; the System app covers it. What is taken from the kit is what
+# makes the hardware work, with the kit as the source of truth (the Duet agent
+# keeps tuning it; `nix flake update duet-kit` picks it up):
 #
-#   home/  -> linked into the user's home (a few files the scripts rewrite are
-#             copied instead, once); ~/.local/bin is a wrapped package
 #   etc/   -> udev, logind, journald, NetworkManager, tmpfiles, battery-limit
+#   home/  -> a whitelist (camera graph, portals, notifications, VNC, theme)
+#             linked into the user's home; the session daemons (autorotate,
+#             idle-dim, keyboard-layout keeper, on-screen keyboard, F-keys) are
+#             run from the Sway config with Debian paths rewritten
 #
 # Hardware-only parts (cros_ec battery limit, keyboard cover wakeup, CPU
 # governor) sit behind `hardware`, so the session also runs in an x86 VM.
@@ -43,6 +45,9 @@ let
       -e 's|/usr/bin/brave-browser|${pkgs.brave}/bin/brave|g' \
       -e 's|/usr/bin/wayvnc|${pkgs.wayvnc}/bin/wayvnc|g' \
       -e 's|/usr/bin/waybar|${pkgs.waybar}/bin/waybar|g'
+    # The `czech` layer exists only in the Duet's patched wvkbd (the patch is not in
+    # duet-kit yet); stock wvkbd exits on an unknown layer, so use its own layers.
+    sed -i -e 's| --landscape-layers czech,landscapespecial||' $out/.local/bin/osk
     # foot 1.2x renamed [colors] (Debian's foot still reads it).
     sed -i -e 's|^\[colors\]$|[colors-dark]|' $out/.config/foot/foot.ini
     # The Debian unit trusts a self-signed LAN repo; that bundle
@@ -71,7 +76,15 @@ let
   listFiles = dir: prefix: lib.concatLists (lib.mapAttrsToList (name: type:
     if type == "directory" then listFiles "${dir}/${name}" "${prefix}${name}/"
     else [ "${prefix}${name}" ]) (builtins.readDir dir));
-  homeFiles = listFiles "${kit}/home" "";
+  # duet-kit's home files that are not UI: the camera graph, portals (screen
+  # sharing), notifications, VNC, theme and terminal settings.
+  keep = f: builtins.any (p: lib.hasPrefix p f) [
+    ".config/systemd/user/camera-" ".config/systemd/user/screen-share.service"
+    ".config/libcamera/" ".config/xdg-desktop-portal" ".config/mako/"
+    ".config/gtk-3.0/" ".config/gtk-4.0/" ".config/foot/" ".config/wayvnc/"
+  ];
+  homeFiles = builtins.filter keep (listFiles "${kit}/home" "");
+  bin = "${homeTree}/.local/bin";
 
   # `systemctl --user enable` on Debian: link each unit into its WantedBy's .wants.
   unitDir = ".config/systemd/user";
@@ -132,24 +145,63 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    basecampos.shell.session = "external";
-    # Basecamp in a Sway window: the sidebar layout, as on the device today.
-    basecampos.shell.layout = lib.mkDefault "sidebar";
+    basecampos.shell.session = "sway";
 
+    # The tablet's Sway rules (panel, touch, keyboard cover) and the kit's
+    # session daemons, on top of BasecampOS's own Sway config.
+    basecampos.shell.swayExtraConfig = ''
+      output DSI-1 transform 270 scale 1.25
+      input type:touch map_to_output DSI-1
+      input type:tablet_tool map_to_output DSI-1
+      input type:keyboard {
+          xkb_layout cz,us
+          xkb_options grp:alt_shift_toggle
+      }
+      input type:touchpad {
+          tap enabled
+          natural_scroll enabled
+      }
 
-    # Session: autologin straight into Sway (lightdm on Debian).
-    programs.sway = {
-      enable = true;
-      wrapperFeatures.gtk = true;
-      extraPackages = [ ];
-    };
-    services.greetd = {
-      enable = true;
-      settings = rec {
-        initial_session = { command = "${pkgs.sway}/bin/sway"; user = cfg.user; };
-        default_session = initial_session;
-      };
-    };
+      # on-screen keyboard: shown when the keyboard cover is folded away / detached
+      exec ${bin}/osk
+      bindswitch --reload --locked tablet:on exec pkill -USR2 wvkbd-mobintl
+      bindswitch --reload --locked tablet:off exec ${bin}/osk
+      exec ${bin}/autorotate
+      exec ${bin}/kbd-layout-keeper
+      exec ${bin}/idle-dim
+      exec ${pkgs.mako}/bin/mako
+
+      # projector mirror (wl-mirror, started by the System app) never takes focus
+      for_window [app_id="at.yrlf.wl_mirror"] no_focus, border none
+      no_focus [app_id="at.yrlf.wl_mirror"]
+
+      bindsym Print exec ${bin}/screenshot
+      # keyboard top row (Chromebook layout; the keys send plain F1-F10 and F13)
+      bindsym F1 exec wtype -M alt -k Left -m alt
+      bindsym F2 exec wtype -M alt -k Right -m alt
+      bindsym F3 exec wtype -M ctrl -k r -m ctrl
+      bindsym F4 fullscreen toggle
+      bindsym F5 workspace next_on_output
+      bindsym F6 exec brightnessctl set 10%-
+      bindsym F7 exec brightnessctl set +10%
+      bindsym F8 exec pactl set-sink-mute @DEFAULT_SINK@ toggle
+      bindsym F9 exec pactl set-sink-volume @DEFAULT_SINK@ -5%
+      bindsym F10 exec pactl set-sink-volume @DEFAULT_SINK@ +5%
+      bindsym F13 exec systemctl suspend
+      mode "fkey" {
+          bindsym Mod4+Mod1+Shift+Control+F12 nop
+      }
+    '' + lib.concatMapStrings (n: "bindsym $mod+F${toString n} exec ${bin}/fkey ${toString n}\n") (lib.range 1 10);
+
+    # Brave with the flags the tablet's Mali GPU and camera need (duet-kit's brave.service).
+    basecampos.shell.externalApps = lib.mkForce [
+      {
+        id = "browser"; appId = "brave-browser"; name = "Browser";
+        command = [ "${pkgs.brave}/bin/brave" "--ozone-platform=wayland" "--use-gl=angle" "--use-angle=gles"
+          "--password-store=basic" "--enable-features=WebRtcPipeWireCamera,WebRTCPipeWireCapturer" ];
+      }
+      { id = "terminal"; appId = "foot"; name = "Terminal"; command = [ "${pkgs.foot}/bin/foot" ]; }
+    ];
 
     # Audio as on the device: PulseAudio for sound, PipeWire only as the
     # camera/screen-capture graph (the kit's camera-pipewire user units).
