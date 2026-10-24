@@ -190,6 +190,8 @@
       packages.aarch64-linux = arm.packages // {
         toplevel = self.nixosConfigurations.basecampos-arm.config.system.build.toplevel;
         duet-toplevel = self.nixosConfigurations.basecampos-duet.config.system.build.toplevel;
+        duet-kpart = self.nixosConfigurations.basecampos-duet.config.system.build.depthchargeKpart;
+        duet-image = self.nixosConfigurations.basecampos-duet.config.system.build.depthchargeImage;
         disk-image = self.nixosConfigurations.basecampos-arm.config.system.build.images.raw-efi;
       };
 

@@ -61,6 +61,19 @@ jobs:
           nix build -L .#packages.aarch64-linux.duet-toplevel -o duet
           nix path-info -Sh ./duet
 
+      - name: Build the Duet USB image (depthcharge)
+        run: |
+          nix build -L .#packages.aarch64-linux.duet-image -o duet-image
+          ls -la duet-image/
+          cat duet-image/verify.txt duet-image/cmdline
+          mkdir -p out-duet && cp duet-image/* out-duet/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: basecampos-duet-image-${{ github.sha }}
+          path: out-duet/
+          retention-days: 14
+
       - uses: actions/upload-artifact@v4
         with:
           name: basecampos-aarch64-${{ github.sha }}
