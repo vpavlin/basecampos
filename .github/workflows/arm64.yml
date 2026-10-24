@@ -6,12 +6,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      target:
-        description: "What to build: apps (Basecamp + BasecampOS apps) or system (the whole basecampos-arm closure)"
-        default: apps
-        type: choice
-        options: [apps, system]
 
 permissions:
   contents: read
@@ -57,7 +51,6 @@ jobs:
           ls -la out
 
       - name: Build the whole basecampos-arm system
-        if: github.event_name == 'workflow_dispatch' && inputs.target == 'system'
         run: |
           nix build -L .#packages.aarch64-linux.toplevel -o system
           nix path-info -Sh ./system
