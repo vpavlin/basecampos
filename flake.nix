@@ -173,6 +173,7 @@
         basecampos-live = mkHost "x86_64-linux" [ ./hosts/live.nix ];
         # Generic arm64 desktop (UEFI): the whole aarch64 closure, built on CI.
         basecampos-arm = mkHost "aarch64-linux" [ ./hosts/desktop.nix { basecampos.shell.session = "sway"; } ];
+        basecampos-duet = mkHost "aarch64-linux" [ ./hosts/duet.nix ];
       };
 
       packages.x86_64-linux = x86.packages // {
@@ -188,6 +189,7 @@
 
       packages.aarch64-linux = arm.packages // {
         toplevel = self.nixosConfigurations.basecampos-arm.config.system.build.toplevel;
+        duet-toplevel = self.nixosConfigurations.basecampos-duet.config.system.build.toplevel;
         disk-image = self.nixosConfigurations.basecampos-arm.config.system.build.images.raw-efi;
       };
 

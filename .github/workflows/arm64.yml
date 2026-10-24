@@ -10,9 +10,10 @@ on:
 permissions:
   contents: read
 
+# Queue rather than cancel: a full build takes long, and every run starts cold.
 concurrency:
   group: arm64-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -54,6 +55,11 @@ jobs:
         run: |
           nix build -L .#packages.aarch64-linux.toplevel -o system
           nix path-info -Sh ./system
+
+      - name: Build the Duet system (basecampos-duet)
+        run: |
+          nix build -L .#packages.aarch64-linux.duet-toplevel -o duet
+          nix path-info -Sh ./duet
 
       - uses: actions/upload-artifact@v4
         with:
