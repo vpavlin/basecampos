@@ -460,3 +460,220 @@ std::string BasecamposSystemImpl::showBasecamp()
     // The session marks Basecamp's window "basecamp" (see the sway config).
     return okOrError(run({ "swaymsg", "[con_mark=\"basecamp\"] focus" }));
 }
+
+// ---- display, bluetooth, battery, tablet ----------------------------------
+
+namespace {
+
+bool validMac(const std::string& m)
+{
+    if (m.size() != 17)
+        return false;
+    for (size_t i = 0; i < m.size(); ++i) {
+        if (i % 3 == 2) {
+            if (m[i] != ':')
+                return false;
+        } else if (!std::isxdigit(static_cast<unsigned char>(m[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string home()
+{
+    for (const auto& kv : childEnvStorage())
+        if (kv.rfind("HOME=", 0) == 0)
+            return kv.substr(5);
+    return "/tmp";
+}
+
+const char* kChargeConf = "/etc/default/battery-limit";
+
+// Sway's outputs in order; the first is taken as the internal panel.
+std::vector<std::string> outputs()
+{
+    std::vector<std::string> names;
+    std::string j = run({ "swaymsg", "-t", "get_outputs", "-r" }).out;
+    const std::string key = "\"name\": \"";
+    size_t pos = 0;
+    while ((pos = j.find(key, pos)) != std::string::npos) {
+        pos += key.size();
+        size_t end = j.find('"', pos);
+        std::string n = j.substr(pos, end - pos);
+        if (safeCriterion(n))
+            names.push_back(n);
+        pos = end;
+    }
+    return names;
+}
+
+} // namespace
+
+std::string BasecamposSystemImpl::brightness()
+{
+    // brightnessctl -m: device,class,current,percent%,max
+    Result r = run({ "brightnessctl", "-m", "-c", "backlight", "info" });
+    if (r.code != 0 || r.out.empty())
+        return "{\"available\":false}";
+    std::vector<std::string> f;
+    std::stringstream ss(trim(r.out));
+    std::string x;
+    while (std::getline(ss, x, ','))
+        f.push_back(x);
+    int pct = f.size() > 3 ? std::atoi(f[3].c_str()) : 0;
+    return "{\"available\":true,\"percent\":" + std::to_string(pct) + "}";
+}
+
+std::string BasecamposSystemImpl::setBrightness(int64_t percent)
+{
+    percent = std::clamp<int64_t>(percent, 1, 100);
+    return okOrError(run({ "brightnessctl", "-q", "-c", "backlight", "set", std::to_string(percent) + "%" }));
+}
+
+std::string BasecamposSystemImpl::bluetooth()
+{
+    Result show = run({ "bluetoothctl", "show" });
+    if (show.code != 0 || show.out.find("Controller") == std::string::npos)
+        return "{\"available\":false}";
+    bool powered = show.out.find("Powered: yes") != std::string::npos;
+    std::string devs;
+    for (const auto& l : lines(run({ "bluetoothctl", "devices" }).out)) {
+        // "Device AA:BB:CC:DD:EE:FF Name"
+        if (l.rfind("Device ", 0) != 0 || l.size() < 24)
+            continue;
+        std::string mac = l.substr(7, 17);
+        if (!validMac(mac))
+            continue;
+        std::string name = l.size() > 25 ? l.substr(25) : mac;
+        std::string info = run({ "bluetoothctl", "info", mac }).out;
+        if (!devs.empty())
+            devs += ",";
+        devs += "{\"mac\":\"" + mac + "\",\"name\":\"" + esc(name)
+            + "\",\"paired\":" + (info.find("Paired: yes") != std::string::npos ? "true" : "false")
+            + ",\"connected\":" + (info.find("Connected: yes") != std::string::npos ? "true" : "false") + "}";
+    }
+    return std::string("{\"available\":true,\"powered\":") + (powered ? "true" : "false")
+        + ",\"devices\":[" + devs + "]}";
+}
+
+std::string BasecamposSystemImpl::bluetoothPower(const std::string& state)
+{
+    if (state != "on" && state != "off")
+        return error("state must be on or off");
+    return okOrError(run({ "bluetoothctl", "power", state }));
+}
+
+std::string BasecamposSystemImpl::bluetoothScan()
+{
+    run({ "bluetoothctl", "--timeout", "8", "scan", "on" });
+    return bluetooth();
+}
+
+std::string BasecamposSystemImpl::bluetoothDevice(const std::string& mac, const std::string& action)
+{
+    if (!validMac(mac))
+        return error("not a Bluetooth address");
+    if (action == "connect") {
+        std::string info = run({ "bluetoothctl", "info", mac }).out;
+        if (info.find("Paired: yes") == std::string::npos) {
+            Result p = run({ "bluetoothctl", "--timeout", "20", "pair", mac });
+            if (p.code != 0)
+                return error(p.out.empty() ? "pairing failed" : p.out);
+        }
+        run({ "bluetoothctl", "trust", mac });
+        return okOrError(run({ "bluetoothctl", "--timeout", "20", "connect", mac }));
+    }
+    if (action == "disconnect")
+        return okOrError(run({ "bluetoothctl", "disconnect", mac }));
+    if (action == "forget")
+        return okOrError(run({ "bluetoothctl", "remove", mac }));
+    return error("unknown action: " + action);
+}
+
+std::string BasecamposSystemImpl::chargeLimit()
+{
+    std::ifstream f(kChargeConf);
+    if (!f)
+        return "{\"available\":false}";
+    int upper = 100;
+    std::string l;
+    while (std::getline(f, l))
+        if (l.rfind("UPPER=", 0) == 0)
+            upper = std::atoi(l.c_str() + 6);
+    return "{\"available\":true,\"upper\":" + std::to_string(upper) + "}";
+}
+
+std::string BasecamposSystemImpl::setChargeLimit(int64_t upper)
+{
+    // The battery-limit service reads this file (and clamps what it reads);
+    // it is owned by the session user, so no privilege is needed.
+    upper = std::clamp<int64_t>(upper / 5 * 5, 50, 100);
+    std::ofstream f(kChargeConf, std::ios::trunc);
+    if (!f)
+        return error("cannot write the charge limit");
+    f << "UPPER=" << upper << "\nLOWER=" << std::max<int64_t>(0, upper - 5) << "\n";
+    return f ? "{\"ok\":true}" : error("cannot write the charge limit");
+}
+
+std::string BasecamposSystemImpl::tablet()
+{
+    std::string lock = home() + "/.cache/rotation-lock";
+    bool locked = access(lock.c_str(), F_OK) == 0;
+    bool osk = run({ "pgrep", "-x", "wvkbd-mobintl" }).code == 0;
+    bool sensor = access("/sys/bus/iio/devices/iio:device0", F_OK) == 0;
+    return std::string("{\"rotationLocked\":") + (locked ? "true" : "false")
+        + ",\"keyboard\":" + (osk ? "true" : "false")
+        + ",\"orientationSensor\":" + (sensor ? "true" : "false") + "}";
+}
+
+std::string BasecamposSystemImpl::setRotationLock(const std::string& state)
+{
+    // The autorotate daemon (duet-kit) honours this file.
+    std::string dir = home() + "/.cache";
+    std::string lock = dir + "/rotation-lock";
+    if (state == "on") {
+        run({ "mkdir", "-p", dir });
+        std::ofstream(lock).flush();
+    } else if (state == "off") {
+        std::remove(lock.c_str());
+    } else {
+        return error("state must be on or off");
+    }
+    return "{\"ok\":true}";
+}
+
+std::string BasecamposSystemImpl::toggleKeyboard()
+{
+    // wvkbd toggles its visibility on SIGRTMIN (the session starts it hidden).
+    Result r = run({ "pkill", "-RTMIN", "-x", "wvkbd-mobintl" });
+    if (r.code != 0)
+        return error("no on-screen keyboard is running");
+    return "{\"ok\":true}";
+}
+
+std::string BasecamposSystemImpl::displays()
+{
+    auto outs = outputs();
+    if (outs.empty())
+        return "{\"available\":false}";
+    bool mirroring = run({ "systemctl", "--user", "is-active", "--quiet", "display-mirror.service" }).code == 0;
+    std::string ext = outs.size() > 1 ? outs[1] : "";
+    return "{\"available\":true,\"internal\":\"" + outs[0] + "\",\"external\":\"" + ext
+        + "\",\"mirroring\":" + (mirroring ? "true" : "false") + "}";
+}
+
+std::string BasecamposSystemImpl::setMirror(const std::string& state)
+{
+    run({ "systemctl", "--user", "stop", "display-mirror.service" });
+    if (state == "off")
+        return "{\"ok\":true}";
+    if (state != "on")
+        return error("state must be on or off");
+    auto outs = outputs();
+    if (outs.size() < 2)
+        return error("no external display connected");
+    // A transient user unit, so the mirror outlives this call and stops cleanly.
+    return okOrError(run({ "systemd-run", "--user", "--quiet", "--unit=display-mirror", "--collect",
+        findTool("wl-mirror"), "--fullscreen-output", outs[1], "--scaling", "fit", "--no-show-cursor", outs[0] }));
+}

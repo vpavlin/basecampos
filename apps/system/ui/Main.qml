@@ -22,6 +22,13 @@ Item {
     property var sys: ({})
     property var net: ({})
     property var vol: ({})
+    property var light: ({})
+    property var bt: ({})
+    property var charge: ({})
+    property var tab: ({})
+    property var disp: ({})
+    property bool btScanning: false
+    property string btMessage: ""
     property var wifi: []
     property bool scanning: false
     property string powerArmed: ""     // the action waiting for a second tap
@@ -46,6 +53,12 @@ Item {
         sys = call("info")
         net = call("network")
         vol = call("volume")
+        light = call("brightness")
+        charge = call("chargeLimit")
+        tab = call("tablet")
+        disp = call("displays")
+        if (!btScanning)
+            bt = call("bluetooth")
     }
 
     function scan() {
@@ -192,6 +205,151 @@ Item {
                     visible: !!root.vol.error
                     text: root.vol.error || ""
                     color: Theme.palette.textTertiary
+                }
+            }
+
+            // --- Display ----------------------------------------------------
+            Section {
+                title: "Display"
+                visible: !!root.light.available || !!root.tab.keyboard || !!root.tab.orientationSensor || !!root.disp.external
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: !!root.light.available
+                    spacing: Theme.spacing.medium
+                    LogosText { text: "Brightness"; Layout.preferredWidth: 110 }
+                    LogosSlider {
+                        id: lightSlider
+                        objectName: "brightnessSlider"
+                        Layout.fillWidth: true
+                        from: 1; to: 100; stepSize: 1
+                        value: root.light.percent || 50
+                        onMoved: root.call("setBrightness", [Math.round(value)])
+                    }
+                    LogosText { text: Math.round(lightSlider.value) + "%"; Layout.preferredWidth: 48; color: Theme.palette.textSecondary }
+                }
+                RowLayout {
+                    spacing: Theme.spacing.large
+                    LogosSwitch {
+                        objectName: "rotationLock"
+                        visible: !!root.tab.orientationSensor
+                        text: "Lock rotation"
+                        checked: !!root.tab.rotationLocked
+                        onToggled: { root.call("setRotationLock", [checked ? "on" : "off"]); root.tab = root.call("tablet") }
+                    }
+                    LogosButton {
+                        objectName: "keyboardToggle"
+                        visible: !!root.tab.keyboard
+                        text: "On-screen keyboard"
+                        onClicked: root.call("toggleKeyboard")
+                    }
+                }
+                RowLayout {
+                    visible: !!root.disp.external
+                    LogosSwitch {
+                        objectName: "mirrorSwitch"
+                        text: "Mirror to " + (root.disp.external || "external display")
+                        checked: !!root.disp.mirroring
+                        onToggled: { root.call("setMirror", [checked ? "on" : "off"]); root.disp = root.call("displays") }
+                    }
+                }
+            }
+
+            // --- Bluetooth --------------------------------------------------
+            Section {
+                title: "Bluetooth"
+                visible: !!root.bt.available
+                RowLayout {
+                    Layout.fillWidth: true
+                    LogosSwitch {
+                        objectName: "btPower"
+                        text: root.bt.powered ? "On" : "Off"
+                        checked: !!root.bt.powered
+                        onToggled: { root.call("bluetoothPower", [checked ? "on" : "off"]); root.bt = root.call("bluetooth") }
+                    }
+                    Item { Layout.fillWidth: true }
+                    LogosButton {
+                        objectName: "btScan"
+                        text: root.btScanning ? "Scanning…" : "Scan"
+                        enabled: !root.btScanning && !!root.bt.powered
+                        onClicked: {
+                            root.btScanning = true
+                            root.bt = root.call("bluetoothScan")
+                            root.btScanning = false
+                        }
+                    }
+                }
+                LogosText {
+                    visible: !!root.bt.powered && (root.bt.devices || []).length === 0
+                    text: "No devices yet. Put a device in pairing mode and press Scan."
+                    color: Theme.palette.textTertiary
+                }
+                Repeater {
+                    model: root.bt.powered ? (root.bt.devices || []) : []
+                    RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        LogosText {
+                            text: modelData.name
+                            font.weight: modelData.connected ? Theme.typography.weightBold : Theme.typography.weightRegular
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                        }
+                        LogosText {
+                            text: modelData.connected ? "Connected" : (modelData.paired ? "Paired" : "")
+                            color: modelData.connected ? Theme.palette.success : Theme.palette.textTertiary
+                        }
+                        LogosButton {
+                            text: modelData.connected ? "Disconnect" : "Connect"
+                            onClicked: {
+                                root.btMessage = (modelData.connected ? "Disconnecting " : "Connecting ") + modelData.name + "…"
+                                let r = root.call("bluetoothDevice", [modelData.mac, modelData.connected ? "disconnect" : "connect"])
+                                root.btMessage = r.error || ""
+                                root.bt = root.call("bluetooth")
+                            }
+                        }
+                        LogosButton {
+                            visible: !!modelData.paired
+                            text: "Forget"
+                            onClicked: { root.call("bluetoothDevice", [modelData.mac, "forget"]); root.bt = root.call("bluetooth") }
+                        }
+                    }
+                }
+                LogosText {
+                    visible: text.length > 0
+                    text: root.btMessage
+                    color: Theme.palette.textSecondary
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                }
+            }
+
+            // --- Battery ----------------------------------------------------
+            Section {
+                title: "Battery"
+                visible: !!root.sys.battery || !!root.charge.available
+                LogosText {
+                    visible: !!root.sys.battery
+                    text: root.sys.battery ? root.sys.battery.percent + "% · " + root.sys.battery.status : ""
+                    color: Theme.palette.textSecondary
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: !!root.charge.available
+                    spacing: Theme.spacing.medium
+                    LogosText { text: "Charge limit"; Layout.preferredWidth: 110 }
+                    LogosSlider {
+                        id: chargeSlider
+                        objectName: "chargeLimit"
+                        Layout.fillWidth: true
+                        from: 50; to: 100; stepSize: 5
+                        value: root.charge.upper || 100
+                        onMoved: root.call("setChargeLimit", [Math.round(value)])
+                    }
+                    LogosText {
+                        text: chargeSlider.value >= 100 ? "Off" : Math.round(chargeSlider.value) + "%"
+                        Layout.preferredWidth: 48
+                        color: Theme.palette.textSecondary
+                    }
                 }
             }
 

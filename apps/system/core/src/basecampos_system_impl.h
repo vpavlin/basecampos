@@ -59,4 +59,43 @@ public:
 
     /// Brings Basecamp itself back to the front.
     std::string showBasecamp();
+
+    /// Screen brightness in percent, or available:false without a backlight.
+    std::string brightness();
+
+    /// Sets the screen brightness in percent (clamped to 1-100).
+    std::string setBrightness(int64_t percent);
+
+    /// Bluetooth: powered, and the known devices (mac, name, paired, connected).
+    std::string bluetooth();
+
+    /// Turns the Bluetooth radio on ("on") or off ("off").
+    std::string bluetoothPower(const std::string& state);
+
+    /// Scans for nearby devices for a few seconds, then returns bluetooth().
+    std::string bluetoothScan();
+
+    /// Connects ("connect": pairs and trusts first if needed), disconnects or forgets a device.
+    std::string bluetoothDevice(const std::string& mac, const std::string& action);
+
+    /// The battery charge limit (UPPER percent), or available:false without the battery-limit service.
+    std::string chargeLimit();
+
+    /// Sets the charge limit: 50-100 in steps of 5; 100 turns it off.
+    std::string setChargeLimit(int64_t upper);
+
+    /// Tablet bits: whether auto-rotation is locked and whether an on-screen keyboard is running.
+    std::string tablet();
+
+    /// Locks or unlocks auto-rotation ("on" locks it).
+    std::string setRotationLock(const std::string& state);
+
+    /// Shows or hides the on-screen keyboard.
+    std::string toggleKeyboard();
+
+    /// Outputs: the internal one, an external one if connected, and whether it mirrors the internal.
+    std::string displays();
+
+    /// Mirrors the internal screen onto the external one ("on") or stops ("off").
+    std::string setMirror(const std::string& state);
 };

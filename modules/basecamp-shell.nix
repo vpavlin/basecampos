@@ -278,6 +278,8 @@ in
       };
     };
     environment.etc."basecampos/sway.conf".source = swayConfig;
+    # What the System app drives in this session (brightness, mirroring).
+    environment.systemPackages = with pkgs; [ brightnessctl wl-mirror ];
   }))
   ]);
 }
