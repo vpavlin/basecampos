@@ -582,6 +582,7 @@ const QStringList& IntentRegistry::knownRoles()
     static const QStringList roles = {
         QStringLiteral("home"), QStringLiteral("launcher"),
         QStringLiteral("packages"), QStringLiteral("settings"),
+        QStringLiteral("search"),
     };
     return roles;
 }

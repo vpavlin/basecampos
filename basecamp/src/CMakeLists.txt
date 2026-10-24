@@ -80,6 +80,8 @@ set_source_files_properties(Basecamp/AppManager/AppColors.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_source_files_properties(Basecamp/AppManager/DownloadFormat.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(Basecamp/Objects/ObjectCardFormat.qml
+    PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(basecamp_backend_qml
     URI Basecamp.Backend
@@ -163,6 +165,34 @@ qt_add_qml_module(basecamp_shell_qml
         Basecamp/Shell/NotificationLayer.qml
 )
 
+# The object cards (SHELL-OBJECTS-SPEC §7): one look per type, shared by every
+# view of objects. Role apps (basecamp_home) import them like the design system.
+qt_add_qml_module(basecamp_objects_qml
+    URI Basecamp.Objects
+    VERSION 1.0
+    STATIC
+    RESOURCE_PREFIX /qt/qml
+    OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Basecamp/Objects
+    QML_FILES
+        Basecamp/Objects/ObjectCard.qml
+        Basecamp/Objects/ObjectCardBody.qml
+        Basecamp/Objects/ObjectCardLine.qml
+        Basecamp/Objects/ObjectCardIcon.qml
+        Basecamp/Objects/ObjectCardStatus.qml
+        Basecamp/Objects/ObjectCardAccount.qml
+        Basecamp/Objects/ObjectCardAsset.qml
+        Basecamp/Objects/ObjectCardTransaction.qml
+        Basecamp/Objects/ObjectCardMessage.qml
+        Basecamp/Objects/ObjectCardPost.qml
+        Basecamp/Objects/ObjectCardCommunity.qml
+        Basecamp/Objects/ObjectCardContact.qml
+        Basecamp/Objects/ObjectCardNews.qml
+        Basecamp/Objects/ObjectCardNotification.qml
+        Basecamp/Objects/ObjectCardGeneric.qml
+        Basecamp/Objects/ObjectCardFormat.qml
+        Basecamp/Objects/ObjectFormat.js
+)
+
 qt_add_qml_module(basecamp_icons_qml
     URI Basecamp.Icons
     VERSION 1.0
@@ -216,12 +246,14 @@ target_link_libraries(main_ui
         basecamp_appmanager_qml
         basecamp_shell_qml
         basecamp_icons_qml
+        basecamp_objects_qml
         $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_backend_qmlplugin>
         $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_common_qmlplugin>
         $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_sidebar_qmlplugin>
         $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_appmanager_qmlplugin>
         $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_shell_qmlplugin>
         $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_icons_qmlplugin>
+        $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_objects_qmlplugin>
 )
 
 if(APPLE)

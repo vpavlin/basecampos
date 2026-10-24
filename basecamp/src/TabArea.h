@@ -78,6 +78,8 @@ public:
     static constexpr int kCompactWidth = 600;
     static constexpr int kBottomBarHeight = 60;
     bool isCompact() const { return m_compact; }
+    // What the bar reads on the New tab, from the home app; "" = "Search apps…".
+    void setHomePlaceholder(const QString& text);
     int bottomBarHeight() const;
     Q_INVOKABLE void showSwitcher(bool on);
     // The bell the user sees: in the bottom bar in the compact layout.

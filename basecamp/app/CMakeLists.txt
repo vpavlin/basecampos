@@ -313,6 +313,9 @@ set(PROJECT_SOURCES
     MainUIBackend.cpp
     NotificationCenter.cpp
     ObjectStore.cpp
+    ObjectRanker.cpp
+    ObjectResults.cpp
+    ObjectSearch.cpp
     DesktopNotifier.cpp
     ShellIntents.cpp
 
@@ -382,7 +385,7 @@ if(WIN32)
     set_target_properties(LogosBasecamp PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
 
-# The UI shell's seven qt_add_qml_module targets live in ../src. They are STATIC
+# The UI shell's qt_add_qml_module targets live in ../src. They are STATIC
 # modules registering their types from a static initializer, so they link into
 # the main_ui plugin — the image that loads the QML — not this executable.
 target_include_directories(LogosBasecamp PRIVATE

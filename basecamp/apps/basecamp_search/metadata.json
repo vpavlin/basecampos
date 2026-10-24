@@ -1,0 +1,17 @@
+{
+  "author": "Logos",
+  "category": "system",
+  "dependencies": [],
+  "description": "Basecamp's search: ranks what apps share with Basecamp by match, recency and what you haven't seen. Draws nothing; Home and Applications show the results.",
+  "display_name": "Search",
+  "icon": "icon.svg",
+  "main": {},
+  "manifestVersion": "0.6.0",
+  "name": "basecamp_search",
+  "type": "ui_qml",
+  "version": "0.1.0",
+  "view": "qml/Main.qml",
+  "roles": [
+    "search"
+  ]
+}

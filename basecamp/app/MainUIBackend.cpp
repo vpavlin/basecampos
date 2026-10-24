@@ -19,6 +19,8 @@
 #include <utility>
 #include "NotificationCenter.h"
 #include "ObjectStore.h"
+#include "ObjectResults.h"
+#include "ObjectSearch.h"
 #include "DesktopNotifier.h"
 #include "links/LinkRequestCoordinator.h"
 #include "UIPluginPresenter.h"
@@ -130,6 +132,12 @@ MainUIBackend::MainUIBackend(LogosAPI* logosAPI, ICoreRuntime* core,
         if (!m_searchAppsTimer->isActive())
             m_searchAppsTimer->start();
     });
+    // Search over them (SHELL-OBJECTS-SPEC §5): views ask, the `search` holder
+    // ranks, the host ranks when nobody does. Role holders are read per call.
+    m_objectSearch = new ObjectSearch(
+        m_objects, [this](const QString& role) { return roleHolder(role); }, this);
+    connect(m_objectSearch, &ObjectSearch::lastRankerChanged,
+            this, &MainUIBackend::lastSearchRankerChanged);
     // While Basecamp is in the background, the desktop shows them too.
     auto* desktop = new DesktopNotifier(m_notifications, this);
     desktop->setNameResolver([this](const QString& app) { return displayNameFor(app); });
@@ -659,11 +667,27 @@ void MainUIBackend::wireIntents()
         { { QStringLiteral("packages"), ShellIntents::kPackageManagerAppName },
           { QStringLiteral("settings"), QStringLiteral("basecamp_settings") },
           { QStringLiteral("launcher"), QStringLiteral("basecamp_apps") },
-          { QStringLiteral("home"),     QStringLiteral("basecamp_home") } },
+          { QStringLiteral("home"),     QStringLiteral("basecamp_home") },
+          { QStringLiteral("search"),   QStringLiteral("basecamp_search") } },
         this);
     m_intentRegistry->setRoleHolderResolver(
         [this](const QString& role) { return m_roles->holder(role); });
     connect(m_roles, &ShellRoles::changed, this, &MainUIBackend::rolesChanged);
+    connect(m_roles, &ShellRoles::changed, this, [this]() {
+        m_objectSearch->rolesChanged();
+        ensureSearchHolderRunning();
+    });
+    // The holder's tab was closed (it had been opened like any app): it goes
+    // back to ranking unseen.
+    connect(m_uiPluginManager, &UIPluginManager::uiModulesChanged, this, [this]() {
+        QTimer::singleShot(0, this, &MainUIBackend::ensureSearchHolderRunning);
+    });
+    // A holder that has just started missed what was asked while it loaded
+    // (the host answered those): ask again, so it ranks what is on screen.
+    connect(m_uiPluginManager, &UIPluginManager::appReady, this, [this](const QString& name) {
+        if (name == roleHolder(ObjectSearch::searchRole()))
+            m_objectSearch->refreshAll();
+    });
 
     // Apps that claim or hold a role get `shell` (ShellApi) in their QML engine;
     // nothing else gets anything beyond `logos`. Each member is checked against
@@ -756,6 +780,15 @@ void MainUIBackend::setHomeQuery(const QString& text, bool inBar)
     emit homeQueryChanged();
 }
 
+void MainUIBackend::setHomePlaceholder(const QString& text)
+{
+    // One line of plain text, short enough for the bar.
+    QString clean = text.simplified().left(60);
+    if (m_homePlaceholder == clean) return;
+    m_homePlaceholder = clean;
+    emit homePlaceholderChanged();
+}
+
 QString MainUIBackend::takePendingSettingsSection()
 {
     return std::exchange(m_pendingSettingsSection, QString());
@@ -819,6 +852,52 @@ void MainUIBackend::rebuildIntentRegistry()
     // machine. The coordinator's park deadline remains the backstop.
     if (m_intentRegistryBootstrapped && m_linkRequests)
         m_linkRequests->onRegistryReady();
+    if (m_intentRegistryBootstrapped)
+        ensureSearchHolderRunning();
+}
+
+// The `search` holder only ranks and draws nothing, but it has to be running
+// to hear searchRequested: load it without a window or a tab. One that is not
+// running (or is still loading) just means the host ranks after the timeout.
+void MainUIBackend::ensureSearchHolderRunning()
+{
+    if (!m_uiPluginManager || !m_intentRegistryBootstrapped || m_uiPluginManager->isShuttingDown())
+        return;
+    const QString holder = roleHolder(ObjectSearch::searchRole());
+    if (!m_backgroundSearchApp.isEmpty() && m_backgroundSearchApp != holder) {
+        // The role moved on: stop the previous holder if it is still unseen,
+        // still loading or still parked (a load that lands later is unloaded).
+        m_uiPluginManager->cancelBackground(m_backgroundSearchApp);
+        m_backgroundSearchApp.clear();
+    }
+    if (holder.isEmpty() || m_uiPluginManager->isLoaded(holder)
+        || m_uiPluginManager->isBackgroundApp(holder))
+        return;
+    qInfo().noquote() << "Search role: starting" << holder << "in the background";
+    m_backgroundSearchApp = holder;
+    m_uiPluginManager->loadInBackground(holder);
+}
+
+QStringList MainUIBackend::searchObjects(const QString& query, const QVariantMap& filter) const
+{
+    return m_objectSearch ? m_objectSearch->rankWithFallback(query, filter) : QStringList();
+}
+
+QObject* MainUIBackend::shellSearch(const QString& query, const QVariantMap& filter)
+{
+    if (!m_objectSearch) return nullptr;
+    if (!m_shellResults) {
+        m_shellResults = m_objectSearch->search(ObjectSearch::shellView(), query, filter);
+        if (m_shellResults) m_shellResults->setParent(this);
+    } else {
+        m_shellResults->update(query, filter);
+    }
+    return m_shellResults;
+}
+
+QString MainUIBackend::lastSearchRanker() const
+{
+    return m_objectSearch ? m_objectSearch->lastRanker() : QString();
 }
 
 void MainUIBackend::rebuildInstallableProviders()

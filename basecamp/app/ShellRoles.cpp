@@ -9,6 +9,9 @@ QString settingsKey(const QString& role)
 {
     return QStringLiteral("ShellRoles/") + role;
 }
+
+// Stored for "no app". Not a module name: those never contain a colon.
+const QString kNone = QStringLiteral("none:");
 } // namespace
 
 ShellRoles::ShellRoles(IntentRegistry* registry,
@@ -34,6 +37,8 @@ QString ShellRoles::holder(const QString& role) const
         return {};
 
     const QString chosen = assigned(role);
+    if (chosen == kNone && allowsNone(role))
+        return {};
     if (!chosen.isEmpty() && candidates(role).contains(chosen))
         return chosen;
 
@@ -61,8 +66,18 @@ QStringList ShellRoles::candidates(const QString& role) const
     return out;
 }
 
+bool ShellRoles::allowsNone(const QString& role)
+{
+    return role == QStringLiteral("search");
+}
+
 bool ShellRoles::assign(const QString& role, const QString& app)
 {
+    if (app.isEmpty() && allowsNone(role)) {
+        QSettings().setValue(settingsKey(role), kNone);
+        reevaluate();
+        return true;
+    }
     if (!candidates(role).contains(app))
         return false;
     {

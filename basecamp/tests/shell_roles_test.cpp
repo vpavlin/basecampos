@@ -63,6 +63,7 @@ private slots:
     void testUninstalledHolderFallsBack();
     void testMissingDefaultGivesNoHolder();
     void testRoleRestrictionFailsClosed();
+    void testSearchCanBeNone();
 
 private:
     QTemporaryDir m_settingsDir;
@@ -201,6 +202,41 @@ void TestShellRoles::testRoleRestrictionFailsClosed()
     // Siblings untouched.
     QVERIFY(registry.requesterAllowed(QStringLiteral("basecamp.packages.confirm_install"),
                                       QStringLiteral("evil_ui")));
+}
+
+void TestShellRoles::testSearchCanBeNone()
+{
+    QTemporaryDir root;
+    const QString dir = makeApp(root, QStringLiteral("alt_search"),
+                                R"({"name":"alt_search","type":"ui_qml","roles":["search"]})");
+    IntentRegistry registry;
+    registry.rebuild({ { QStringLiteral("alt_search"), plugin(dir) } }, nullptr, nullptr);
+    QVERIFY(IntentRegistry::knownRoles().contains(QStringLiteral("search")));
+    QVERIFY(registry.declaresRole(QStringLiteral("alt_search"), QStringLiteral("search")));
+    const QHash<QString, QString> defaults{
+        { QStringLiteral("search"), QStringLiteral("basecamp_search") },
+        { QStringLiteral("packages"), QStringLiteral("package_manager_ui") } };
+    ShellRoles roles(&registry, [](const QString&) { return true; }, defaults);
+    QCOMPARE(roles.holder(QStringLiteral("search")), QStringLiteral("basecamp_search"));
+    QCOMPARE(roles.candidates(QStringLiteral("search")),
+             (QStringList{ QStringLiteral("basecamp_search"), QStringLiteral("alt_search") }));
+
+    // Another app, then nobody (the host ranks), then the default again.
+    QVERIFY(roles.assign(QStringLiteral("search"), QStringLiteral("alt_search")));
+    QCOMPARE(roles.holder(QStringLiteral("search")), QStringLiteral("alt_search"));
+    int changes = 0;
+    connect(&roles, &ShellRoles::changed, this, [&changes]() { ++changes; });
+    QVERIFY(roles.assign(QStringLiteral("search"), QString()));
+    QCOMPARE(changes, 1);
+    QCOMPARE(roles.holder(QStringLiteral("search")), QString());
+    ShellRoles again(&registry, [](const QString&) { return true; }, defaults);
+    QCOMPARE(again.holder(QStringLiteral("search")), QString());   // remembered
+    QVERIFY(roles.assign(QStringLiteral("search"), QStringLiteral("basecamp_search")));
+    QCOMPARE(roles.holder(QStringLiteral("search")), QStringLiteral("basecamp_search"));
+
+    // "Nobody" is for roles the host can do itself, not for packages.
+    QVERIFY(!roles.assign(QStringLiteral("packages"), QString()));
+    QCOMPARE(roles.holder(QStringLiteral("packages")), QStringLiteral("package_manager_ui"));
 }
 
 QTEST_GUILESS_MAIN(TestShellRoles)

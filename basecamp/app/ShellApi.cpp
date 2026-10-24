@@ -2,6 +2,8 @@
 
 #include "IntentRegistry.h"
 #include "MainUIBackend.h"
+#include "ObjectResults.h"
+#include "ObjectSearch.h"
 #include "UIPluginManager.h"
 
 #include "BasecampModelRoles.h"
@@ -10,6 +12,7 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QImage>
+#include <QQmlEngine>
 #include <QQuickImageProvider>
 #include <QUrl>
 
@@ -206,6 +209,19 @@ ShellApi::ShellApi(MainUIBackend* backend, const QString& appName, QObject* pare
     connect(backend, &MainUIBackend::homeQueryAccepted, this, [this]() {
         if (holds("home")) emit homeQueryAccepted();
     });
+    // Search: to the holder the request was made of, and only while it holds
+    // the role. objectsChanged is a clock of every app's publishing; only the
+    // holder, which reads across apps anyway, hears it.
+    if (ObjectSearch* search = backend->objectSearch()) {
+        connect(search, &ObjectSearch::searchRequested, this,
+                [this](const QString& holder, const QString& id, const QString& query,
+                       const QVariantMap& filter) {
+                    if (holder == m_app && holds("search")) emit searchRequested(id, query, filter);
+                });
+        connect(search, &ObjectSearch::objectsChanged, this, [this](const QString& app) {
+            if (holds("search")) emit objectsChanged(app);
+        });
+    }
 }
 
 bool ShellApi::holds(const char* role) const
@@ -374,6 +390,11 @@ void ShellApi::launch(const QString& name)
     if (holds("home")) emit m_backend->homeLaunchRequested(name);
 }
 
+void ShellApi::setBarPlaceholder(const QString& text)
+{
+    if (holds("home")) m_backend->setHomePlaceholder(text);
+}
+
 // Navigation any app could already ask for (basecamp.apps.launch). From home,
 // the shell also turns the New tab into whatever opens.
 bool ShellApi::openRole(const QString& role)
@@ -384,4 +405,53 @@ bool ShellApi::openRole(const QString& role)
         return true;
     }
     return m_backend->openRole(role);
+}
+
+// ── search ───────────────────────────────────────────────────────────────────
+
+QVariantList ShellApi::objects(const QVariantMap& filter) const
+{
+    ObjectSearch* search = m_backend ? m_backend->objectSearch() : nullptr;
+    return search && holds("search") ? search->objects(m_app, filter) : QVariantList();
+}
+
+bool ShellApi::answer(const QString& requestId, const QVariantList& ids)
+{
+    ObjectSearch* search = m_backend ? m_backend->objectSearch() : nullptr;
+    return search && holds("search") && search->answer(m_app, requestId, ids);
+}
+
+// ── home and launcher: views over objects ────────────────────────────────────
+
+QObject* ShellApi::search(const QString& query, const QVariantMap& filter)
+{
+    ObjectSearch* search = m_backend ? m_backend->objectSearch() : nullptr;
+    if (!search || !isView()) return nullptr;
+    ObjectResults* results = search->search(m_app, query, filter);
+    // Unparented and JS-owned: collected when the view drops it.
+    if (results) QQmlEngine::setObjectOwnership(results, QQmlEngine::JavaScriptOwnership);
+    return results;
+}
+
+QString ShellApi::raise(const QString& id, const QString& action, const QString& text)
+{
+    ObjectSearch* search = m_backend ? m_backend->objectSearch() : nullptr;
+    if (!search || !isView() || !search->inResultsOf(m_app, id)) return QString();
+    return m_backend->raiseObjectAction(id, action, text);
+}
+
+QStringList ShellApi::markSeen(const QVariantList& ids)
+{
+    ObjectSearch* search = m_backend ? m_backend->objectSearch() : nullptr;
+    if (!search || !isView()) return {};
+    QStringList list;
+    for (const QVariant& v : ids)
+        if (v.typeId() == QMetaType::QString) list << v.toString();
+    return search->markSeen(m_app, list);
+}
+
+QVariantMap ShellApi::counts(const QString& query) const
+{
+    ObjectSearch* search = m_backend ? m_backend->objectSearch() : nullptr;
+    return search && isView() ? search->counts(m_app, query) : QVariantMap();
 }

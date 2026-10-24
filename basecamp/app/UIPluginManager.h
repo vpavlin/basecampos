@@ -147,6 +147,17 @@ public slots:
     // UI module lifecycle
     void loadUiModule(const QString& moduleName);
     void unloadUiModule(const QString& moduleName);
+    // Load an app without showing it: no window or tab is asked for, so its
+    // QML runs and draws nowhere (the `search` role's holder, which only ranks).
+    // Opening it later (the launcher, loadUiModule) shows it as usual.
+    void loadInBackground(const QString& moduleName);
+    // Stop a background load that is no longer wanted, wherever it is:
+    // parked, loading (unloaded when it lands) or running unseen. An app the
+    // user has opened since is left alone.
+    void cancelBackground(const QString& moduleName);
+    bool isBackgroundApp(const QString& moduleName) const { return m_backgroundApps.contains(moduleName); }
+    bool isLoaded(const QString& moduleName) const { return m_loadedApps.contains(moduleName); }
+    bool isShuttingDown() const { return m_shuttingDown; }
     void activateApp(const QString& appName);
 
     // Local unload-cascade confirmation flow, called from QML dialogs.
@@ -248,6 +259,9 @@ private slots:
     void onUiPluginUnloadFinished();
 
 private:
+    // loadUiModule's body; `background` from loadInBackground().
+    void startLoad(const QString& moduleName, bool background);
+
     // Local unload-cascade pending slot. Set when unloadUiModule /
     // unloadCoreModule detects a loaded dependent and asks the user to
     // confirm the cascade. No package_manager involvement — this is purely
@@ -338,6 +352,11 @@ private:
     // PackageCoordinator::uninstallApp's deferral — last click wins.
     QString                 m_pendingGatedLoadName;
     QMetaObject::Connection m_pendingGatedLoadConn;
+    // Background loads parked the same way, all of them kept: they are not
+    // clicks, so they neither supersede the parked click nor each other (the
+    // search holder's load used to push the New tab's home out of the slot).
+    QSet<QString>           m_pendingBackgroundLoads;
+    QMetaObject::Connection m_pendingBackgroundConn;
     bool                    m_startupAppsOpened = false;
     QMetaObject::Connection m_startupOpenConn;
     PluginLoader*      m_pluginLoader;      // owned (parent=this)
@@ -354,6 +373,10 @@ private:
 
     // App launcher
     QSet<QString> m_loadedApps;
+    // Loaded with loadInBackground() and not shown since.
+    QSet<QString> m_backgroundApps;
+    // Background loads cancelled while in flight (cancelBackground).
+    QSet<QString> m_cancelledBackgroundLoads;
     QString       m_currentVisibleApp;
 
     // Recently-closed list, persisted under LogosBasecampPaths::baseDirectory().

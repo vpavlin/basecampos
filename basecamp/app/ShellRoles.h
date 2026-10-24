@@ -13,7 +13,8 @@ class IntentRegistry;
 // ── ShellRoles ───────────────────────────────────────────────────────────────
 //
 // Which app fills each of the shell's roles: home, launcher, packages,
-// settings (docs SHELL-ROLES-SPEC.md, ADR-067).
+// settings, search (docs SHELL-ROLES-SPEC.md, ADR-067; search is
+// SHELL-OBJECTS-SPEC §5).
 //
 // An app CLAIMS a role in its metadata.json (IntentRegistry reads that); the
 // USER assigns it here. The bundled default for a role needs no claim: it is
@@ -43,8 +44,13 @@ public:
     // the role, sorted. These are the only apps assign() accepts.
     QStringList candidates(const QString& role) const;
 
-    // false (and nothing stored) when `app` is not a candidate.
+    // false (and nothing stored) when `app` is not a candidate. An empty `app`
+    // is "no app" and is accepted only for a role the host can do itself
+    // (allowsNone): the holder is then "" even with the default installed.
     bool assign(const QString& role, const QString& app);
+    // Roles where "no app" is a real choice: `search`, whose host fallback
+    // ranker answers when nobody holds it.
+    static bool allowsNone(const QString& role);
     void reset(const QString& role);
 
     // role -> current holder, for every known role.

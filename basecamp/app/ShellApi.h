@@ -147,6 +147,33 @@ public:
 
     // home: turn the New tab this page is shown in into `name`.
     Q_INVOKABLE void launch(const QString& name);
+    // home: what the shell's bar reads while it searches this page, naming
+    // the active filter ("Search transactions"); "" gives the shell's own back.
+    // Plain text, one line, at most 60 characters.
+    Q_INVOKABLE void setBarPlaceholder(const QString& text);
+
+    // ── search (SHELL-OBJECTS-SPEC §5) ───────────────────────────────────
+    // The envelopes `filter` allows ({ types?, apps?, kinds?, subjects?,
+    // unseenOnly? }), newest first.
+    Q_INVOKABLE QVariantList objects(const QVariantMap& filter = QVariantMap()) const;
+    // Ranked ids for a searchRequested: at most 200; unknown ids, ids outside
+    // the request's filter and repeats are dropped. false for a stale request.
+    Q_INVOKABLE bool answer(const QString& requestId, const QVariantList& ids);
+
+    // ── home and launcher: views over objects ────────────────────────────
+    // Live results (ObjectResults) for `query` and `filter`, owned by the
+    // caller's JS. Keep one and call its update(query, filter). null when this
+    // app is not a view.
+    Q_INVOKABLE QObject* search(const QString& query, const QVariantMap& filter = QVariantMap());
+    // `open` or one of the object's actions, `text` for an `input: "text"` one.
+    // Only objects in this app's results. Returns the request id, "" if refused.
+    Q_INVOKABLE QString raise(const QString& id, const QString& action, const QString& text = QString());
+    // Only objects in this app's results; returns the ids marked.
+    Q_INVOKABLE QStringList markSeen(const QVariantList& ids);
+    // How many objects match `query`, uncapped (a results model stops at
+    // 200): { total, types: [{ type, count }], apps: [{ app, count }] }, for
+    // pills. Read when asked, never pushed.
+    Q_INVOKABLE QVariantMap counts(const QString& query) const;
 
     // any role app: open whatever fills another role (navigation only).
     Q_INVOKABLE bool openRole(const QString& role);
@@ -166,10 +193,16 @@ signals:
     void homeQueryChanged();
     // Enter in the shell's bar while home is shown: open the first result.
     void homeQueryAccepted();
+    // search: a view wants results; answer(requestId, ids) within 500 ms or
+    // the host ranks instead.
+    void searchRequested(const QString& requestId, const QString& query, const QVariantMap& filter);
+    // search: what `app` published changed (the host asks again by itself).
+    void objectsChanged(const QString& app);
 
 private:
     bool holds(const char* role) const;
     bool holdsAny() const;
+    bool isView() const { return holds("home") || holds("launcher"); }
 
     QPointer<MainUIBackend> m_backend;
     QString m_app;

@@ -16,7 +16,9 @@ Item {
         { role: "packages", label: qsTr("Packages"),
           hint: qsTr("Installs, updates and removes apps. Whichever app you choose may ask to uninstall or downgrade packages.") },
         { role: "settings", label: qsTr("Settings"),
-          hint: qsTr("This screen. The app you choose can change Basecamp's preferences and default apps.") }
+          hint: qsTr("This screen. The app you choose can change Basecamp's preferences and default apps.") },
+        { role: "search", label: qsTr("Search"), allowsNone: true,
+          hint: qsTr("Ranks what apps share with Basecamp when you search or open Home. The app you choose reads everything shared in Settings → Search. With none, Basecamp ranks by itself.") }
     ]
 
     Flickable {
@@ -69,7 +71,7 @@ Item {
                         wrapMode: Text.Wrap
                     }
                     LogosText {
-                        visible: roleBlock.candidates.length === 0
+                        visible: roleBlock.candidates.length === 0 && !roleBlock.modelData.allowsNone
                         text: qsTr("No installed app can do this.")
                         color: Theme.palette.textSecondary
                     }
@@ -120,6 +122,44 @@ Item {
                                     color: Theme.palette.primary
                                     font.pixelSize: Theme.typography.secondaryText
                                 }
+                            }
+                        }
+                    }
+
+                    // "No app" for a role the shell can do itself (search).
+                    Rectangle {
+                        id: noneRow
+                        readonly property bool current: (shell.roles[roleBlock.modelData.role] || "") === ""
+                        visible: roleBlock.modelData.allowsNone === true
+                        objectName: "settings.defaultApps." + roleBlock.modelData.role + ".none"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 56
+                        radius: Theme.spacing.radiusLarge
+                        color: current ? Theme.palette.backgroundTertiary : Theme.palette.backgroundSecondary
+                        border.width: current ? 1 : 0
+                        border.color: Theme.palette.primary
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: shell.assignRole(roleBlock.modelData.role, "")
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.spacing.medium
+                            anchors.rightMargin: Theme.spacing.medium
+                            spacing: Theme.spacing.medium
+
+                            LogosText {
+                                Layout.fillWidth: true
+                                text: qsTr("None: Basecamp ranks by itself")
+                                elide: Text.ElideRight
+                            }
+                            LogosText {
+                                visible: noneRow.current
+                                text: qsTr("In use")
+                                color: Theme.palette.primary
+                                font.pixelSize: Theme.typography.secondaryText
                             }
                         }
                     }

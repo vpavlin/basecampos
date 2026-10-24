@@ -1170,6 +1170,10 @@ void MainContainer::setupTabsUi()
         if (QObject* backend = m_host->backendObject())
             QMetaObject::invokeMethod(backend, "acceptHomeQuery");
     });
+    // The home app names what the bar searches ("Search transactions").
+    connect(m_host->backendObject(), SIGNAL(homePlaceholderChanged()),
+            this, SLOT(pullHomePlaceholder()));
+    pullHomePlaceholder();
     // The home app asks the shell to turn the New tab into an app or a role.
     connect(m_host->backendObject(), SIGNAL(homeLaunchRequested(QString)),
             this, SLOT(tabLaunchApp(QString)));
@@ -1248,6 +1252,15 @@ QObject* MainContainer::homeRoot() const
     return view ? view->rootObject() : nullptr;
 }
 
+// The home app's words for the bar ("Search transactions"); "" = the shell's own.
+void MainContainer::pullHomePlaceholder()
+{
+    QString text;
+    if (QObject* backend = m_host->backendObject())
+        QMetaObject::invokeMethod(backend, "homePlaceholder", Q_RETURN_ARG(QString, text));
+    if (m_tabArea) m_tabArea->setHomePlaceholder(text);
+}
+
 // Loads whatever fills the `home` role into the New tab, and again whenever the
 // user assigns another app (Settings → Default apps).
 void MainContainer::loadHomeApp()
@@ -1264,6 +1277,9 @@ void MainContainer::loadHomeApp()
     }
     const QString previous = m_homeApp;
     m_homeApp = holder;
+    // The bar's words belonged to the old home.
+    if (QObject* backend = m_host->backendObject())
+        QMetaObject::invokeMethod(backend, "setHomePlaceholder", Q_ARG(QString, QString()));
     if (!previous.isEmpty() && previous != holder)
         m_host->unloadUiModule(previous);
     if (holder.isEmpty()) {

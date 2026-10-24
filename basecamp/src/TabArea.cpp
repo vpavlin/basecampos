@@ -880,8 +880,7 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     // On the New tab the pill is the search: the page below shows the results.
     m_pillSearch = new QLineEdit(pill);
     m_pillSearch->setObjectName(QStringLiteral("basecampium.barSearch"));
-    m_pillSearch->setPlaceholderText(tr("Search apps…"));
-    m_pillSearch->setAccessibleName(tr("Search apps"));
+    setHomePlaceholder(QString());
     m_pillSearch->setFrame(false);
     m_pillSearch->setVisible(false);
     auto* pillRow = new QHBoxLayout(pill);
@@ -1985,4 +1984,11 @@ void TabArea::showSwitcherMenu(QWidget* anchor)
     menu->popup(anchor->mapToGlobal(QPoint(anchor->width() - hint.width(), anchor->height() + 4)));
     qInfo() << "Basecampium: menu" << menu->objectName() << "shown" << menu->isVisible();
     saveForTests(menu);
+}
+
+void TabArea::setHomePlaceholder(const QString& text)
+{
+    if (!m_pillSearch) return;
+    m_pillSearch->setPlaceholderText(text.isEmpty() ? tr("Search apps…") : text);
+    m_pillSearch->setAccessibleName(text.isEmpty() ? tr("Search apps") : text);
 }

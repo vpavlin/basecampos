@@ -12,6 +12,9 @@
 
 #include <QObject>
 #include <QPointer>
+
+class ObjectResults;
+class ObjectSearch;
 #include <QVariantList>
 #include <QVariantMap>
 #include <QStringList>
@@ -102,16 +105,19 @@ class MainUIBackend : public QObject {
     // { name, displayName, icon, enabled }.
     Q_PROPERTY(QVariantList notificationApps READ notificationApps NOTIFY notificationAppsChanged)
     // Shell objects (SHELL-OBJECTS-SPEC.md): what apps publish for search and
-    // home. Read-only from QML (count, list(filter), types(), get(id)); for the
-    // search role and views in phase 2, and for headless tests now.
+    // home. Read-only from QML (count, list(filter), types(), get(id)); for
+    // headless tests. Apps reach objects only through ShellApi's search members.
     Q_PROPERTY(QObject* objectStore READ objectStore CONSTANT)
     // Apps whose manifest declares basecamp.objects.publish, for Settings →
     // Search: { name, displayName, icon, enabled, count }.
     Q_PROPERTY(QVariantList searchApps READ searchApps NOTIFY searchAppsChanged)
+    // Who ranked the most recent search results: the `search` holder's app
+    // name, or "fallback" for the host's ranker (headless tests compare them).
+    Q_PROPERTY(QString lastSearchRanker READ lastSearchRanker NOTIFY lastSearchRankerChanged)
     // Most-recently-closed apps, persisted across restarts.
     Q_PROPERTY(QVariantList recentlyClosedApps READ recentlyClosedApps NOTIFY recentlyClosedAppsChanged)
     // role -> the app filling it ("" when nothing can): home, launcher, packages,
-    // settings (SHELL-ROLES-SPEC.md). The shell opens roles, not apps.
+    // settings, search (SHELL-ROLES-SPEC.md). The shell opens roles, not apps.
     Q_PROPERTY(QVariantMap roles READ roles NOTIFY rolesChanged)
     Q_PROPERTY(QString currentVisibleApp READ currentVisibleApp NOTIFY currentVisibleAppChanged)
     Q_PROPERTY(QStringList loadingModules READ loadingModules NOTIFY loadingModulesChanged)
@@ -220,6 +226,16 @@ public:
     // publisher cannot hear).
     Q_INVOKABLE QString raiseObjectAction(const QString& id, const QString& action,
                                           const QString& text = QString());
+    // Search (SHELL-OBJECTS-SPEC §5). For ShellApi, and for headless tests:
+    //   searchObjects  the host ranker's ids, synchronously (never the holder);
+    //   shellSearch    the shell's own live results (one model, refilled on
+    //                  each call), ranked by the holder like any view's.
+    ObjectSearch* objectSearch() const { return m_objectSearch; }
+    Q_INVOKABLE QStringList searchObjects(const QString& query,
+                                          const QVariantMap& filter = QVariantMap()) const;
+    Q_INVOKABLE QObject* shellSearch(const QString& query,
+                                     const QVariantMap& filter = QVariantMap());
+    QString lastSearchRanker() const;
 
     // ── Roles ───────────────────────────────────────────────────────────
     QVariantMap roles() const;
@@ -251,6 +267,10 @@ public:
     Q_INVOKABLE void acceptHomeQuery() { emit homeQueryAccepted(); }
     QString homeQuery() const { return m_homeQuery; }
     bool homeSearchInBar() const { return m_homeSearchInBar; }
+    // What the bar reads while it searches home ("Search transactions"),
+    // set by the home app; "" = the shell's own ("Search apps…").
+    Q_INVOKABLE void setHomePlaceholder(const QString& text);
+    Q_INVOKABLE QString homePlaceholder() const { return m_homePlaceholder; }
 
     // The shell's preferences object, handed over through IShellHost and given
     // only to the settings role's app (ShellApi).
@@ -401,6 +421,7 @@ public slots:
 signals:
     void notificationAppsChanged();
     void searchAppsChanged();
+    void lastSearchRankerChanged();
     // The publisher answered an action raised with raiseObjectAction().
     void objectActionAnswered(const QString& requestId, bool ok, const QString& error);
     void rolesChanged();
@@ -409,6 +430,7 @@ signals:
     void launcherSearchRequested(const QString& query);
     void homeQueryChanged();
     void homeQueryAccepted();
+    void homePlaceholderChanged();
     // From the home app: the shell turns the New tab into this app / role.
     void homeLaunchRequested(const QString& name);
     void homeRoleRequested(const QString& role);
@@ -536,6 +558,7 @@ private:
     // capabilities. Called once, after UIPluginManager exists.
     void wireIntents();
     void rebuildIntentRegistry();
+    void ensureSearchHolderRunning();
     void rebuildInstallableProviders();
     QString repositoryUrlFor(const QString& packageName) const;
     QVariantMap installCandidateDetails(const QString& name) const;
@@ -592,6 +615,7 @@ private:
     QString              m_pendingSettingsSection;
     QString              m_pendingLauncherSearch;
     QString              m_homeQuery;
+    QString              m_homePlaceholder;
     bool                 m_homeSearchInBar = false;
     LinkRequestCoordinator* m_linkRequests = nullptr;
     // False until wireIntents() has done its bootstrap rebuild, so the
@@ -627,6 +651,10 @@ private:
     // refreshSearchApps(). The rows last announced, and the coalescing timer.
     QVariantList              m_lastSearchApps;
     class QTimer*             m_searchAppsTimer = nullptr;
+    class ObjectSearch*       m_objectSearch = nullptr;
+    QPointer<ObjectResults> m_shellResults;
+    // The `search` holder this backend started unseen (ensureSearchHolderRunning).
+    QString                   m_backgroundSearchApp;
     PackageCoordinator*    m_packageCoordinator;
     ModuleInstanceModel* m_uiModulesModel;
     ModuleInstanceModel* m_coreModulesModel;

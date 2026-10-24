@@ -68,6 +68,8 @@ private slots:
     void openSystemApp(const QString& key);
     // Open whatever app fills `role` (ADR-067). false: nothing can.
     bool openRole(const QString& role);
+    // The home app's words for the bar (backend homePlaceholder) into TabArea.
+    void pullHomePlaceholder();
     void launchFromDock(const QString& name);
     void openSettingsRepositories();
     void showSpotlight();

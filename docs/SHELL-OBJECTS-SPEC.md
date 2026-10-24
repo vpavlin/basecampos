@@ -1,6 +1,6 @@
 # Shell objects: apps publish, search ranks, views draw
 
-Status: draft, 2026-10-24. Steps 1 and 2 built (§11); 3 to 5 not yet. Decision: [ADR-072](adr/0072-apps-publish-typed-objects.md).
+Status: draft, 2026-10-24. Steps 1 to 4 built (§11, §12); step 5 (experiments) not yet. Decision: [ADR-072](adr/0072-apps-publish-typed-objects.md).
 Grows out of [SHELL-ROLES-SPEC.md](SHELL-ROLES-SPEC.md) Part B and generalises
 [NOTIFICATIONS-SPEC.md](NOTIFICATIONS-SPEC.md).
 
@@ -145,8 +145,13 @@ For `home` and `launcher` holders (and the shell's own switcher):
   the search role answers again.
 - `raise(id, action, text?)`: send an action to the object's publisher.
 - `markSeen(ids)`.
+- `counts(query)`: how many objects match, per type and per app, with no cap (for pills).
+  Read on request, never pushed.
+- Home only: `setBarPlaceholder(text)`, what the shell's bar reads ("Search transactions…");
+  plain text, one line, at most 60 characters; `""` gives the shell's own back.
 
-Views get only the objects in their results, not the whole store.
+Views get only the objects in their results, not the whole store. A results model holds at most
+200 ids; when more match, the view says "Showing N of M".
 
 ## 6. Subjects: how objects refer to people and things
 
@@ -270,3 +275,37 @@ Issues #22, #23, #24. Host code in `basecamp/app/` (`ObjectStore`, `IntentBroker
   stubs use per-app file names.
 
 ![Settings → Search at 390](shell-objects/settings-search-390.png)
+
+## 12. Steps 3 and 4: built
+
+Issues #25, #26. Host: `ObjectSearch`, `ObjectRanker`, `ObjectResults` in `basecamp/app/`; the
+default search app `basecamp/apps/basecamp_search/`; shared cards `basecamp/src/Basecamp/Objects/`
+(one per type plus a generic one); home in `basecamp/apps/basecamp_home/`.
+
+- **Ranking** (the same rules in C++ and in basecamp_search's JS, checked by a unit test over 11
+  queries): every query word must start a word in the object; title 4, keywords 3, subtitle 2,
+  field text 1; score = 10 × match + up to 5 for recency (halves each day) + 3 if unseen; an empty
+  query lists unseen first, then newest. Matching on field content is one constant
+  (`kMatchContentFields`), so the privacy decision (§9) can turn it off.
+- **The search holder runs in the background**, without a tab. The host ranks when nobody holds
+  `search` (Settings → Default apps → Search → None) or the holder takes more than 500 ms.
+- **Home**: the bar is the query and names what it searches; pills per type and per app with
+  uncapped counts; modules (saved filters: small, medium, large, row; pin; count new; at most 7)
+  kept in memory only; a feed with "N new since"; Join, Vote, Reply with text and View from
+  cards. A card never shows two buttons with the same label: the built-in View is dropped when
+  the app offers its own. Cards are plain text (a title with markup shows the tags).
+- **Unit tests:** 34 of 34. **Headless** (fresh profile, five stubs, 390 and 1280): all 16 checks
+  pass, among them "ada" ranks Ada's items first, None gives the same order from the host, no
+  duplicate button labels across all 60 objects, the placeholder per pill, Join and Reply reaching
+  the stub, live progress, switch-off removing cards at once.
+- **Review fixes** (7): home freed its results models so module edits could evict the feed's;
+  pills were capped at 200; publisher markup rendered in cards; views could time other apps'
+  publishing; two background-load races; no test tied the JS ranker to the C++ one.
+- **Open, small:** pills reorder by count under the finger; your own reply counts as new; the
+  Wallet module sits alone in a grid row at 1280; typing into a card's Reply field needs a check
+  on a real device (headless keystrokes went to the bar); Home and Launcher have no row in
+  Settings → Default apps.
+
+| 390 grid | 390 feed, Messages | 1280 |
+|---|---|---|
+| ![](shell-objects/390-grid-1.png) | ![](shell-objects/390-reply-sent.png) | ![](shell-objects/1280-grid-1.png) |
