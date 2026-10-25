@@ -64,18 +64,18 @@
       },
       "locked": {
         "dir": "basecamp",
-        "lastModified": 1792488754,
-        "narHash": "sha256-L3x9rDNJ5WwpfjgyAhIlTzN5mm70BbKIYDtEqUJxsao=",
-        "owner": "xAlisher",
-        "repo": "basecamp-theming",
-        "rev": "22ee3febc8f07f4293ca4fd8f73fadbddaaea35f",
+        "lastModified": 1792952697,
+        "narHash": "sha256-xFor1wyrUdqhITqtohwr9Vjh6unUcojlLaQV1SoEnSY=",
+        "owner": "vpavlin",
+        "repo": "basecampos",
+        "rev": "0595cb3917569ccf11cead11e1dc4f3b35be0c01",
         "type": "github"
       },
       "original": {
         "dir": "basecamp",
-        "owner": "xAlisher",
-        "ref": "basecamp-os-theme",
-        "repo": "basecamp-theming",
+        "owner": "vpavlin",
+        "ref": "basecamp-shell",
+        "repo": "basecampos",
         "type": "github"
       }
     },

@@ -10,9 +10,11 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
     # Alisher's Basecamp fork with themes + the desktop layout (dock, windows,
-    # Spotlight). Tracked, not vendored: `nix flake update basecamp alisher-ds`.
+    # Spotlight), plus our shell patches (split view) on branch basecamp-shell
+    # of this repo. Following Alisher: rebase that branch onto his
+    # basecamp-os-theme, push, then `nix flake update basecamp alisher-ds`.
     basecamp = {
-      url = "github:xAlisher/basecamp-theming/basecamp-os-theme?dir=basecamp";
+      url = "github:vpavlin/basecampos/basecamp-shell?dir=basecamp";
       inputs.logos-design-system.follows = "alisher-ds";
     };
     alisher-ds.url = "github:xAlisher/basecamp-theming/basecamp-os-theme?dir=design-system";
