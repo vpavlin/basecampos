@@ -71,17 +71,22 @@ jobs:
 
       - name: Duet rootfs tarball + kernel (Image, dtbs) for signing
         run: |
-          df -h / /nix
-          rm -rf system
-          nix build -L .#packages.aarch64-linux.duet-test-rootfs -o duet-rootfs
-          nix build -L .#packages.aarch64-linux.duet-test-kernel -o duet-kernel
-          mkdir -p out-duet/kernel
-          cp duet-rootfs/* lse-report.txt out-duet/
-          cp duet-kernel/Image out-duet/kernel/
-          cp duet-kernel/dtbs/mediatek/mt8183-kukui-krane-sku*.dtb out-duet/kernel/
-          ls duet-kernel/lib/modules > out-duet/kernel/modules-version.txt
-          sha256sum out-duet/kernel/* > out-duet/kernel/SHA256SUMS
-          ls -laR out-duet
+          mkdir -p diag
+          set -o pipefail
+          {
+            set -ex
+            df -h / /nix
+            rm -rf system
+            nix build -L .#packages.aarch64-linux.duet-test-rootfs -o duet-rootfs
+            nix build -L .#packages.aarch64-linux.duet-test-kernel -o duet-kernel
+            mkdir -p out-duet/kernel
+            cp duet-rootfs/* lse-report.txt out-duet/
+            cp duet-kernel/Image out-duet/kernel/
+            cp duet-kernel/dtbs/mediatek/mt8183-kukui-krane-sku*.dtb out-duet/kernel/
+            ls duet-kernel/lib/modules > out-duet/kernel/modules-version.txt
+            sha256sum out-duet/kernel/* > out-duet/kernel/SHA256SUMS
+            ls -laR out-duet
+          } 2>&1 | tee diag/rootfs-step.log
 
       - name: Publish the Duet test build as a prerelease (no login needed to download)
         env:
@@ -99,13 +104,20 @@ jobs:
             --notes "Unattended first test on the Duet (watchdog, 20-minute test window, reports in /var/log/basecampos-test). Rootfs parts: cat basecampos-duet-rootfs.tar.zst.part* > basecampos-duet-rootfs.tar.zst. Kernel modules: $(cat rel/modules-version.txt)."
           df -h / /nix
 
-      - name: Diagnostics (always)
+      - name: Diagnostics (always; published as a release when the run fails)
         if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p diag
           df -h > diag/df.txt 2>&1 || true
           cp lse-report.txt diag/ 2>/dev/null || true
           ls -la duet-kernel/ duet-kernel/dtbs/mediatek 2>/dev/null | head -50 > diag/kernel-ls.txt || true
+          # Actions logs and artifacts need a GitHub login; release assets don't.
+          if [ "${{ job.status }}" != "success" ]; then
+            gh release create "ci-diag-${GITHUB_SHA::7}" diag/* --prerelease --target "$GITHUB_SHA" \
+              --title "CI diagnostics ${GITHUB_SHA::7}" --notes "Diagnostics of a failed arm64 run." || true
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()
