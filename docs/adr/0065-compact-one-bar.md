@@ -1,6 +1,6 @@
 # ADR-065: Compact Basecampium has one bar, and New tab is the home page
 
-**Status:** Accepted (experiment) · 2026-10-22 · Supersedes the two-bar layout of ADR-050 / ADR-051.
+**Status:** Accepted (experiment) · 2026-10-22 · Supersedes the two-bar layout of ADR-050 / ADR-051. The "New tab" name is replaced by "Basecamp" (ADR-073).
 
 ## Context
 The compact layout had a title bar on top and a bottom bar (🔔 · + · tabs). Exploring Mull (Firefox for Android) showed a tighter model: one toolbar holds the page identity, the search, the tab count and a menu, and "New tab" opens a home page that is not itself a tab. Ours spent a whole bar on a title, and every + left an empty "New tab" behind in the count and the switcher.

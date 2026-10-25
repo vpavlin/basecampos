@@ -1,6 +1,6 @@
 # ADR-046: Toasts and a bell list over the tabs, in a layer that never hides
 
-**Status:** Accepted (experiment) · 2026-10-21
+**Status:** Accepted (experiment) · 2026-10-21 · The bell list is superseded by ADR-075 (notifications are feed items); toasts stay.
 
 ## Context
 Basecampium needs somewhere to show notifications without covering the page or stealing clicks, and it must work under X11 and Wayland.

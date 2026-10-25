@@ -1,6 +1,6 @@
 # ADR-066: The compact menu is a bottom sheet; menus fit their context
 
-**Status:** Accepted (experiment) · 2026-10-22 · Builds on ADR-065.
+**Status:** Superseded by ADR-077 (no menus in the bars) · 2026-10-22 · Builds on ADR-065.
 
 ## Context
 The one bar's ⋮ opened a bare QMenu: a light desktop menu with cramped rows, greyed items that didn't apply, and no theme. IronFox 158 (Firefox for Android) moved its menus into bottom sheets of grouped cards, leaves out what doesn't apply, opens the tab list by swiping the toolbar up, and gives the tab list its own menu and search.
