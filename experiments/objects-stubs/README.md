@@ -55,6 +55,13 @@ copies them into each app **renamed** (`WalletStubApp.qml`, `WalletObjectPublish
 
 Edit `common/`, then run `./sync.sh` (and `./sync.sh --check` before committing).
 
+## Icons
+
+`gen-icons.py` draws each app's `icon.png`: a full-bleed 256x256 square, opaque to the corners,
+with the app's letters. No rounding is baked in; the shell rounds every app tile when it draws
+it (basecamp-experiments#40). Change a letter or colour in the script and rerun it;
+`python3 gen-icons.py --check` fails on an icon with a transparent corner.
+
 ## Install into a profile
 
 ```
