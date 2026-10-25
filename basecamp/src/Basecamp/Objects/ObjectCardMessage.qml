@@ -18,8 +18,9 @@ ObjectCardBody {
                : (who.length > 0 ? who : body.conversation)
     }
 
-    ObjectCardLine {
-        text: F.str(body.fields.text).length > 0 ? F.str(body.fields.text) : F.str(body.object.title)
+    ObjectCardMatchLine {
+        plain: F.str(body.fields.text).length > 0 ? F.str(body.fields.text) : F.str(body.object.title)
+        query: body.query
         maximumLineCount: 3
         color: body.outgoing ? Theme.palette.textSecondary : Theme.palette.text
     }

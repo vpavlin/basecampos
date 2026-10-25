@@ -19,6 +19,9 @@ const QRegularExpression& separators()
 bool hasWordStartingWith(const QString& text, const QString& token)
 {
     if (text.isEmpty()) return false;
+    // A word of it starts with the token only if the text holds the token:
+    // that check is cheap, the split is not, and most objects miss.
+    if (!text.toLower().contains(token)) return false;
     const QStringList words = ObjectRanker::tokens(text);
     return std::any_of(words.cbegin(), words.cend(),
                        [&token](const QString& w) { return w.startsWith(token); });

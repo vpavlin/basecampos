@@ -12,7 +12,7 @@ ObjectCardBody {
 
     trailing: level
 
-    ObjectCardLine { text: F.str(body.fields.body); maximumLineCount: 3 }
+    ObjectCardMatchLine { plain: F.str(body.fields.body); query: body.query; maximumLineCount: 3 }
     ObjectCardStatus {
         text: body.level
         tone: body.level === "error" ? "error" : body.level === "warning" ? "warning" : "info"

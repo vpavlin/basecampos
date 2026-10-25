@@ -33,9 +33,10 @@ ObjectCardBody {
             tone: F.statusTone(body.fields.status)
         }
     }
-    ObjectCardLine {
+    ObjectCardMatchLine {
         secondary: true
-        text: body.summary ? F.str(body.object.subtitle)
+        query: body.query
+        plain: body.summary ? F.str(body.object.subtitle)
                            : [F.str(body.object.subtitle), F.str(body.fields.network)]
                                .filter(s => s.length > 0).join(" · ")
         maximumLineCount: 2

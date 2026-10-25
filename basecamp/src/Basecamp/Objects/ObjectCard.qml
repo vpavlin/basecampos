@@ -6,6 +6,7 @@ import Logos.Controls
 import Logos.Theme
 
 import "ObjectFormat.js" as F
+import "ObjectHighlight.js" as H
 
 // ObjectCard: one object (SHELL-OBJECTS-SPEC §3, §7), drawn by its type.
 //
@@ -16,7 +17,8 @@ import "ObjectFormat.js" as F
 // in the middle comes from the type's own body (ObjectCardTransaction, …);
 // a type without one, an app's own `x.<app>.<name>` included, gets
 // ObjectCardGeneric. Everything is plain text: nothing an app sent is read as
-// markup or a link.
+// markup or a link. The lines that mark matches are StyledText, the
+// publisher's text escaped before the mark is added (ObjectHighlight.js).
 //
 // Public API:
 //     object        the envelope (ObjectResults' `object` role, or get(row))
@@ -25,6 +27,9 @@ import "ObjectFormat.js" as F
 //     compact       one 44 px row: icon, title, a short value, time. No body,
 //                   no actions (a small module, a dense list)
 //     isNew         draws the "new" dot (the view decides what is new)
+//     query         the search's text: the heading, title, subtitle and text
+//                   mark the start of each word it matches, in the accent
+//                   (basecamp-experiments#46)
 //     namePrefix    objectName of the card; its controls are
 //                   <namePrefix>.action.<id> (View is .action.open),
 //                   <namePrefix>.reply and <namePrefix>.reply.send
@@ -39,6 +44,7 @@ Rectangle {
     property real now: Date.now()
     property bool compact: false
     property bool isNew: false
+    property string query: ""
     property string namePrefix: "objectCard." + F.str(card.object.key)
 
     signal actionRequested(string action, string text)
@@ -63,10 +69,30 @@ Rectangle {
                                  : column.implicitHeight + 2 * Theme.spacing.medium
     radius: Theme.spacing.radiusLarge
     color: tap.pressed ? Theme.palette.backgroundTertiary : Theme.palette.backgroundSecondary
-    border.width: 1
-    border.color: tap.containsMouse ? Theme.palette.border : Theme.palette.borderHairline
+    // Focused from the keyboard: an accent ring, drawn inside, so nothing
+    // moves (basecamp-experiments#48).
+    border.width: card.activeFocus ? 2 : 1
+    border.color: card.activeFocus ? Theme.palette.accentOrange
+                : tap.containsMouse ? Theme.palette.border : Theme.palette.borderHairline
+    activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: F.str(card.object.title)
+    Accessible.focusable: true
+
+    // Enter on the focused card: what its primary button does (the first
+    // action, a reply field opened for a text one), else View. A focused
+    // action button inside is not the card: the key passes on.
+    function activate() {
+        const a = F.primaryAction(card.actions, card.compact)
+        if (a.input === "text") {
+            card.replyAction = a.id
+            reply.forceActiveFocus()
+        } else {
+            card.actionRequested(a.id, "")
+        }
+    }
+    Keys.onReturnPressed: event => { if (card.activeFocus) card.activate(); else event.accepted = false }
+    Keys.onEnterPressed: event => { if (card.activeFocus) card.activate(); else event.accepted = false }
 
     function sendReply() {
         const text = reply.text.trim()
@@ -99,9 +125,10 @@ Rectangle {
 
         ObjectCardIcon { object: card.object; size: 28 }
         LogosText {
-            textFormat: Text.PlainText   // publisher text, never markup (ADR-071)
+            // Escaped, then the matches marked (ObjectHighlight.js, ADR-072).
+            textFormat: Text.StyledText
             Layout.fillWidth: true
-            text: F.str(card.object.title)
+            text: H.mark(F.str(card.object.title), card.query, Theme.palette.accentOrange)
             elide: Text.ElideRight
             maximumLineCount: 1
             font.pixelSize: Theme.typography.primaryText
@@ -143,11 +170,13 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 2
                 LogosText {
-                    textFormat: Text.PlainText   // publisher text, never markup (ADR-071)
+                    // Escaped, then the matches marked (ObjectHighlight.js, ADR-072).
+                    textFormat: Text.StyledText
                     objectName: card.namePrefix + ".heading"
                     Layout.fillWidth: true
-                    text: body.item && body.item.heading.length > 0 ? body.item.heading
-                                                                     : F.str(card.object.title)
+                    text: H.mark(body.item && body.item.heading.length > 0 ? body.item.heading
+                                                                           : F.str(card.object.title),
+                                 card.query, Theme.palette.accentOrange)
                     elide: Text.ElideRight
                     maximumLineCount: 1
                     font.pixelSize: Theme.typography.primaryText
@@ -265,16 +294,16 @@ Rectangle {
     }
 
     // ── the bodies, one per type ────────────────────────────────────────
-    Component { id: accountBody;      ObjectCardAccount      { object: card.object; fields: card.fields } }
-    Component { id: assetBody;        ObjectCardAsset        { object: card.object; fields: card.fields } }
-    Component { id: transactionBody;  ObjectCardTransaction  { object: card.object; fields: card.fields } }
-    Component { id: messageBody;      ObjectCardMessage      { object: card.object; fields: card.fields } }
-    Component { id: postBody;         ObjectCardPost         { object: card.object; fields: card.fields } }
-    Component { id: communityBody;    ObjectCardCommunity    { object: card.object; fields: card.fields } }
-    Component { id: contactBody;      ObjectCardContact      { object: card.object; fields: card.fields } }
-    Component { id: newsBody;         ObjectCardNews         { object: card.object; fields: card.fields } }
-    Component { id: notificationBody; ObjectCardNotification { object: card.object; fields: card.fields } }
-    Component { id: genericBody;      ObjectCardGeneric      { object: card.object; fields: card.fields } }
+    Component { id: accountBody;      ObjectCardAccount      { object: card.object; fields: card.fields; query: card.query } }
+    Component { id: assetBody;        ObjectCardAsset        { object: card.object; fields: card.fields; query: card.query } }
+    Component { id: transactionBody;  ObjectCardTransaction  { object: card.object; fields: card.fields; query: card.query } }
+    Component { id: messageBody;      ObjectCardMessage      { object: card.object; fields: card.fields; query: card.query } }
+    Component { id: postBody;         ObjectCardPost         { object: card.object; fields: card.fields; query: card.query } }
+    Component { id: communityBody;    ObjectCardCommunity    { object: card.object; fields: card.fields; query: card.query } }
+    Component { id: contactBody;      ObjectCardContact      { object: card.object; fields: card.fields; query: card.query } }
+    Component { id: newsBody;         ObjectCardNews         { object: card.object; fields: card.fields; query: card.query } }
+    Component { id: notificationBody; ObjectCardNotification { object: card.object; fields: card.fields; query: card.query } }
+    Component { id: genericBody;      ObjectCardGeneric      { object: card.object; fields: card.fields; query: card.query } }
 
     component NewDot: Rectangle {
         objectName: card.namePrefix + ".new"

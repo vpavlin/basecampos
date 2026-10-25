@@ -43,6 +43,229 @@ Rectangle {
         root.pill = null
         root.startVisit()
     }
+    // Esc in the search (#47): clears what was typed, the type pill stays.
+    // True when there was text to clear; the desktop shell asks this before
+    // Esc closes the overlay or the sidebar. Basecampium's compact bar is the
+    // shell's own, with its own Esc (Back).
+    // With a result focused from the keyboard (#48), Esc first takes the
+    // focus back to the field, the text kept.
+    function escapeSearch() {
+        if (root.searchInBar)
+            return false
+        if (root.resultFocused()) {
+            root.focusSearch()
+            return true
+        }
+        if (search.text.length === 0)
+            return false
+        search.text = ""
+        return true
+    }
+
+    // ── keyboard (basecamp-experiments#48) ──────────────────────────────
+    // Down from the search moves into the results: Recent apps (Left and
+    // Right along the row), then down the Apps block's rows and the cards
+    // (the feed's, or the modules' in reading order). Up from the first
+    // returns to the search. Enter does what a click on it would (a card:
+    // its primary action, ObjectCard.activate). Typing goes back to the
+    // search. The results take real focus (screen readers follow it) and
+    // draw an accent ring while they hold it; the page scrolls to keep the
+    // focused one in view. The phone layout's search is the shell's bar,
+    // so none of this applies there.
+    function within(item, ancestor) {
+        for (let it = item; it; it = it.parent)
+            if (it === ancestor) return true
+        return false
+    }
+    function focusedItem() { return root.Window.window ? root.Window.window.activeFocusItem : null }
+    function resultFocused() {
+        const f = root.focusedItem()
+        return f !== null && root.within(f, page) && !root.within(f, search)
+    }
+    // The lines under Recent apps, top to bottom, each the results side by
+    // side on it: an app row, a card, or a module's cards in a strip or two
+    // columns (Left and Right go along those, M.navMove).
+    function navGroups() {
+        const out = []
+        if (appsBlock.visible)
+            for (let i = 0; i < appHitRepeater.count; ++i) {
+                const it = appHitRepeater.itemAt(i)
+                if (it) out.push([it])
+            }
+        if (feed.visible)
+            return out.concat(feed.navCards().map(c => [c]))
+        if (grid.visible) {
+            const mods = []
+            for (let i = 0; i < moduleRepeater.count; ++i) {
+                const m = moduleRepeater.itemAt(i)
+                if (m && m.visible) mods.push(m)
+            }
+            mods.sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x)
+            for (const m of mods) out.push(...m.navGroups())
+        }
+        return out
+    }
+    // The same flattened: `rows` top to bottom and left to right, `lines`
+    // the line each is on.
+    function navLayout() {
+        const rows = [], lines = []
+        const groups = root.navGroups()
+        for (let g = 0; g < groups.length; ++g)
+            for (const it of groups[g]) { rows.push(it); lines.push(g) }
+        return { rows: rows, lines: lines }
+    }
+    function navRows() { return root.navLayout().rows }
+    // Which result `f` is in: { where: "tile" | "row", index, stop, key }
+    // (key: the card's object or the app row's app, to find it again), or
+    // null. `rows` is navRows().
+    function locate(f, rows) {
+        if (!f) return null
+        if (appRow.visible)
+            for (let i = 0; i < appRow.count; ++i) {
+                const t = appRow.itemAtIndex(i)
+                if (t && root.within(f, t)) return { where: "tile", index: i, stop: t, key: "" }
+            }
+        for (let i = 0; i < rows.length; ++i)
+            if (root.within(f, rows[i])) {
+                const r = rows[i]
+                const key = r.object && r.object.id ? "object:" + r.object.id
+                          : r.hit && r.hit.name ? "app:" + r.hit.name : ""
+                return { where: "row", index: i, stop: r, key: key }
+            }
+        return null
+    }
+    // The result last focused from the keyboard ({ where, index, key }) and
+    // its item. The feed and the Apps block are drawn again whenever their
+    // results change (a pending payment moves every few seconds), which
+    // drops the focused card; the focus then goes back to the same object,
+    // or the same place. Only then: when the focus leaves for somewhere else
+    // (the window lost it, a click in the dock or another app) while the
+    // result is still there, nothing is taken back.
+    property var navAt: null
+    property Item navItem: null
+    function restoreNav() {
+        const at = root.navAt
+        const f = root.focusedItem()
+        if (!at || (f && root.within(f, page))) return
+        // The result is still on the page: the focus left for somewhere else
+        // (the window lost it, a click in the dock or another app), so it
+        // stays there and the ring goes out (#48 review). A redrawn result
+        // is out of the page by now (unparented, or destroyed: null).
+        const old = root.navItem
+        if (old && old.visible && root.within(old, page)) {
+            root.navAt = null
+            root.navItem = null
+            return
+        }
+        if (at.where === "tile") {
+            if (appRow.visible && appRow.count > 0) root.focusTile(Math.min(at.index, appRow.count - 1))
+            else root.focusSearch()
+            return
+        }
+        const rows = root.navRows()
+        if (rows.length === 0) { root.focusSearch(); return }
+        let target = rows[Math.min(at.index, rows.length - 1)]
+        for (const r of rows)
+            if (at.key.length > 0 && root.locate(r, [r]).key === at.key) { target = r; break }
+        target.forceActiveFocus(Qt.TabFocusReason)
+    }
+    function noteFocus() {
+        const f = root.focusedItem()
+        const at = root.locate(f, root.navRows())
+        if (at) {
+            root.navAt = { where: at.where, index: at.index, key: at.key }
+            root.navItem = at.stop
+        } else if (root.navAt && (!f || !root.within(f, page))) {
+            // Its result may have been drawn again: once that is done,
+            // restoreNav brings the focus back to the new one.
+            Qt.callLater(root.restoreNav)
+            return
+        } else {
+            root.navAt = null
+            root.navItem = null
+        }
+        Qt.callLater(root.revealFocus)
+    }
+    function focusTile(i) {
+        if (appRow.count === 0) return
+        appRow.currentIndex = i
+        appRow.positionViewAtIndex(i, ListView.Contain)
+        const t = appRow.itemAtIndex(i)
+        if (t) t.forceActiveFocus(Qt.TabFocusReason)
+    }
+    function navKey(event) {
+        if (root.searchInBar) return
+        const f = root.focusedItem()
+        if (!f || !root.within(f, root)) return
+        const inSearch = root.within(f, search)
+        if (!inSearch && root.within(f, page) && M.typesText(event.text, event.modifiers)) {
+            root.focusSearch()
+            search.textInput.cursorPosition = search.text.length
+            search.textInput.insert(search.textInput.cursorPosition, event.text)
+            event.accepted = true
+            return
+        }
+        if (!inSearch && event.key === Qt.Key_Backspace && root.within(f, page)) {
+            root.focusSearch()
+            search.textInput.cursorPosition = search.text.length
+            if (search.text.length > 0)
+                search.textInput.remove(search.text.length - 1, search.text.length)
+            event.accepted = true
+            return
+        }
+        if (!inSearch && event.key === Qt.Key_Escape) {
+            event.accepted = root.escapeSearch()
+            return
+        }
+        const key = { [Qt.Key_Up]: "up", [Qt.Key_Down]: "down",
+                      [Qt.Key_Left]: "left", [Qt.Key_Right]: "right" }[event.key]
+        const isEnter = event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+        if (!key && !isEnter) return
+
+        const tiles = appRow.visible ? appRow.count : 0
+        const nav = root.navLayout()
+        const rows = nav.rows
+        const from = inSearch ? { where: "search" } : root.locate(f, rows)
+        if (!from) return
+        const stop = from.stop
+        if (isEnter) {
+            // A card takes its own Enter; a tile or an app row opens.
+            if (stop && typeof stop.activate === "function" && stop.activeFocus) {
+                stop.activate()
+                event.accepted = true
+            }
+            return
+        }
+        const to = M.navMove(from, key, tiles, rows.length, appRow.currentIndex, nav.lines)
+        if (!to) return
+        event.accepted = true
+        if (to.where === "search") root.focusSearch()
+        else if (to.where === "tile") root.focusTile(to.index)
+        else rows[to.index].forceActiveFocus(Qt.TabFocusReason)
+    }
+    Keys.onPressed: event => root.navKey(event)
+
+    // Keeps what has the focus in view, the search included.
+    function revealFocus() {
+        const f = root.focusedItem()
+        if (!f || !root.within(f, page)) return
+        // Back in the search: the page's top, as it was before.
+        if (root.within(f, search)) {
+            scroll.contentY = 0
+            return
+        }
+        const item = f
+        const p = item.mapToItem(scroll.contentItem, 0, 0)
+        const pad = Theme.spacing.medium
+        let y = scroll.contentY
+        if (p.y + item.height + pad > y + scroll.height) y = p.y + item.height + pad - scroll.height
+        if (p.y - pad < y) y = p.y - pad
+        scroll.contentY = Math.max(0, Math.min(y, scroll.contentHeight - scroll.height))
+    }
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() { root.noteFocus() }
+    }
 
     // Basecampium's compact layout puts the search in its one bar
     // (docs/MOBILE-LAYOUT.md §8): this page then shows the results only.
@@ -50,8 +273,26 @@ Rectangle {
     property string barQuery: ""
     // The desktop's Activity sidebar: the search, the pills and the feed only.
     property bool feedOnly: false
-    readonly property string rawQuery: (searchInBar ? barQuery : search.text).trim()
+    // What is typed, and what the results are for: the same text a moment
+    // after the last keystroke (basecamp-experiments#27, the flood test:
+    // each search ranks the whole store, so typing fast asked for one per
+    // letter). Emptied at once (Esc, a new visit); Enter applies it first.
+    readonly property string typedQuery: (searchInBar ? barQuery : search.text).trim()
+    property string rawQuery: ""
     readonly property string query: rawQuery.toLowerCase()
+    onTypedQueryChanged: {
+        if (root.typedQuery.length === 0) root.applyQuery()
+        else queryTimer.restart()
+    }
+    function applyQuery() {
+        queryTimer.stop()
+        root.rawQuery = root.typedQuery
+    }
+    Timer {
+        id: queryTimer
+        interval: 100
+        onTriggered: root.applyQuery()
+    }
     // Phone width (Basecampium's compact layout): tighter margins and tiles.
     readonly property bool compact: width < 600
     readonly property int sideMargin: compact ? Theme.spacing.medium : Theme.spacing.xlarge * 2
@@ -129,6 +370,7 @@ Rectangle {
     // Enter: the first app found that is installed (never an install).
     function openFirst() {
         if (root.feedOnly) return
+        if (queryTimer.running) root.applyQuery()
         const hit = root.appHits.find(a => a.state === "running" || a.state === "installed")
         if (root.query.length > 0 && hit) root.launchApp(hit.name)
     }
@@ -182,9 +424,9 @@ Rectangle {
     }
 
     function startVisit() {
+        root.flushMarks()
         root.now = Date.now()
         root.newIds = ({})
-        root.toMark = []
         root.visit += 1
         if (root.view === "feed") root.noteShown(root.feedRows.slice(0, feed.shown))
     }
@@ -262,8 +504,8 @@ Rectangle {
         return rows
     }
 
-    onRawQueryChanged: { refreshAll(); refreshApps() }
-    onPillChanged: refreshPill()
+    onRawQueryChanged: { flushMarks(); refreshAll(); refreshApps() }
+    onPillChanged: { flushMarks(); refreshPill() }
     onViewChanged: if (root.view === "feed") root.noteShown(root.feedRows.slice(0, feed.shown))
     Connections {
         target: root.allResults
@@ -283,10 +525,16 @@ Rectangle {
     Timer {
         id: markTimer
         interval: 1500
-        onTriggered: {
-            if (root.toMark.length > 0) shell.markSeen(root.toMark)
-            root.toMark = []
-        }
+        onTriggered: root.flushMarks()
+    }
+    // Marks what was noted now. The host marks only ids still in this view's
+    // results, so this runs before the results change under them too (new
+    // text, a pill, the modules dropping theirs), or they would stay unseen
+    // for good: noted, in newIds, never noted again in this visit.
+    function flushMarks() {
+        markTimer.stop()
+        if (root.toMark.length > 0) shell.markSeen(root.toMark)
+        root.toMark = []
     }
     // Relative times ("5 min") move on.
     Timer {
@@ -335,6 +583,7 @@ Rectangle {
     Component.onCompleted: {
         search.textInput.cursorDelegate = calmCursor
         shell.setBarPlaceholder(root.barPlaceholder)
+        root.rawQuery = root.typedQuery
         root.refreshAll()
         root.refreshApps()
         root.startVisit()
@@ -472,6 +721,7 @@ Rectangle {
             onSubmitted: root.openFirst()
             Keys.onReturnPressed: root.openFirst()
             Keys.onEnterPressed: root.openFirst()
+            Keys.onEscapePressed: event => { event.accepted = root.escapeSearch() }
         }
 
         Loader {
@@ -503,9 +753,12 @@ Rectangle {
             orientation: ListView.Horizontal
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+            // Left and Right go through home's keys (navKey), which move the focus.
+            keyNavigationEnabled: false
             model: root.recentApps
             delegate: Tile {
                 required property var modelData
+                required property int index
                 objectName: "newTab.app." + modelData.name
                 key: modelData.name
                 label: modelData.displayName || modelData.name
@@ -513,6 +766,10 @@ Rectangle {
                 fullBleed: modelData.supportsFullBleedIcon === true
                 loading: (shell.loadingModules || []).indexOf(modelData.name) >= 0
                 onActivated: root.launchApp(modelData.name)
+                onActiveFocusChanged: if (activeFocus) {
+                    appRow.currentIndex = index
+                    appRow.positionViewAtIndex(index, ListView.Contain)
+                }
             }
         }
 
@@ -566,6 +823,7 @@ Rectangle {
             }
 
             Repeater {
+                id: appHitRepeater
                 model: root.shownAppHits.slice(0, root.maxAppHits)
                 delegate: AppRow {
                     required property var modelData
@@ -635,6 +893,9 @@ Rectangle {
                            + (M.spanFor(modelData.size, grid.columns) - 1) * grid.gap
                     barQuery: root.rawQuery
                     pill: root.pill
+                    // Searching only while the modules show (#27).
+                    live: root.view === "grid"
+                    onReleasing: root.flushMarks()
                     now: root.now
                     newIds: root.newIds
                     visit: root.visit
@@ -678,6 +939,7 @@ Rectangle {
             total: root.feedTotal
             now: root.now
             newIds: root.newIds
+            query: root.rawQuery
             onRaiseRequested: (id, action, text) => root.raise(id, action, text)
             onShownChanged: root.noteShown(root.feedRows.slice(0, feed.shown))
         }
@@ -734,14 +996,22 @@ Rectangle {
         objectName: "home.app." + (hit.name || "")
         height: 56
         hoverEnabled: true
+        // Focus from the keyboard only: a click leaves it in the search.
+        focusPolicy: Qt.TabFocus
         Accessible.name: hit.title || hit.name || ""
         Accessible.description: stateLabel.visible ? stateLabel.text : actionButton.text
         onClicked: root.openApp(hit)
+        // Enter (#48): what a click does.
+        function activate() { root.openApp(appRowItem.hit) }
 
         background: Rectangle {
             radius: Theme.spacing.radiusMedium
             color: appRowItem.pressed ? Theme.palette.backgroundTertiary
-                 : appRowItem.hovered ? Theme.palette.backgroundSecondary : "transparent"
+                 : appRowItem.hovered || appRowItem.activeFocus ? Theme.palette.backgroundSecondary
+                 : "transparent"
+            // The keyboard's focus ring (#48), drawn inside: nothing moves.
+            border.width: appRowItem.activeFocus ? 2 : 0
+            border.color: Theme.palette.accentOrange
         }
 
         BasecampAppTile {
@@ -762,7 +1032,11 @@ Rectangle {
             anchors.rightMargin: Theme.spacing.medium
             anchors.verticalCenter: parent.verticalCenter
             elide: Text.ElideRight
-            text: appRowItem.hit.title || appRowItem.hit.name || ""
+            // The name escaped, what the bar's text matches marked
+            // (basecamp-experiments#46).
+            textFormat: Text.StyledText
+            text: ObjectCardFormat.mark(appRowItem.hit.title || appRowItem.hit.name || "", root.rawQuery,
+                                        Theme.palette.accentOrange)
             color: Theme.palette.text
         }
 
@@ -816,15 +1090,25 @@ Rectangle {
         width: root.pitch
         height: root.tileHeight
         hoverEnabled: true
+        // Focus from the keyboard only: a click leaves it in the search.
+        focusPolicy: Qt.TabFocus
+        Accessible.name: tile.label
         onClicked: tile.activated()
+        // Enter (#48): what a click does.
+        function activate() { tile.activated() }
+        // Hovered or focused from the keyboard: lifted the same way.
+        readonly property bool lit: tile.hovered || tile.activeFocus
 
         Rectangle {
             anchors.fill: parent
             anchors.margins: 4
             radius: Theme.spacing.radiusLarge
             color: tile.pressed ? Theme.palette.backgroundTertiary : Theme.palette.backgroundSecondary
-            opacity: tile.hovered ? 1 : 0
+            opacity: tile.lit ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 120 } }
+            // The keyboard's focus ring (#48), on the plate's edge.
+            border.width: tile.activeFocus ? 2 : 0
+            border.color: Theme.palette.accentOrange
         }
 
         Item {
@@ -832,13 +1116,13 @@ Rectangle {
             width: root.tileSize
             height: root.tileSize
             anchors.horizontalCenter: parent.horizontalCenter
-            y: tile.hovered ? 8 : 12
+            y: tile.lit ? 8 : 12
             Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
             LogosGlow {
                 anchors.fill: parent
                 radius: artTile.radius
-                active: tile.hovered
+                active: tile.lit
             }
 
             // The app's icon, or its letters when it has none.
@@ -873,7 +1157,7 @@ Rectangle {
             lineHeight: 1.1
             text: tile.label
             font.pixelSize: Theme.typography.secondaryText
-            color: tile.hovered ? Theme.palette.text : Theme.palette.textSecondary
+            color: tile.lit ? Theme.palette.text : Theme.palette.textSecondary
         }
     }
 }

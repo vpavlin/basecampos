@@ -32,6 +32,9 @@ function tokens(text) {
 }
 
 function hasWordStartingWith(text, token) {
+    // A word of it starts with the token only if the text holds the token:
+    // that check is cheap, the split is not, and most objects miss.
+    if (typeof text !== "string" || text.toLowerCase().indexOf(token) < 0) return false
     var words = tokens(text)
     for (var i = 0; i < words.length; ++i)
         if (words[i].indexOf(token) === 0) return true

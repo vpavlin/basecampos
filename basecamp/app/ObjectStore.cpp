@@ -646,29 +646,33 @@ int ObjectStore::count(const QString& app) const
     return m_byApp.value(app).size();
 }
 
+bool ObjectStore::matches(const QVariantMap& o, const QVariantMap& filter)
+{
+    if (!anyOf(filter, "types", o.value(QStringLiteral("type")).toString())
+        || !anyOf(filter, "apps", o.value(QStringLiteral("app")).toString())
+        || !anyOf(filter, "kinds", o.value(QStringLiteral("kind")).toString())
+        || !anyOf(filter, "keys", o.value(QStringLiteral("key")).toString())
+        || !anyOf(filter, "ids", o.value(QStringLiteral("id")).toString()))
+        return false;
+    if (filter.value(QStringLiteral("unseenOnly")).toBool() && o.value(QStringLiteral("seen")).toBool())
+        return false;
+    const QStringList subjects = filter.value(QStringLiteral("subjects")).toStringList();
+    if (!subjects.isEmpty()) {
+        const QStringList mine = o.value(QStringLiteral("subjects")).toStringList();
+        if (std::none_of(subjects.cbegin(), subjects.cend(),
+                         [&mine](const QString& s) { return mine.contains(s); }))
+            return false;
+    }
+    return true;
+}
+
 QVariantList ObjectStore::list(const QVariantMap& filter) const
 {
     const_cast<ObjectStore*>(this)->purgeExpired();
-    const bool unseenOnly = filter.value(QStringLiteral("unseenOnly")).toBool();
-    const QStringList subjects = filter.value(QStringLiteral("subjects")).toStringList();
     QList<QVariantMap> hits;
-    for (const QVariantMap& o : std::as_const(m_objects)) {
-        if (!anyOf(filter, "types", o.value(QStringLiteral("type")).toString())
-            || !anyOf(filter, "apps", o.value(QStringLiteral("app")).toString())
-            || !anyOf(filter, "kinds", o.value(QStringLiteral("kind")).toString())
-            || !anyOf(filter, "keys", o.value(QStringLiteral("key")).toString())
-            || !anyOf(filter, "ids", o.value(QStringLiteral("id")).toString()))
-            continue;
-        if (unseenOnly && o.value(QStringLiteral("seen")).toBool())
-            continue;
-        if (!subjects.isEmpty()) {
-            const QStringList mine = o.value(QStringLiteral("subjects")).toStringList();
-            if (std::none_of(subjects.cbegin(), subjects.cend(),
-                             [&mine](const QString& s) { return mine.contains(s); }))
-                continue;
-        }
-        hits << o;
-    }
+    for (const QVariantMap& o : std::as_const(m_objects))
+        if (matches(o, filter))
+            hits << o;
     std::sort(hits.begin(), hits.end(), [](const QVariantMap& a, const QVariantMap& b) {
         const qint64 ta = a.value(QStringLiteral("time")).toLongLong();
         const qint64 tb = b.value(QStringLiteral("time")).toLongLong();
@@ -717,20 +721,30 @@ QVariantMap ObjectStore::get(const QString& id) const
     return m_objects.value(id);
 }
 
+QList<QVariantMap> ObjectStore::getMany(const QStringList& ids) const
+{
+    const_cast<ObjectStore*>(this)->purgeExpired();
+    QList<QVariantMap> out;
+    out.reserve(ids.size());
+    for (const QString& id : ids)
+        out << m_objects.value(id);
+    return out;
+}
+
 void ObjectStore::markSeen(const QStringList& ids)
 {
-    QSet<QString> apps;
+    QStringList marked;
     for (const QString& id : ids) {
         auto it = m_objects.find(id);
         if (it == m_objects.end() || it->value(QStringLiteral("seen")).toBool())
             continue;
         (*it)[QStringLiteral("seen")] = true;
-        apps.insert(it->value(QStringLiteral("app")).toString());
+        marked << id;
     }
-    for (const QString& app : std::as_const(apps))
-        emit objectsChanged(app);
-    if (!apps.isEmpty())
-        emit changed();
+    if (marked.isEmpty())
+        return;
+    emit seenChanged(marked);
+    emit changed();
 }
 
 QStringList ObjectStore::disabledApps() const

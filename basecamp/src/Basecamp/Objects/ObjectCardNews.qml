@@ -10,7 +10,7 @@ ObjectCardBody {
     id: body
     trailing: F.str(fields.source)
 
-    ObjectCardLine { text: F.str(body.fields.text); maximumLineCount: 3; secondary: true }
+    ObjectCardMatchLine { plain: F.str(body.fields.text); query: body.query; maximumLineCount: 3; secondary: true }
     ObjectCardLine {
         secondary: true
         text: F.str(body.fields.source)

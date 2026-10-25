@@ -16,13 +16,14 @@ ObjectCardBody {
     heading: F.str(fields.authorName)
     trailing: scoreText
 
-    ObjectCardLine {
-        text: F.str(body.fields.text).length > 0 ? F.str(body.fields.text) : F.str(body.object.title)
+    ObjectCardMatchLine {
+        plain: F.str(body.fields.text).length > 0 ? F.str(body.fields.text) : F.str(body.object.title)
+        query: body.query
         maximumLineCount: 3
     }
     ObjectCardLine {
         secondary: true
         text: [body.scoreText, body.likesText].filter(s => s.length > 0).join(" · ")
     }
-    ObjectCardLine { secondary: true; text: F.str(body.object.subtitle) }
+    ObjectCardMatchLine { secondary: true; plain: F.str(body.object.subtitle); query: body.query }
 }

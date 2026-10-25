@@ -9,6 +9,7 @@
 #include "ShellPrefs.h"
 #include "TabArea.h"
 #include "HomeOverlayGeometry.h"
+#include "HomeEscape.h"
 
 #include <QGuiApplication>
 #include <QQuickWidget>
@@ -572,13 +573,18 @@ bool MainContainer::eventFilter(QObject* watched, QEvent* event)
             toggleHomeOverlay();
             return true;
         }
-        // Esc closes the overlay or the sidebar, unless a dialog is up over
-        // it (that one's).
+        // Esc clears home's search first and closes the overlay or the
+        // sidebar once it is empty (#47), unless a dialog is up over it
+        // (that one's). Home is asked only when the key is its own: with the
+        // focus in the dock or the top bar, Esc just closes.
         const bool dialogUp = m_overlayWidget && m_overlayWidget->isVisible();
-        if (ke->key() == Qt::Key_Escape && mods == Qt::NoModifier && homeOverlayOpen()
-            && !dialogUp && w && w->window() == window()) {
-            hideHomeOverlay();
-            return true;
+        if (ke->key() == Qt::Key_Escape && mods == Qt::NoModifier && w && w->window() == window()) {
+            const bool inHome = m_homeWidget && (w == m_homeWidget || m_homeWidget->isAncestorOf(w));
+            switch (HomeEscape::onEscape(homeOverlayOpen(), dialogUp, inHome, homeRoot())) {
+            case HomeEscape::Action::Ignore: break;
+            case HomeEscape::Action::Cleared: return true;
+            case HomeEscape::Action::Close: hideHomeOverlay(); return true;
+            }
         }
     }
     if (watched == m_dockWidget && event->type() == QEvent::Resize)

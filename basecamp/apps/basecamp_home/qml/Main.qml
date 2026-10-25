@@ -18,6 +18,8 @@ Rectangle {
     // Called by the shell (desktop New tab: focus the page's own search).
     function focusSearch() { if (page.item) page.item.focusSearch() }
     function clearSearch() { if (page.item) page.item.clearSearch() }
+    // Esc (#47): true when home had search text and cleared it.
+    function escapeSearch() { return page.item ? page.item.escapeSearch() : false }
 
     Loader {
         id: page

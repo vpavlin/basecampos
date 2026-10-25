@@ -12,6 +12,9 @@ Column {
     property string heading: ""
     // A short value for the one-line row ("+40.00 TST", "1,240 members").
     property string trailing: ""
+    // The bar's text: lines of the object's own words mark what it matches
+    // (ObjectCardMatchLine, basecamp-experiments#46).
+    property string query: ""
 
     spacing: Theme.spacing.tiny
 }

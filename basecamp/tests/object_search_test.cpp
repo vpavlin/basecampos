@@ -122,6 +122,7 @@ private slots:
     void testStoreChangeAsksAgain();
     void testNonHoldersGetNothing();
     void testViewsActOnlyOnTheirResults();
+    void testMarkSeenKeepsTheOrder();
     void testLosingTheViewRoleEmptiesResults();
     void testHolderChangeMovesRequests();
     void testDroppedResultsFreeTheirPlace();
@@ -603,6 +604,56 @@ void TestObjectSearch::testViewsActOnlyOnTheirResults()
     QVERIFY(!store->get(n1).value("seen").toBool());
     // The row updates after the store change re-asks.
     QTRY_VERIFY_WITH_TIMEOUT(home->index(home->ids().indexOf(m1)).data(ObjectResults::SeenRole).toBool(), 1000);
+}
+
+// Marking seen is not a store change that re-ranks (the flood test of
+// basecamp-experiments#27): the rows take the new `seen` in place, in the
+// same order, and nobody is asked; an unseenOnly filter does ask again.
+void TestObjectSearch::testMarkSeenKeepsTheOrder()
+{
+    auto store = makeStore();
+    seed(store.get());
+    auto search = makeSearch(store.get());
+    QSignalSpy asked(search.get(), &ObjectSearch::searchRequested);
+    QSignalSpy published(store.get(), &ObjectStore::objectsChanged);
+    QSignalSpy seenSpy(store.get(), &ObjectStore::seenChanged);
+
+    std::unique_ptr<ObjectResults> all(search->search(kHome, QString()));
+    QVERIFY(search->answer(kRanker, asked.last().at(1).toString(),
+                           idList(ObjectRanker::rank(store->list(), QString(), kNow))));
+    std::unique_ptr<ObjectResults> unseen(search->search(kHome, QString(), { { "unseenOnly", true } }));
+    QVERIFY(search->answer(kRanker, asked.last().at(1).toString(),
+                           idList(ObjectRanker::rank(store->list({ { "unseenOnly", true } }), QString(), kNow))));
+    const QStringList before = all->ids();
+    QCOMPARE(before.size(), 6);
+    const QString top = before.first();
+    QCOMPARE(unseen->ids().first(), top);
+    const int askedBefore = int(asked.count());
+
+    QCOMPARE(search->markSeen(kHome, { top }), QStringList{ top });
+    QCOMPARE(published.count(), 0);
+    QCOMPARE(seenSpy.count(), 1);
+    QCOMPARE(seenSpy.at(0).at(0).toStringList(), QStringList{ top });
+    // Marking again says nothing.
+    store->markSeen({ top });
+    QCOMPARE(seenSpy.count(), 1);
+
+    // The unseenOnly results ask again (and lose it once answered); the
+    // others keep their order and show it seen.
+    QTRY_COMPARE_WITH_TIMEOUT(int(asked.count()), askedBefore + 1, 1000);
+    QCOMPARE(asked.last().at(3).toMap().value("unseenOnly").toBool(), true);
+    QVERIFY(search->answer(kRanker, asked.last().at(1).toString(),
+                           idList(ObjectRanker::rank(store->list({ { "unseenOnly", true } }), QString(), kNow))));
+    QVERIFY(!unseen->ids().contains(top));
+    QCOMPARE(all->ids(), before);
+    QVERIFY(all->index(0).data(ObjectResults::SeenRole).toBool());
+    QTest::qWait(50);
+    QCOMPARE(int(asked.count()), askedBefore + 1);
+    QCOMPARE(all->ids(), before);
+
+    // A real change re-ranks: the seen one leaves the top.
+    QCOMPARE(store->publish(kNews, batch({ obj("n:2", "news", "Later", kNow - 5 * kHour) })), QString());
+    QTRY_VERIFY_WITH_TIMEOUT(int(asked.count()) >= askedBefore + 2, 1000);
 }
 
 void TestObjectSearch::testLosingTheViewRoleEmptiesResults()

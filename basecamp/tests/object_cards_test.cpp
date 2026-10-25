@@ -1,10 +1,13 @@
 // The object cards' and home's pure JS (SHELL-OBJECTS-SPEC §3, §4, §7):
 // src/Basecamp/Objects/ObjectFormat.js (what a card writes for a type, a
 // time, an amount, a status, which actions it draws) and
+// src/Basecamp/Objects/ObjectHighlight.js (what the search matched, marked,
+// basecamp-experiments#46),
 // apps/basecamp_home/qml/BasecampHomeModules.js (modules as saved filters,
 // pills, the feed's order and "N new", rows that keep their places, the grid
-// layout). Each file runs in a bare QJSEngine, as QML would run a
-// `.pragma library` script; the QML around them is checked headlessly.
+// layout, where the arrow keys take the focus). Each file runs in a bare
+// QJSEngine, as QML would run a `.pragma library` script; the QML around
+// them is checked headlessly.
 
 #include <QFile>
 #include <QJSEngine>
@@ -39,17 +42,32 @@ class ObjectCardsTest : public QObject {
 
     QJSEngine m_format;
     QJSEngine m_home;
+    QJSEngine m_mark;
 
     QJSValue f(const QString& expr) { return m_format.evaluate(expr); }
     QJSValue h(const QString& expr) { return m_home.evaluate(expr); }
     QString fs(const QString& expr) { return f(expr).toString(); }
     QString hs(const QString& expr) { return h(expr).toString(); }
+    QString ms(const QString& expr) { return m_mark.evaluate(expr).toString(); }
+
+    // Where an arrow takes the focus: "where:index", or "-" when the key is
+    // not home's.
+    // `lines`: the rows' visual lines as a JS array ("" for none).
+    QString nav(const QString& from, const QString& key, int tiles, int rows, int lastTile = 0,
+                const QString& lines = QString())
+    {
+        return hs(QStringLiteral("(function(){ var t = navMove(%1, '%2', %3, %4, %5, %6);"
+                                 " return t ? t.where + (t.where === 'search' ? '' : ':' + t.index) : '-' })()")
+                      .arg(from, key).arg(tiles).arg(rows).arg(lastTile)
+                      .arg(lines.isEmpty() ? QStringLiteral("undefined") : lines));
+    }
 
 private slots:
     void initTestCase()
     {
         QVERIFY(load(m_format, QFINDTESTDATA("../src/Basecamp/Objects/ObjectFormat.js")));
         QVERIFY(load(m_home, QFINDTESTDATA("../apps/basecamp_home/qml/BasecampHomeModules.js")));
+        QVERIFY(load(m_mark, QFINDTESTDATA("../src/Basecamp/Objects/ObjectHighlight.js")));
     }
 
     // ── ObjectFormat.js ─────────────────────────────────────────────────
@@ -157,6 +175,15 @@ private slots:
         QVERIFY(f("offersView(actions({ actions: [ { id: 'view', label: 'Details' } ] }))").toBool());
         QVERIFY(f("offersView(actions({ actions: [ { id: 'show', label: 'View' } ] }))").toBool());
         QVERIFY(!f("offersView(actions({ actions: [ { id: 'join', label: 'Join' } ] }))").toBool());
+        // Enter on a card (#48): the first action, else View; a compact row
+        // draws no actions, so View.
+        QCOMPARE(fs("primaryAction(actions({ actions: [ { id: 'pay', label: 'Pay' }, { id: 'no' } ] }), false).id"),
+                 QStringLiteral("pay"));
+        QCOMPARE(fs("primaryAction(actions({ actions: [ { id: 'reply', input: 'text' } ] }), false).input"),
+                 QStringLiteral("text"));
+        QCOMPARE(fs("primaryAction(actions({ actions: [ { id: 'pay' } ] }), true).id"), QStringLiteral("open"));
+        QCOMPARE(fs("primaryAction(actions({}), false).id"), QStringLiteral("open"));
+        QCOMPARE(fs("primaryAction(actions({ actions: [ { id: 'open' } ] }), false).id"), QStringLiteral("open"));
     }
 
     void timeOf()
@@ -164,6 +191,56 @@ private slots:
         QCOMPARE(f("timeOf({ time: 5, updated: 9 })").toInt(), 5);
         QCOMPARE(f("timeOf({ updated: 9 })").toInt(), 9);
         QCOMPARE(f("timeOf({ time: 'now' })").toInt(), 0);
+    }
+
+    // ── ObjectHighlight.js ──────────────────────────────────────────────
+
+    // The issue's own cases: the start of each word a query word begins,
+    // case-insensitive, as the rankers match.
+    void markWordPrefixes()
+    {
+        const QString o = QStringLiteral("<font color=\"#ed7b58\">");
+        const QString c = QStringLiteral("</font>");
+        QCOMPARE(ms("mark('Sent 12.00 TST to Ada Morrow', 'ada', '#ed7b58')"),
+                 QStringLiteral("Sent 12.00 TST to ") + o + "Ada" + c + " Morrow");
+        QCOMPARE(ms("mark('Stub Wallet', 'wal', '#ed7b58')"), QStringLiteral("Stub ") + o + "Wal" + c + "let");
+        QCOMPARE(ms("mark('LEZ Wallet', 'WAL', '#ed7b58')"), QStringLiteral("LEZ ") + o + "Wal" + c + "let");
+        // Every query word; the longest one a word starts with.
+        QCOMPARE(ms("mark('Ada Morrow', 'mo ada mor', '#ed7b58')"),
+                 o + "Ada" + c + " " + o + "Mor" + c + "row");
+        // Word starts only: "ada" is not in "Canada"; punctuation splits words.
+        QCOMPARE(ms("mark('Canada', 'ada', '#ed7b58')"), QStringLiteral("Canada"));
+        QCOMPARE(ms("mark('re:ada-morrow', 'mor', '#ed7b58')"),
+                 QStringLiteral("re:ada-") + o + "mor" + c + "row");
+        // A query word longer than the word marks the word, not past it.
+        QCOMPARE(ms("ranges('Ada', 'adam').length").toInt(), 0);
+        QCOMPARE(ms("JSON.stringify(ranges('Ada Ada', 'a'))"), QStringLiteral("[[0,1],[4,5]]"));
+        // No query, no match or no valid colour: the text, escaped, unmarked.
+        QCOMPARE(ms("mark('Ada', '', '#ed7b58')"), QStringLiteral("Ada"));
+        QCOMPARE(ms("mark('Ada', '  ', '#ed7b58')"), QStringLiteral("Ada"));
+        QCOMPARE(ms("mark('Ada', 'ada', 'red\\\"><img src=x>')"), QStringLiteral("Ada"));
+        QCOMPARE(ms("mark(42, 'ada', '#ed7b58')"), QString());
+        QCOMPARE(ms("mark('', 'ada', '#ed7b58')"), QString());
+    }
+
+    // Publisher text stays plain (ADR-072): escaped before the one tag is
+    // added, matched or not.
+    void markEscapesPublisherText()
+    {
+        const QString o = QStringLiteral("<font color=\"#ed7b58\">");
+        const QString c = QStringLiteral("</font>");
+        QCOMPARE(ms("mark('<b>Ada</b> &amp; <img src=\"http://x/a.png\">', 'ada', '#ed7b58')"),
+                 QStringLiteral("&lt;b&gt;") + o + "Ada" + c
+                 + "&lt;/b&gt; &amp;amp; &lt;img src=&quot;http://x/a.png&quot;&gt;");
+        // A match inside what looks like a tag is still only text.
+        QCOMPARE(ms("mark('<img src=x>', 'img', '#ed7b58')"),
+                 QStringLiteral("&lt;") + o + "img" + c + " src=x&gt;");
+        QCOMPARE(ms("mark('<b>bold</b>', '', '#ed7b58')"), QStringLiteral("&lt;b&gt;bold&lt;/b&gt;"));
+        // Reads as the plain text would: line breaks, runs of spaces.
+        QCOMPARE(ms("escape('a\\nb\\r\\nc')"), QStringLiteral("a<br>b<br>c"));
+        QCOMPARE(ms("escape('a   b')"), QStringLiteral("a &nbsp;&nbsp;b"));
+        QCOMPARE(ms("mark('x  Ada', 'ada', '#ed7b58')"), QStringLiteral("x &nbsp;") + o + "Ada" + c);
+        QCOMPARE(ms("escape({})"), QString());
     }
 
     // ── BasecampHomeModules.js ──────────────────────────────────────────
@@ -322,6 +399,114 @@ private slots:
         QCOMPARE(hs("g1.items.map(i => i.col + ':' + i.y).join(' ')"), QStringLiteral("0:0 0:110"));
         QCOMPARE(h("g1.height").toInt(), 160);
         QCOMPARE(h("layout([], [], 3, 10).height").toInt(), 0);
+    }
+
+    // ── keyboard (basecamp-experiments#48) ──────────────────────────────
+
+    void keyboardNavigation()
+    {
+        const QString search = QStringLiteral("{ where: 'search' }");
+        auto tile = [](int i) { return QStringLiteral("{ where: 'tile', index: %1 }").arg(i); };
+        auto row = [](int i) { return QStringLiteral("{ where: 'row', index: %1 }").arg(i); };
+
+        // Down from the search: the first Recent app, else the first row
+        // (a query hides Recent apps: "wal", Down lands on the first app).
+        QCOMPARE(nav(search, "down", 3, 5), QStringLiteral("tile:0"));
+        QCOMPARE(nav(search, "down", 0, 5), QStringLiteral("row:0"));
+        QCOMPARE(nav(search, "down", 0, 0), QStringLiteral("-"));
+        // Up, Left and Right in the search stay the field's own.
+        QCOMPARE(nav(search, "up", 3, 5), QStringLiteral("-"));
+        QCOMPARE(nav(search, "left", 3, 5), QStringLiteral("-"));
+
+        // Along Recent apps, stopping at both ends.
+        QCOMPARE(nav(tile(0), "right", 3, 5), QStringLiteral("tile:1"));
+        QCOMPARE(nav(tile(2), "right", 3, 5), QStringLiteral("tile:2"));
+        QCOMPARE(nav(tile(1), "left", 3, 5), QStringLiteral("tile:0"));
+        QCOMPARE(nav(tile(0), "left", 3, 5), QStringLiteral("tile:0"));
+        // Up from the row: the search; Down: the first row, or stay.
+        QCOMPARE(nav(tile(2), "up", 3, 5), QStringLiteral("search"));
+        QCOMPARE(nav(tile(2), "down", 3, 5), QStringLiteral("row:0"));
+        QCOMPARE(nav(tile(2), "down", 3, 0), QStringLiteral("tile:2"));
+
+        // Down the rows (app rows, then cards), stopping at the last.
+        QCOMPARE(nav(row(0), "down", 3, 5), QStringLiteral("row:1"));
+        QCOMPARE(nav(row(4), "down", 3, 5), QStringLiteral("row:4"));
+        QCOMPARE(nav(row(3), "up", 3, 5), QStringLiteral("row:2"));
+        // Up from the first row: back to the tile it came from, or the search.
+        QCOMPARE(nav(row(0), "up", 3, 5, 2), QStringLiteral("tile:2"));
+        QCOMPARE(nav(row(0), "up", 3, 5, 9), QStringLiteral("tile:2"));
+        QCOMPARE(nav(row(0), "up", 0, 5), QStringLiteral("search"));
+        // Left and Right in a column are not home's (a card's own buttons).
+        QCOMPARE(nav(row(1), "left", 3, 5), QStringLiteral("-"));
+        QCOMPARE(nav(row(1), "right", 3, 5), QStringLiteral("-"));
+        // Rows that shrank under the focus: clamped.
+        QCOMPARE(nav(row(7), "down", 0, 3), QStringLiteral("row:2"));
+        QCOMPARE(nav(QStringLiteral("null"), "down", 3, 5), QStringLiteral("-"));
+    }
+
+    // Cards side by side (a module's sideways strip, a large module's two
+    // columns) share a line: Left and Right go along it, Up and Down leave it
+    // for the line above or below, to the card in the same place or the
+    // nearest (basecamp-experiments#48 review).
+    void keyboardNavigationByLine()
+    {
+        auto row = [](int i) { return QStringLiteral("{ where: 'row', index: %1 }").arg(i); };
+        // Modules view: an app row (0), a strip of four (1-4), a module below (5).
+        const QString strip = QStringLiteral("[0, 1, 1, 1, 1, 2]");
+        QCOMPARE(nav(row(1), "right", 0, 6, 0, strip), QStringLiteral("row:2"));
+        QCOMPARE(nav(row(4), "right", 0, 6, 0, strip), QStringLiteral("row:4"));
+        QCOMPARE(nav(row(2), "left", 0, 6, 0, strip), QStringLiteral("row:1"));
+        QCOMPARE(nav(row(1), "left", 0, 6, 0, strip), QStringLiteral("row:1"));
+        // Down from anywhere in the strip: the module below, not the next card.
+        QCOMPARE(nav(row(3), "down", 0, 6, 0, strip), QStringLiteral("row:5"));
+        QCOMPARE(nav(row(1), "down", 0, 6, 0, strip), QStringLiteral("row:5"));
+        // Up from the strip: the line above; from below: into the strip.
+        QCOMPARE(nav(row(4), "up", 0, 6, 0, strip), QStringLiteral("row:0"));
+        QCOMPARE(nav(row(5), "up", 0, 6, 0, strip), QStringLiteral("row:1"));
+        QCOMPARE(nav(row(0), "down", 0, 6, 0, strip), QStringLiteral("row:1"));
+        // A line of one: Left and Right stay the card's own.
+        QCOMPARE(nav(row(5), "right", 0, 6, 0, strip), QStringLiteral("-"));
+        QCOMPARE(nav(row(0), "left", 0, 6, 0, strip), QStringLiteral("-"));
+        // The last line: Down stays; the first: Up goes to the tiles or the search.
+        QCOMPARE(nav(row(5), "down", 0, 6, 0, strip), QStringLiteral("row:5"));
+        QCOMPARE(nav(row(0), "up", 3, 6, 1, strip), QStringLiteral("tile:1"));
+        QCOMPARE(nav(row(2), "up", 0, 3, 0, QStringLiteral("[0, 0, 0]")), QStringLiteral("search"));
+
+        // A large module's two columns: pairs, and an odd one out at the end.
+        const QString pairs = QStringLiteral("[0, 0, 1, 1, 2]");
+        QCOMPARE(nav(row(1), "down", 0, 5, 0, pairs), QStringLiteral("row:3"));
+        QCOMPARE(nav(row(0), "down", 0, 5, 0, pairs), QStringLiteral("row:2"));
+        QCOMPARE(nav(row(3), "down", 0, 5, 0, pairs), QStringLiteral("row:4"));
+        QCOMPARE(nav(row(4), "up", 0, 5, 0, pairs), QStringLiteral("row:2"));
+        QCOMPARE(nav(row(3), "up", 0, 5, 0, pairs), QStringLiteral("row:1"));
+        QCOMPARE(nav(row(2), "right", 0, 5, 0, pairs), QStringLiteral("row:3"));
+        QCOMPARE(nav(row(3), "left", 0, 5, 0, pairs), QStringLiteral("row:2"));
+        // Lines that do not match the rows (a stale list) are not used.
+        QCOMPARE(nav(row(1), "down", 0, 5, 0, QStringLiteral("[0, 0]")), QStringLiteral("row:2"));
+        // The focused row past the end (rows shrank): clamped, then moved.
+        QCOMPARE(nav(row(9), "up", 0, 5, 0, pairs), QStringLiteral("row:2"));
+    }
+
+    void typingGoesToTheSearch()
+    {
+        const int shift = 0x02000000, ctrl = 0x04000000, alt = 0x08000000, meta = 0x10000000;
+        // A script error would read as true below: every answer must be a bool.
+        QVERIFY(h("typeof typesText('w', 0) === 'boolean' && typeof typesText('\\r', 0) === 'boolean'").toBool());
+        QVERIFY(h("typesText('w', 0)").toBool());
+        QVERIFY(h(QStringLiteral("typesText('W', %1)").arg(shift)).toBool());
+        QVERIFY(h("typesText(' ', 0)").toBool());
+        QVERIFY(h("typesText('\\u00e9', 0)").toBool());
+        QVERIFY(!h(QStringLiteral("typesText('k', %1)").arg(ctrl)).toBool());
+        QVERIFY(!h(QStringLiteral("typesText('k', %1)").arg(alt)).toBool());
+        QVERIFY(!h(QStringLiteral("typesText('k', %1)").arg(meta)).toBool());
+        // Arrows, Enter, Esc, Tab, Backspace and Delete type nothing.
+        QVERIFY(!h("typesText('', 0)").toBool());
+        QVERIFY(!h("typesText('\\r', 0)").toBool());
+        QVERIFY(!h("typesText('\\u001b', 0)").toBool());
+        QVERIFY(!h("typesText('\\t', 0)").toBool());
+        QVERIFY(!h("typesText('\\b', 0)").toBool());
+        QVERIFY(!h("typesText('\\u007f', 0)").toBool());
+        QVERIFY(!h("typesText(undefined, 0)").toBool());
     }
 };
 

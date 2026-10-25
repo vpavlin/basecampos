@@ -11,5 +11,5 @@ ObjectCardBody {
     id: body
     trailing: ""
 
-    ObjectCardLine { secondary: true; text: F.str(body.object.subtitle); maximumLineCount: 2 }
+    ObjectCardMatchLine { secondary: true; plain: F.str(body.object.subtitle); query: body.query; maximumLineCount: 2 }
 }

@@ -27,12 +27,19 @@ Rectangle {
     property var newIds: ({})
     // Bumped at each visit: the rows may take their new order then.
     property int visit: 0
+    // Whether the modules show (home's grid view). Off, it holds no results:
+    // each one ranks the whole store on every keystroke and every store
+    // change, for nothing in the feed view (basecamp-experiments#27).
+    property bool live: false
 
     signal changeRequested(var change)
     signal removeRequested()
     // The envelopes it now shows (NewTabPage notes the unseen and marks them).
     signal rowsShown(var rows)
     signal raiseRequested(string id, string action, string text)
+    // Its results are about to go (it stopped being live): what home noted
+    // from them must be marked first, while they still hold it.
+    signal releasing()
 
     readonly property var filter: M.effectiveFilter(mod.module.filter, mod.pill)
     readonly property string query: M.joinQuery(mod.module.query, mod.barQuery)
@@ -53,8 +60,47 @@ Rectangle {
     border.width: 1
     border.color: Theme.palette.borderHairline
 
+    // The cards it draws, as the lines they are on, top to bottom: home's
+    // arrow keys step through them (basecamp-experiments#48). One card per
+    // line in a small or medium module; two side by side in a large one with
+    // two columns; a strip is one line of the cards it has made.
+    function navGroups() {
+        const out = []
+        const live = it => it && it.visible
+        if (!mod.visible) return out
+        if (mod.size === "small") {
+            for (let i = 0; i < smallRepeater.count; ++i)
+                if (live(smallRepeater.itemAt(i))) out.push([smallRepeater.itemAt(i)])
+        } else if (cards.visible) {
+            let line = []
+            for (let i = 0; i < cardRepeater.count; ++i) {
+                const it = cardRepeater.itemAt(i)
+                if (!live(it)) continue
+                line.push(it)
+                if (line.length === cards.columns) { out.push(line); line = [] }
+            }
+            if (line.length > 0) out.push(line)
+        } else if (strip.visible) {
+            const line = []
+            for (let i = 0; i < strip.count; ++i)
+                if (live(strip.itemAtIndex(i))) line.push(strip.itemAtIndex(i))
+            if (line.length > 0) out.push(line)
+        }
+        return out
+    }
+
     function refresh() {
         mod.order = null
+        if (!mod.live) {
+            if (mod.results) {
+                mod.releasing()
+                mod.results.destroy()
+                mod.results = null
+            }
+            mod.rows = []
+            mod.total = 0
+            return
+        }
         if (mod.filter === null) {
             mod.rows = []
             mod.total = 0
@@ -81,6 +127,7 @@ Rectangle {
 
     onQueryChanged: refresh()
     onFilterChanged: refresh()
+    onLiveChanged: refresh()
     onSizeChanged: rebuild()
     onVisitChanged: { mod.order = null; rebuild() }
     Component.onCompleted: refresh()
@@ -159,6 +206,7 @@ Rectangle {
             width: parent.width
             spacing: Theme.spacing.tiny
             Repeater {
+                id: smallRepeater
                 model: mod.size === "small" ? mod.rows : []
                 delegate: ObjectCard {
                     required property var modelData
@@ -167,6 +215,7 @@ Rectangle {
                     now: mod.now
                     compact: true
                     isNew: mod.newIds[modelData.id] === true
+                    query: mod.query
                     namePrefix: "home.card." + modelData.key
                     onActionRequested: (action, text) => mod.raiseRequested(modelData.id, action, text)
                 }
@@ -182,6 +231,7 @@ Rectangle {
             width: parent.width
             spacing: Theme.spacing.small
             Repeater {
+                id: cardRepeater
                 model: cards.visible ? mod.rows : []
                 delegate: ObjectCard {
                     required property var modelData
@@ -189,6 +239,7 @@ Rectangle {
                     object: modelData
                     now: mod.now
                     isNew: mod.newIds[modelData.id] === true
+                    query: mod.query
                     namePrefix: "home.card." + modelData.key
                     onActionRequested: (action, text) => mod.raiseRequested(modelData.id, action, text)
                 }
@@ -207,15 +258,21 @@ Rectangle {
             spacing: Theme.spacing.small
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+            // Left and Right go through home's keys (navKey), which move the focus.
+            keyNavigationEnabled: false
             model: visible ? mod.rows : []
             delegate: ObjectCard {
                 required property var modelData
+                required property int index
                 width: strip.cardWidth
                 object: modelData
                 now: mod.now
                 isNew: mod.newIds[modelData.id] === true
+                query: mod.query
                 namePrefix: "home.card." + modelData.key
                 onActionRequested: (action, text) => mod.raiseRequested(modelData.id, action, text)
+                // Focused from the keyboard: scrolled into the strip.
+                onActiveFocusChanged: if (activeFocus) strip.positionViewAtIndex(index, ListView.Contain)
                 // The strip is as tall as its tallest card.
                 onImplicitHeightChanged: if (implicitHeight > strip.stripHeight) strip.stripHeight = implicitHeight
                 Component.onCompleted: if (implicitHeight > strip.stripHeight) strip.stripHeight = implicitHeight

@@ -185,7 +185,15 @@ function offersView(actions) {
     return false
 }
 
-// Which card draws `type`: the type itself when it has one, else "generic".
+// What Enter on a card does (basecamp-experiments#48): its first action, the
+// one drawn as primary, else `open` (View), which is also all a compact row
+// has. `actions` is the result of actions(). Returns { id, input }.
+function primaryAction(actions, compact) {
+    if (!compact && actions && actions.length > 0) return { id: actions[0].id, input: actions[0].input }
+    return { id: "open", input: "" }
+}
+
+// Which card draws `type`:the type itself when it has one, else "generic".
 function cardFor(type) {
     return isKnownType(str(type)) ? str(type) : "generic"
 }

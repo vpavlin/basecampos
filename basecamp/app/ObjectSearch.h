@@ -35,6 +35,13 @@ class QTimer;
 //   filter could include the app that changed. That refresh is the host's,
 //   not the view's: it does not flip `pending`, and rows that come back the
 //   same signal nothing, so a view cannot time other apps' publishing.
+// * Marking seen does NOT ask again (basecamp-experiments#27, the flood
+//   test): the results that hold a marked id take its new `seen` in place,
+//   in the same order, debounced like a store change. Unseen ranks first, so
+//   re-ranking would drop what a view just marked and lift the next unseen,
+//   which it would mark in turn: the feed moved under the user every couple
+//   of seconds and every pass ranked the whole store. The next real change
+//   re-ranks. A filter with unseenOnly does ask again (its rows must go).
 //
 // Who may do what is decided here (each call names its app), so the rules are
 // unit-tested without the rest of the host; ShellApi re-checks the role on every
@@ -133,6 +140,8 @@ private:
     void request(ObjectResults* results, bool byView);
     void forget(ObjectResults* results);
     void fillWith(ObjectResults* results, const QStringList& ids, const QString& ranker);
+    // The live results holding one of `ids` take their new `seen`.
+    void refreshSeen(const QSet<QString>& ids);
     void fallback(ObjectResults* results);
     void setLastRanker(const QString& ranker);
     qint64 now() const;
@@ -146,5 +155,6 @@ private:
     int m_answerTimeoutMs = kAnswerTimeoutMs;
     QTimer* m_debounce = nullptr;
     QSet<QString> m_changedApps;   // since the debounce started
+    QSet<QString> m_seenIds;       // marked seen since the debounce started
     QString m_lastRanker;
 };

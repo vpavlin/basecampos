@@ -40,11 +40,18 @@ ObjectSearch::ObjectSearch(ObjectStore* store, HolderFn holderOf, QObject* paren
     m_debounce->setInterval(kRefreshDebounceMs);
     connect(m_debounce, &QTimer::timeout, this, [this]() {
         refreshFor(std::exchange(m_changedApps, {}));
+        refreshSeen(std::exchange(m_seenIds, {}));
     });
     if (m_store) {
         connect(m_store, &ObjectStore::objectsChanged, this, [this](const QString& app) {
             emit objectsChanged(app);
             m_changedApps.insert(app);
+            if (!m_debounce->isActive())
+                m_debounce->start();
+        });
+        connect(m_store, &ObjectStore::seenChanged, this, [this](const QStringList& ids) {
+            for (const QString& id : ids)
+                m_seenIds.insert(id);
             if (!m_debounce->isActive())
                 m_debounce->start();
         });
@@ -192,25 +199,30 @@ bool ObjectSearch::answer(const QString& app, const QString& requestId, const QV
     m_open.erase(it);
     results->requestId.clear();
 
-    QSet<QString> allowed;
-    if (m_store)
-        for (const QVariant& v : m_store->list(results->filter()))
-            allowed.insert(v.toMap().value(QStringLiteral("id")).toString());
-    QStringList kept;
+    // Each id looked up in the store and checked against the filter, rather
+    // than listing everything the filter allows: an answer is at most a few
+    // hundred ids, the store can hold thousands.
+    QStringList candidates;
     QSet<QString> seen;
     int dropped = 0;
     for (const QVariant& v : ids) {
         const QString id = v.typeId() == QMetaType::QString ? v.toString() : QString();
-        if (id.isEmpty() || !allowed.contains(id) || seen.contains(id)) {
-            ++dropped;
-            continue;
-        }
-        if (kept.size() >= kMaxAnswer) {
+        if (id.isEmpty() || seen.contains(id)) {
             ++dropped;
             continue;
         }
         seen.insert(id);
-        kept << id;
+        candidates << id;
+    }
+    const QList<QVariantMap> found = m_store ? m_store->getMany(candidates) : QList<QVariantMap>();
+    QStringList kept;
+    for (int i = 0; i < candidates.size(); ++i) {
+        const QVariantMap o = i < found.size() ? found.at(i) : QVariantMap();
+        if (o.isEmpty() || !ObjectStore::matches(o, results->filter()) || kept.size() >= kMaxAnswer) {
+            ++dropped;
+            continue;
+        }
+        kept << candidates.at(i);
     }
     if (dropped > 0)
         qWarning().noquote() << "Object search:" << app << "answer" << requestId << "—"
@@ -271,14 +283,41 @@ void ObjectSearch::fillWith(ObjectResults* results, const QStringList& ids, cons
 {
     QList<QVariantMap> envelopes;
     QStringList present;
-    for (const QString& id : ids) {
-        const QVariantMap o = m_store ? m_store->get(id) : QVariantMap();
-        if (o.isEmpty()) continue;
-        envelopes << o;
-        present << id;
+    const QList<QVariantMap> found = m_store ? m_store->getMany(ids) : QList<QVariantMap>();
+    for (int i = 0; i < ids.size() && i < found.size(); ++i) {
+        if (found.at(i).isEmpty()) continue;
+        envelopes << found.at(i);
+        present << ids.at(i);
     }
     results->fill(present, envelopes, ranker);
     setLastRanker(ranker);
+}
+
+void ObjectSearch::refreshSeen(const QSet<QString>& ids)
+{
+    if (ids.isEmpty()) return;
+    const QList<QPointer<ObjectResults>> live = m_live;
+    for (const QPointer<ObjectResults>& r : live) {
+        // One with a request out gets fresh envelopes with its answer.
+        if (!r || !r->attached() || !r->requestId.isEmpty()) continue;
+        const QStringList mine = r->ids();
+        if (std::none_of(mine.cbegin(), mine.cend(), [&ids](const QString& id) { return ids.contains(id); }))
+            continue;
+        if (r->filter().value(QStringLiteral("unseenOnly")).toBool()) {
+            request(r, false);
+            continue;
+        }
+        // Same ids, same order, same ranker: only the rows' data changes.
+        QList<QVariantMap> envelopes;
+        QStringList present;
+        const QList<QVariantMap> found = m_store ? m_store->getMany(mine) : QList<QVariantMap>();
+        for (int i = 0; i < mine.size() && i < found.size(); ++i) {
+            if (found.at(i).isEmpty()) continue;
+            envelopes << found.at(i);
+            present << mine.at(i);
+        }
+        r->fill(present, envelopes, r->ranker());
+    }
 }
 
 void ObjectSearch::forget(ObjectResults* results)

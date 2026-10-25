@@ -307,3 +307,77 @@ function layout(spans, heights, columns, gap) {
     for (var c2 = 0; c2 < columns; ++c2) height = Math.max(height, cols[c2])
     return { items: items, height: Math.max(0, height - (items.length > 0 ? gap : 0)) }
 }
+
+// ── keyboard (basecamp-experiments#48) ──────────────────────────────────
+
+// Where an arrow key takes the focus. The results are the search field,
+// one row of `tiles` (Recent apps) and `rows` stacked under it (the Apps
+// block's rows, then the cards). `from` is { where: "search" | "tile" |
+// "row", index }, `key` "up", "down", "left" or "right", `lastTile` the tile
+// the row was left from. `lines` (optional, one per row) says which visual
+// line each row is on: cards side by side (a module's sideways strip, a
+// large module's two columns) share one, and Left and Right move along it
+// while Up and Down go to the line above or below, to the card in the same
+// place or the nearest. Without it every row is a line of its own. Returns
+// the place to focus (the same one when the key stops at an edge), or null
+// when the key is not home's to take (Up in the search, Left and Right in a
+// line of one).
+function navMove(from, key, tiles, rows, lastTile, lines) {
+    var where = from ? from.where : ""
+    var i = from && typeof from.index === "number" ? from.index : 0
+    var clamp = function (n, count) { return Math.max(0, Math.min(count - 1, n)) }
+    if (where === "search") {
+        if (key !== "down") return null
+        if (tiles > 0) return { where: "tile", index: 0 }
+        if (rows > 0) return { where: "row", index: 0 }
+        return null
+    }
+    if (where === "tile") {
+        if (key === "left") return { where: "tile", index: clamp(i - 1, tiles) }
+        if (key === "right") return { where: "tile", index: clamp(i + 1, tiles) }
+        if (key === "up") return { where: "search" }
+        if (key === "down") return rows > 0 ? { where: "row", index: 0 } : { where: "tile", index: i }
+        return null
+    }
+    if (where === "row") {
+        if (rows <= 0) return null
+        i = clamp(i, rows)
+        var byLine = lines && lines.length === rows
+        var lineOf = function (n) { return byLine ? lines[n] : n }
+        // The rows on line `l`, left to right.
+        var on = function (l) {
+            var out = []
+            for (var k = 0; k < rows; ++k) if (lineOf(k) === l) out.push(k)
+            return out
+        }
+        var line = on(lineOf(i))
+        var place = line.indexOf(i)
+        if (key === "left" || key === "right") {
+            if (line.length < 2) return null
+            return { where: "row", index: line[clamp(place + (key === "left" ? -1 : 1), line.length)] }
+        }
+        if (key !== "up" && key !== "down") return null
+        // The next line up or down that has rows (line numbers may skip).
+        var step = key === "down" ? 1 : -1
+        var target = []
+        for (var k = i + step; k >= 0 && k < rows && target.length === 0; k += step)
+            if (lineOf(k) !== lineOf(i)) target = on(lineOf(k))
+        if (target.length > 0) return { where: "row", index: target[clamp(place, target.length)] }
+        if (key === "down") return { where: "row", index: i }
+        if (tiles > 0) return { where: "tile", index: clamp(lastTile || 0, tiles) }
+        return { where: "search" }
+    }
+    return null
+}
+
+// Whether a key press types into the search: printable text, no Ctrl, Alt
+// or Meta (Shift is part of typing). `modifiers` is the event's bit mask.
+function typesText(text, modifiers) {
+    if (typeof text !== "string" || text.length === 0) return false
+    if ((modifiers & (0x04000000 | 0x08000000 | 0x10000000)) !== 0) return false
+    for (var i = 0; i < text.length; ++i) {
+        var c = text.charCodeAt(i)
+        if (c < 32 || c === 127) return false
+    }
+    return true
+}

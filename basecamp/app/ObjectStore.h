@@ -94,6 +94,13 @@ public:
     // pill (basecamp-experiments#36).
     QHash<QString, int> countsOfType(const QString& type) const;
     Q_INVOKABLE QVariantMap get(const QString& id) const;
+    // get() for each of `ids`, in order ({} for an unknown one), expiring
+    // once rather than per id: a search answer looks up 200.
+    QList<QVariantMap> getMany(const QStringList& ids) const;
+    // Whether envelope `o` passes `filter` (as list() filters).
+    static bool matches(const QVariantMap& o, const QVariantMap& filter);
+    // Says seenChanged, not objectsChanged: marking seen is the user looking,
+    // not an app publishing, and does not re-rank (ObjectSearch.h).
     Q_INVOKABLE void markSeen(const QStringList& ids);
 
     // ── The user's switch ───────────────────────────────────────────────
@@ -124,6 +131,8 @@ signals:
     // Something `app` published was added, replaced, retracted, evicted or
     // expired. The search role re-ranks on this (spec §5).
     void objectsChanged(const QString& app);
+    // `ids` turned seen (markSeen).
+    void seenChanged(const QStringList& ids);
     void changed();
     void disabledAppsChanged();
 
