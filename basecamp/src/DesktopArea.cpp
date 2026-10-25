@@ -546,6 +546,10 @@ AppWindow* DesktopArea::openWindow(const QString& key, const QString& title,
     if (key == m_pendingB && window(m_pendingA)) {
         const QString a = m_pendingA;
         QTimer::singleShot(0, this, [this, a, key]() { setSplit(a, key); });
+    } else if (m_splitOn && m_splitB.isEmpty() && key != m_splitA) {
+        // Opened from the dock while the picker waits: it takes the empty half.
+        const QString a = m_splitA;
+        QTimer::singleShot(0, this, [this, a, key]() { setSplit(a, key); });
     } else if (m_splitOn && !m_splitB.isEmpty()) {
         replaceActiveSide(key);
     }
@@ -560,8 +564,12 @@ void DesktopArea::restoreAndRaise(AppWindow* w)
     w->show();
     w->raise();
     setActiveSubWindow(w);
-    if (m_splitOn && !m_splitB.isEmpty() && !inSplit(w))
+    if (m_splitOn && m_splitB.isEmpty() && w->key() != m_splitA) {
+        const QString a = m_splitA, b = w->key();
+        QTimer::singleShot(0, this, [this, a, b]() { setSplit(a, b); });
+    } else if (m_splitOn && !m_splitB.isEmpty() && !inSplit(w)) {
         replaceActiveSide(w->key());
+    }
     retileSoon();
     emit windowsChanged();
 }
@@ -1149,7 +1157,7 @@ protected:
             p.setFont(item);
             p.setPen(tok("textSecondary", "#a0a0a0"));
             p.drawText(rect().adjusted(kMargin, 0, -kMargin, 0), Qt::AlignCenter | Qt::TextWordWrap,
-                       QStringLiteral("Open another app from the dock to put it here."));
+                       QStringLiteral("Open an app from the dock to put it here."));
             return;
         }
         if (m_usual > 0)
