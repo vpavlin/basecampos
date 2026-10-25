@@ -197,7 +197,12 @@
         basecampos-arm = mkHost "aarch64-linux" [ ./hosts/desktop.nix { basecampos.shell.session = "sway"; } ];
         basecampos-duet = mkHost "aarch64-linux" [ ./hosts/duet.nix ];
         # The unattended first test on the tablet (watchdog, 20-min window, reports).
-        basecampos-duet-test = mkHost "aarch64-linux" [ ./hosts/duet.nix { basecampos.duet.testMode = true; } ];
+        basecampos-duet-test = mkHost "aarch64-linux" [ ./hosts/duet.nix {
+          basecampos.duet.testMode = true;
+          # The Duet agent works from inside the test boot, so a longer window.
+          basecampos.duet.agentChroot.enable = true;
+          basecampos.duet.testWindowMinutes = 90;
+        } ];
         basecampos-duet-usb = mkHost "aarch64-linux" [ ./hosts/duet.nix { basecampos.duet.boot = "usb"; } ];
       };
 

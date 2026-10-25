@@ -15,14 +15,19 @@ let
   bootMode = config.basecampos.duet.boot;
 in
 {
-  imports = [ ../modules/duet/depthcharge.nix ];
+  imports = [ ../modules/duet/depthcharge.nix ../modules/duet/agent-chroot.nix ];
 
   options.basecampos.duet.boot = lib.mkOption {
     type = lib.types.enum [ "subvol" "usb" ];
     default = "subvol";
   };
+  options.basecampos.duet.testWindowMinutes = lib.mkOption {
+    type = lib.types.ints.positive;
+    default = 20;
+    description = "testMode: minutes until the test boot reboots back to Debian.";
+  };
   options.basecampos.duet.testMode = lib.mkEnableOption ''
-    the unattended first test on the tablet: a watchdog, a 20-minute test window
+    the unattended first test on the tablet: a watchdog, a test window
     that reboots back to Debian (KERN-A is tries=1), and reports + screenshots in
     /var/log/basecampos-test (readable from Debian inside the subvolume)'';
 
@@ -155,7 +160,7 @@ in
       '';
     in {
       # Self-recovery while nobody is at the tablet: a hung kernel/system resets,
-      # and after 20 minutes the test ends with a reboot; KERN-A has tries=1, so
+      # and after the test window the test ends with a reboot; KERN-A has tries=1, so
       # the tablet comes back up in Debian (KERN-B).
       systemd.settings.Manager = {
         RuntimeWatchdogSec = "30s";
@@ -163,10 +168,10 @@ in
       };
       systemd.tmpfiles.rules = [ "d ${logDir} 0775 ${user} users -" "d /var/lib/basecampos-test 0755 root root -" ];
       systemd.services.basecampos-test-window = {
-        description = "BasecampOS test window: reboot back to Debian after 20 minutes";
+        description = "BasecampOS test window: reboot back to Debian after ${toString config.basecampos.duet.testWindowMinutes} minutes";
         wantedBy = [ "multi-user.target" ];
         unitConfig.ConditionPathExists = "!/var/lib/basecampos-test/keep";
-        script = "sleep 1200; [ -e /var/lib/basecampos-test/keep ] || systemctl reboot";
+        script = "sleep ${toString (config.basecampos.duet.testWindowMinutes * 60)}; [ -e /var/lib/basecampos-test/keep ] || systemctl reboot";
       };
       # A report even if the graphical session never comes up.
       systemd.services.basecampos-test-boot-report = {
