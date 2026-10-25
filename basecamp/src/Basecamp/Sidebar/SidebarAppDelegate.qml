@@ -4,6 +4,7 @@ import QtQuick.Controls
 import Logos.Theme
 import Logos.Controls
 import Basecamp.AppManager
+import Basecamp.Icons
 
 // AbstractButton so the whole 50px row is one mouse, keyboard and
 // accessibility control — matching the grid and list delegates, and avoiding
@@ -75,17 +76,14 @@ AbstractButton {
             active: root.hovered && tile.visible
         }
 
-        LogosTile {
+        BasecampAppTile {
             id: tile
             anchors.centerIn: parent
-            label: root.appName
+            size: d.tileSize
+            label: root.text || root.appName
             source: root.iconSource
-            fallbackColor: Theme.palette.surfaceRaised
             highlighted: root.checked
-            insetArtwork: !root.fullBleedIcon
-            // Presentational — the row owns activation.
-            interactive: false
-            tileSize: d.tileSize
+            fullBleed: root.fullBleedIcon
             dimOpacity: root.loaded ? 1.0 : 0.55
             visible: !root.loading
         }

@@ -23,6 +23,12 @@ Rectangle {
     // its text over when a result routes here. Goes through d.searchText so the
     // visible field and the proxy stay in step.
     function applySearch(query) { d.searchText = query }
+    // "All apps" from home: no search, every category, installed or not.
+    function showAll() {
+        d.searchText = ""
+        d.selectedCategoryIndex = 0
+        panelHeader.installStateIndex = 0
+    }
     property var repositories: []
     property bool loading: false
     property bool showUnavailable: false
@@ -88,7 +94,8 @@ Rectangle {
             // or the grid is filtered with the search folded away and empty.
             if (root.compact && compactSearch.text !== searchText) {
                 compactSearch.text = searchText
-                if (searchText.length > 0) compactSearch.expanded = true
+                // Cleared from outside ("All apps"): fold it away as well.
+                compactSearch.expanded = searchText.length > 0
             }
         }
 

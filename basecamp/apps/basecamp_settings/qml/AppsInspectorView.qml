@@ -8,6 +8,7 @@ import Logos.Theme
 
 import Basecamp.Backend
 import Basecamp.Common
+import Basecamp.Icons
 
 // Settings → Apps Inspector. Lists the UI plugins discovered in the plugins
 // directory with their load state and a Load/Unload toggle per row. Uninstall
@@ -168,35 +169,17 @@ Item {
                 RowLayout {
                     spacing: Theme.spacing.small
 
-                    // Icon tile — falls back to the first two letters of the
-                    // module name when the plugin ships no icon.
-                    Rectangle {
-                        Layout.preferredWidth: 32
-                        Layout.preferredHeight: 32
+                    // The app's tile; its letters when the plugin ships no icon.
+                    // Other apps' icons are outside this app's sandbox: the host serves them.
+                    BasecampAppTile {
+                        Layout.preferredWidth: size
+                        Layout.preferredHeight: size
                         Layout.alignment: Qt.AlignVCenter
-                        radius: Theme.spacing.radiusMedium
-                        color: Theme.palette.backgroundButton
-
-                        readonly property bool hasIcon:
-                            rowItem && String(rowItem.iconPath || "").length > 0
-
-                        Image {
-                            anchors.centerIn: parent
-                            visible: parent.hasIcon
-                            // Other apps' icons are outside this app's sandbox: the host serves them.
-                            source: parent.hasIcon ? "image://basecamp/appicon/" + rowItem.name : ""
-                            sourceSize.width: 22
-                            sourceSize.height: 22
-                        }
-
-                        LogosText {
-                            anchors.centerIn: parent
-                            visible: !parent.hasIcon
-                            text: rowItem ? rowItem.name.substring(0, 2).toUpperCase() : ""
-                            font.pixelSize: Theme.typography.secondaryText
-                            font.weight: Theme.typography.weightBold
-                            color: Theme.palette.textTertiary
-                        }
+                        size: 32
+                        label: rowItem ? (rowItem.label || rowItem.name) : ""
+                        source: rowItem && String(rowItem.iconPath || "").length > 0
+                                ? "image://basecamp/appicon/" + rowItem.name : ""
+                        fullBleed: !!rowItem && rowItem.supportsFullBleedIcon === true
                     }
 
                     ColumnLayout {

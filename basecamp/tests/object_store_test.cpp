@@ -85,8 +85,10 @@ private slots:
     void testExpiredObjectsAreDropped();
     void testRetainAppsForgetsUninstalled();
     void testListFilters();
+    void testCountsOfType();
     void testSignalsCarryTheApp();
     void testEnvelopesAreCanonicalPayloads();
+    void testIconFullBleedIsStampedPerApp();
 
 private:
     ObjectStore* makeStore()
@@ -130,6 +132,7 @@ void TestObjectStore::testHostFieldsCannotBeSupplied()
     o[QStringLiteral("app")] = kChat;
     o[QStringLiteral("seen")] = true;
     o[QStringLiteral("icon")] = QStringLiteral("https://evil.example/x.png");
+    o[QStringLiteral("iconFullBleed")] = true;
     QStringList ids;
     QCOMPARE(store->publish(kWallet, batch({ o }), nullptr, &ids), QString());
     const QVariantMap stored = store->get(ids.first());
@@ -137,7 +140,25 @@ void TestObjectStore::testHostFieldsCannotBeSupplied()
     QVERIFY(stored.value(QStringLiteral("id")).toString() != QStringLiteral("forged"));
     QCOMPARE(stored.value(QStringLiteral("seen")).toBool(), false);
     QCOMPARE(stored.value(QStringLiteral("icon")).toString(), QStringLiteral("file:///icons/wallet_ui"));
+    QCOMPARE(stored.value(QStringLiteral("iconFullBleed")).toBool(), false);
     QCOMPARE(store->count(kChat), 0);
+}
+
+// A card draws the publisher's icon with the shared app tile, which needs to
+// know whether that icon fills the tile (basecamp-experiments#40). The host
+// says so per app; without a resolver, or for an app it says no to, false.
+void TestObjectStore::testIconFullBleedIsStampedPerApp()
+{
+    std::unique_ptr<ObjectStore> store(makeStore());
+    QStringList ids;
+    QCOMPARE(store->publish(kWallet, batch({ tx(QStringLiteral("tx:1")) }), nullptr, &ids), QString());
+    QCOMPARE(store->get(ids.first()).value(QStringLiteral("iconFullBleed")).toBool(), false);
+
+    store->setIconFullBleedResolver([](const QString& app) { return app == kWallet; });
+    QCOMPARE(store->publish(kWallet, batch({ tx(QStringLiteral("tx:2")) }), nullptr, &ids), QString());
+    QCOMPARE(store->get(ids.last()).value(QStringLiteral("iconFullBleed")).toBool(), true);
+    QCOMPARE(store->publish(kChat, batch({ tx(QStringLiteral("tx:3")) }), nullptr, &ids), QString());
+    QCOMPARE(store->get(ids.last()).value(QStringLiteral("iconFullBleed")).toBool(), false);
 }
 
 void TestObjectStore::testUnknownFieldsAreDropped()
@@ -467,6 +488,35 @@ void TestObjectStore::testRetainAppsForgetsUninstalled()
     store->retainApps({ kChat });
     QCOMPARE(store->count(kWallet), 0);
     QCOMPARE(store->count(kChat), 1);
+}
+
+// The apps home names under a type pill (basecamp-experiments#36): who holds
+// objects of that type, how many, and never a switched-off app.
+void TestObjectStore::testCountsOfType()
+{
+    std::unique_ptr<ObjectStore> store(makeStore());
+    const QString explorer = QStringLiteral("explorer_ui");
+    QVariantMap msg{ { QStringLiteral("key"), QStringLiteral("m1") },
+                     { QStringLiteral("type"), QStringLiteral("message") },
+                     { QStringLiteral("title"), QStringLiteral("Ada: lunch?") } };
+    QVERIFY(store->publish(kWallet, batch({ tx(QStringLiteral("t1")), tx(QStringLiteral("t2")) })).isEmpty());
+    QVERIFY(store->publish(explorer, batch({ tx(QStringLiteral("e1")) })).isEmpty());
+    QVERIFY(store->publish(kChat, batch({ msg })).isEmpty());
+
+    QHash<QString, int> txs = store->countsOfType(QStringLiteral("transaction"));
+    QCOMPARE(txs.size(), 2);
+    QCOMPARE(txs.value(kWallet), 2);
+    QCOMPARE(txs.value(explorer), 1);
+    QCOMPARE(store->countsOfType(QStringLiteral("message")), (QHash<QString, int>{ { kChat, 1 } }));
+    QVERIFY(store->countsOfType(QStringLiteral("news")).isEmpty());
+    QVERIFY(store->countsOfType(QString()).isEmpty());
+
+    // Retracted: no longer related.
+    QVERIFY(store->retract(explorer, { { QStringLiteral("all"), true } }).isEmpty());
+    QCOMPARE(store->countsOfType(QStringLiteral("transaction")), (QHash<QString, int>{ { kWallet, 2 } }));
+    // Switched off in Settings -> Search: gone.
+    store->setEnabled(kWallet, false);
+    QVERIFY(store->countsOfType(QStringLiteral("transaction")).isEmpty());
 }
 
 void TestObjectStore::testListFilters()

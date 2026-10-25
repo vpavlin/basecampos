@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Logos.Controls
 import Logos.Theme
 import Basecamp.Backend 1.0
+import Basecamp.Icons
 
 ItemDelegate {
     id: root
@@ -144,18 +145,16 @@ ItemDelegate {
                 Layout.preferredHeight: d.tileSize
                 Layout.alignment: Qt.AlignHCenter
 
-                LogosTile {
+                BasecampAppTile {
                     anchors.fill: parent
-                    label: d.nameText
+                    size: d.tileSize
+                    label: d.displayName
                     source: d.iconUrl
                     fallbackColor: d.isInstalled
                                    ? Theme.palette.surfaceRaised
                                    : AppColors.colorForApp(d.nameText)
-                    tileSize: d.tileSize
-                    radius: Theme.spacing.radiusXlarge
                     dimOpacity: d.tileOpacity
-                    insetArtwork: !d.fullBleedIcon
-                    interactive: false
+                    fullBleed: d.fullBleedIcon
                 }
 
                 LogosBadge {

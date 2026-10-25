@@ -4,6 +4,7 @@ import QtQuick.Layouts
 
 import Logos.Controls
 import Logos.Theme
+import Basecamp.Icons
 
 // Settings → Default apps (SHELL-ROLES-SPEC §3, ADR-067): which installed app
 // fills each of the shell's roles. Basecamp's own app is the default; any app
@@ -102,13 +103,13 @@ Item {
                                 anchors.rightMargin: Theme.spacing.medium
                                 spacing: Theme.spacing.medium
 
-                                Image {
-                                    Layout.preferredWidth: 28
-                                    Layout.preferredHeight: 28
+                                BasecampAppTile {
+                                    Layout.preferredWidth: size
+                                    Layout.preferredHeight: size
+                                    size: 28
+                                    label: row.modelData.displayName || row.modelData.name || ""
                                     source: row.modelData.icon || ""
-                                    sourceSize: Qt.size(56, 56)
-                                    fillMode: Image.PreserveAspectFit
-                                    visible: status === Image.Ready
+                                    fullBleed: row.modelData.supportsFullBleedIcon === true
                                 }
                                 LogosText {
                                     Layout.fillWidth: true

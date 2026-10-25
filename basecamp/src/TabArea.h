@@ -63,13 +63,11 @@ public:
 
     // Moves a tab's content into its own window (drag out, or the tab menu).
     void detachTab(int index, const QPoint& globalPos);
-    // Puts a torn-off window's app back as a tab ("Back to tabs").
+    // Puts a torn-off window's app back as a tab ("Back to the main window").
     void attachTab(const QString& key);
 
     void nextTab(int delta);
     void goToTab(int index);  // -1 = last
-    // The bar's notification bell (NOTIFICATIONS-SPEC.md).
-    void setNotificationCount(int count);
     // Tabs (by key) whose app has unread notifications get a dot.
     void setAttention(const QStringList& keys);
 
@@ -82,8 +80,6 @@ public:
     void setHomePlaceholder(const QString& text);
     int bottomBarHeight() const;
     Q_INVOKABLE void showSwitcher(bool on);
-    // The bell the user sees: in the bottom bar in the compact layout.
-    QWidget* bellButton() const { return m_compact ? m_bottomBell : m_bell; }
     int topBarHeight() const;
 
     // Compact layout, one bar (docs/MOBILE-LAYOUT.md §8, after Mull): New tab
@@ -96,20 +92,15 @@ public:
     // Open tabs, not counting New tabs.
     int contentTabCount() const;
     void closeAllTabs();
-    // The ⋮ menu as a bottom sheet (docs/MOBILE-IRONFOX.md P1).
-    Q_INVOKABLE void showSheet();
 
 signals:
     void closeRequested(const QString& key);
     void currentKeyChanged(const QString& key);
     void newTabShown();
-    void notificationsClicked();
     void compactChanged(bool compact);
     // One bar: the bar's search on the New tab, and its Enter.
     void homeQueryChanged(const QString& text);
     void homeQueryAccepted();
-    void reopenClosedRequested();
-    void systemAppRequested(const QString& key);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -126,12 +117,10 @@ private:
     void setCompact(bool on);
     void updateCompactBar();
     void rebuildSwitcher();
-    void showBarMenu(QWidget* anchor, bool tabsOnly);
-    void showSwitcherMenu(QWidget* anchor);
+    void showTabsMenu(QWidget* anchor);
 
     QWidget* m_bar = nullptr;
     QToolButton* m_plus = nullptr;
-    QWidget* m_bell = nullptr;
     TabStrip* m_tabs = nullptr;
     QWidget* m_drag = nullptr;
     QWidget* m_buttons = nullptr;
@@ -146,17 +135,19 @@ private:
     QStringList m_attention;                // keys with unread notifications
     bool m_compact = false;
     bool m_switcherOpen = false;
+    // A tab is being taken out while the switcher is up (its × or Close all):
+    // the current tab may move, and the switcher stays (onCurrentChanged).
+    bool m_holdSwitcher = false;
     QWidget* m_bottom = nullptr;            // compact: the one bar
-    QWidget* m_bottomBell = nullptr;
     QWidget* m_pill = nullptr;              // compact: the current tab, or the search on New tab
     QLineEdit* m_pillSearch = nullptr;
-    QToolButton* m_menuButton = nullptr;
     QToolButton* m_tabsButton = nullptr;
     QString m_prevKey;                      // the tab shown before the current one
     QString m_returnKey;                    // the last tab that was not a New tab
-    QWidget* m_switcher = nullptr;          // compact: open tabs as cards
+    QWidget* m_switcher = nullptr;          // compact: open apps as cards
     QWidget* m_switcherGrid = nullptr;
-    QLabel* m_switcherCount = nullptr;      // "N open tabs"
-    QLineEdit* m_switcherSearch = nullptr;  // shown with many tabs
-    QToolButton* m_switcherMenuButton = nullptr;
+    QLabel* m_switcherCount = nullptr;      // "N open apps"
+    QLineEdit* m_switcherSearch = nullptr;  // shown with many apps
+    QWidget* m_switcherFoot = nullptr;      // holds "Close all apps", pinned below the cards
+    QToolButton* m_switcherCloseAll = nullptr;
 };

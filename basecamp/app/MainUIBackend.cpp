@@ -18,6 +18,7 @@
 #include "restricted/RestrictedUrlInterceptor.h"
 #include <utility>
 #include "NotificationCenter.h"
+#include "NotificationObjects.h"
 #include "ObjectStore.h"
 #include "ObjectResults.h"
 #include "ObjectSearch.h"
@@ -43,6 +44,13 @@
 // ShellIntents so a unit test can reach them; this file cannot be linked into
 // the test harness. Unqualified below to keep the use sites unchanged.
 using namespace ShellIntents;
+
+// Whether an app's icon fills its tile (manifest 0.4.0+), for the app rows
+// and cards drawn with the shared tile (basecamp-experiments#40).
+static bool iconFillsTile(const UIPluginManager* plugins, const QString& name)
+{
+    return plugins && AppsModel::supportsFullBleedIcon(plugins->pluginManifestVersion(name));
+}
 
 MainUIBackend::MainUIBackend(LogosAPI* logosAPI, ICoreRuntime* core,
                              const LogosBasecamp::HostProfile& hostProfile, QObject* parent)
@@ -113,6 +121,11 @@ MainUIBackend::MainUIBackend(LogosAPI* logosAPI, ICoreRuntime* core,
     m_objects->setIconResolver([this](const QString& app) {
         return m_uiPluginManager->pluginIconUrl(app);
     });
+    m_objects->setIconFullBleedResolver([this](const QString& app) {
+        return iconFillsTile(m_uiPluginManager, app);
+    });
+    // Notifications are cards in the home feed, published for their sender.
+    new NotificationObjects(m_notifications, m_objects, this);
     // NOT a per-publish signal. ObjectStore::changed fires on every publish,
     // retract, expiry and markSeen by any app, and searchAppsChanged reaches
     // QML (ShellApi::searchChanged) — forwarded as is, it would be a clock of
@@ -213,6 +226,8 @@ MainUIBackend::MainUIBackend(LogosAPI* logosAPI, ICoreRuntime* core,
             this,              &MainUIBackend::launcherAppsChanged);
     connect(m_uiPluginManager, &UIPluginManager::recentlyClosedAppsChanged,
             this,              &MainUIBackend::recentlyClosedAppsChanged);
+    connect(m_uiPluginManager, &UIPluginManager::recentAppsChanged,
+            this,              &MainUIBackend::recentAppsChanged);
     connect(m_uiPluginManager, &UIPluginManager::loadingModulesChanged,
             this,              &MainUIBackend::loadingModulesChanged);
     connect(m_uiPluginManager, &UIPluginManager::currentVisibleAppChanged,
@@ -408,6 +423,7 @@ void MainUIBackend::refreshCoreModulesModel()
 
 QVariantList MainUIBackend::launcherApps() const     { return m_uiPluginManager->launcherApps(); }
 QVariantList MainUIBackend::recentlyClosedApps() const { return m_uiPluginManager->recentlyClosedApps(); }
+QVariantList MainUIBackend::recentApps() const { return m_uiPluginManager->recentApps(); }
 QString      MainUIBackend::currentVisibleApp() const{ return m_uiPluginManager->currentVisibleApp(); }
 QStringList  MainUIBackend::loadingModules() const   { return m_uiPluginManager->loadingModules(); }
 
@@ -734,6 +750,7 @@ QVariantList MainUIBackend::roleCandidates(const QString& role) const
             { QStringLiteral("displayName"), displayNameFor(name) },
             { QStringLiteral("icon"),
               m_uiPluginManager ? m_uiPluginManager->pluginIconUrl(name) : QString() },
+            { QStringLiteral("supportsFullBleedIcon"), iconFillsTile(m_uiPluginManager, name) },
             { QStringLiteral("current"), name == current },
             { QStringLiteral("isDefault"), name == fallback },
         });
@@ -767,6 +784,12 @@ bool MainUIBackend::requestLauncherSearch(const QString& query)
     return opened;
 }
 
+void MainUIBackend::clearLauncherSearch()
+{
+    m_pendingLauncherSearch.clear();
+    emit launcherSearchRequested(QString());
+}
+
 QString MainUIBackend::takePendingLauncherSearch()
 {
     return std::exchange(m_pendingLauncherSearch, QString());
@@ -778,6 +801,13 @@ void MainUIBackend::setHomeQuery(const QString& text, bool inBar)
     m_homeQuery = text;
     m_homeSearchInBar = inBar;
     emit homeQueryChanged();
+}
+
+void MainUIBackend::setHomeFeedOnly(bool on)
+{
+    if (m_homeFeedOnly == on) return;
+    m_homeFeedOnly = on;
+    emit homeFeedOnlyChanged();
 }
 
 void MainUIBackend::setHomePlaceholder(const QString& text)
@@ -833,7 +863,7 @@ void MainUIBackend::rebuildIntentRegistry()
     // Uninstalled (or updated to stop publishing): its objects go with it.
     // After the bootstrap only — the constructor-time rebuild sees no apps.
     if (m_objects && m_intentRegistryBootstrapped)
-        m_objects->retainApps(m_intentRegistry->modulesUsing(kObjectsPublishIntent));
+        m_objects->retainApps(objectPublishers());
     refreshSearchApps();
 
     // THE COLD-START GATE, and it must skip the bootstrap call above.
@@ -1229,7 +1259,10 @@ void MainUIBackend::openApp(const QString& name, const QString& repositoryUrl, c
 void MainUIBackend::confirmCatalogInstall(const QString& name, const QString& repositoryUrl)
 { m_packageCoordinator->confirmCatalogInstall(name, repositoryUrl); }
 void MainUIBackend::notifyAddApplicationDialogClosed()
-{ m_packageCoordinator->notifyAddApplicationDialogClosed(); }
+{
+    m_homeInstall.clear();
+    m_packageCoordinator->notifyAddApplicationDialogClosed();
+}
 
 // cancelPendingAction is the one slot that doesn't route to a single manager:
 // a pending action lives on either UIPluginManager (local unload cascade) or
@@ -1339,6 +1372,7 @@ QVariantList MainUIBackend::notificationApps() const
             { QStringLiteral("name"), name },
             { QStringLiteral("displayName"), display.isEmpty() ? name : display },
             { QStringLiteral("icon"), m_uiPluginManager->pluginIconUrl(name) },
+            { QStringLiteral("supportsFullBleedIcon"), iconFillsTile(m_uiPluginManager, name) },
             { QStringLiteral("enabled"), !muted.contains(name) },
         };
     }
@@ -1356,17 +1390,29 @@ QObject* MainUIBackend::objectStore() const
     return m_objects;
 }
 
+QStringList MainUIBackend::objectPublishers() const
+{
+    // Apps that publish, and apps that notify: their notifications are
+    // objects too (NotificationObjects), under the same Search switch.
+    QStringList apps = m_intentRegistry->modulesUsing(kObjectsPublishIntent);
+    for (const QString& name : m_intentRegistry->modulesUsing(kNotificationsPostIntent))
+        if (!apps.contains(name))
+            apps << name;
+    return apps;
+}
+
 QVariantList MainUIBackend::searchApps() const
 {
     QVariantList out;
     if (!m_intentRegistry || !m_objects)
         return out;
-    for (const QString& name : m_intentRegistry->modulesUsing(kObjectsPublishIntent)) {
+    for (const QString& name : objectPublishers()) {
         const QString display = displayNameFor(name);
         out << QVariantMap{
             { QStringLiteral("name"), name },
             { QStringLiteral("displayName"), display.isEmpty() ? name : display },
             { QStringLiteral("icon"), m_uiPluginManager->pluginIconUrl(name) },
+            { QStringLiteral("supportsFullBleedIcon"), iconFillsTile(m_uiPluginManager, name) },
             { QStringLiteral("enabled"), m_objects->isEnabled(name) },
             { QStringLiteral("count"), m_objects->count(name) },
         };

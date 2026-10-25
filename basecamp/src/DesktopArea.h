@@ -175,7 +175,6 @@ public:
     // Removes the window, detaching its content first (see releaseContent).
     void removeWindow(AppWindow* w);
 
-    QStringList openKeys() const;
     QString activeKey() const;
 
 signals:
@@ -201,34 +200,48 @@ private:
 };
 
 // The desktop's top bar: the λ and "Logos Basecamp" on the left; a search
-// hint (opens Spotlight) and the clock on the right.
+// hint (opens the Basecamp overlay), the clock and the Activity button (opens
+// the Activity sidebar, basecamp-experiments#44) on the right.
 class DesktopStatusBar : public QWidget
 {
     Q_OBJECT
 
 public:
-    static constexpr int kHeight = 30;
+    // Room for the 32 px Activity button with 2 px above and below.
+    static constexpr int kHeight = 36;
+    static constexpr int kActivitySize = 32;
     explicit DesktopStatusBar(QWidget* parent = nullptr);
 
     void setTiling(bool on) { m_tiling = on; update(); }
+    // The sidebar is open: the button reads as pressed.
+    void setActivityOpen(bool on) { if (m_activityOpen != on) { m_activityOpen = on; update(); } }
+    // `pos` (this bar's coordinates) is on the Activity button.
+    bool isOnActivity(const QPoint& pos) const { return activityRect().contains(pos); }
 
 signals:
     void searchClicked();
     void tileClicked();
+    void activityClicked();
 
 protected:
+    bool event(QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void leaveEvent(QEvent* event) override;
 
 private:
+    QRect activityRect() const;
+    QRect clockRect() const;
     QRect searchRect() const;
     QRect tileRect() const;
     bool m_tiling = false;
     bool m_tileHover = false;
     QPixmap m_lambda;
+    QPixmap m_activityGlyph;
     bool m_searchHover = false;
+    bool m_activityHover = false;
+    bool m_activityOpen = false;
 };
 
 // Glass painted from C++ under an app's QML we don't own (Package Manager):

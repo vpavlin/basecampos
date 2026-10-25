@@ -1,5 +1,7 @@
 #include "DesktopArea.h"
 
+#include "AppTileIcon.h"
+
 #include <QCloseEvent>
 #include <QIcon>
 #include <QLocale>
@@ -47,8 +49,10 @@ public:
     {
         setFixedHeight(kHeight);
         setMouseTracking(true);
-        const QIcon icon(iconPath);
-        if (!iconPath.isEmpty() && !icon.isNull())
+        // The app's tile, rounded like everywhere else (AppTileIcon.h).
+        const QIcon icon = appTileIcon(iconPath, title, tok("surfaceRaised", "#232323"),
+                                       tok("text", "#FFFFFF"));
+        if (!icon.isNull())
             m_icon = icon.pixmap(QSize(18, 18), devicePixelRatioF());
     }
 
@@ -548,14 +552,6 @@ void DesktopArea::removeWindow(AppWindow* w)
     emit windowsChanged();
 }
 
-QStringList DesktopArea::openKeys() const
-{
-    QStringList keys;
-    for (AppWindow* w : appWindows())
-        keys << w->key();
-    return keys;
-}
-
 QString DesktopArea::activeKey() const
 {
     auto* w = qobject_cast<AppWindow*>(activeSubWindow());
@@ -581,6 +577,8 @@ void DesktopArea::resizeEvent(QResizeEvent* event)
 // ── DesktopStatusBar ────────────────────────────────────────────────────────
 
 #include <QDateTime>
+#include <QHelpEvent>
+#include <QToolTip>
 #include <QTimer>
 
 DesktopStatusBar::DesktopStatusBar(QWidget* parent)
@@ -599,12 +597,24 @@ DesktopStatusBar::DesktopStatusBar(QWidget* parent)
         tick->start(60000 - (now.second() * 1000 + now.msec()) + 20);
     };
     connect(tick, &QTimer::timeout, this, [this, arm]() {
-        update(QRect(width() - 16 - 150, 0, 150, height()));
+        update(clockRect());
         arm();
     });
     arm();
     connect(Logos::ThemeNotifier::instance(), &Logos::ThemeNotifier::currentChanged,
-            this, [this]() { m_lambda = QPixmap(); update(); });
+            this, [this]() { m_lambda = QPixmap(); m_activityGlyph = QPixmap(); update(); });
+}
+
+QRect DesktopStatusBar::activityRect() const
+{
+    // At the right edge, where the sidebar it opens comes in.
+    const int s = kActivitySize;
+    return QRect(width() - 8 - s, (height() - s) / 2, s, s);
+}
+
+QRect DesktopStatusBar::clockRect() const
+{
+    return QRect(activityRect().left() - 8 - 150, 0, 150, height());
 }
 
 QRect DesktopStatusBar::tileRect() const
@@ -616,7 +626,7 @@ QRect DesktopStatusBar::tileRect() const
 QRect DesktopStatusBar::searchRect() const
 {
     // Left of the clock, sized for "Search  Ctrl K".
-    return QRect(width() - 16 - 150 - 16 - 120, 4, 120, height() - 8);
+    return QRect(clockRect().left() - 16 - 120, 4, 120, height() - 8);
 }
 
 void DesktopStatusBar::paintEvent(QPaintEvent*)
@@ -689,18 +699,56 @@ void DesktopStatusBar::paintEvent(QPaintEvent*)
     f.setPixelSize(13);
     p.setFont(f);
     p.setPen(text);
-    p.drawText(QRect(width() - 16 - 150, 0, 150, height()), Qt::AlignVCenter | Qt::AlignRight,
+    p.drawText(clockRect(), Qt::AlignVCenter | Qt::AlignRight,
                QLocale().toString(QDateTime::currentDateTime(), QStringLiteral("ddd d MMM  HH:mm")));
+
+    // Activity: a pulse line, on a raised square while hovered or open.
+    const QRect ar = activityRect();
+    if (m_activityHover || m_activityOpen) {
+        p.setPen(Qt::NoPen);
+        p.setBrush(tok("surfaceRaised", "#333333"));
+        p.drawRoundedRect(ar, 6, 6);
+    }
+    if (m_activityGlyph.isNull()) {
+        const qreal dpr = devicePixelRatioF();
+        QPixmap src = QIcon(QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/activity.svg"))
+                          .pixmap(QSize(18, 18), dpr);
+        if (!src.isNull()) {
+            QPainter tp(&src);
+            tp.setCompositionMode(QPainter::CompositionMode_SourceIn);
+            tp.fillRect(src.rect(), text);
+        }
+        m_activityGlyph = src;
+    }
+    if (!m_activityGlyph.isNull())
+        p.drawPixmap(QRect(ar.center().x() - 8, ar.center().y() - 8, 18, 18), m_activityGlyph);
+}
+
+bool DesktopStatusBar::event(QEvent* e)
+{
+    if (e->type() == QEvent::ToolTip) {
+        auto* he = static_cast<QHelpEvent*>(e);
+        if (activityRect().contains(he->pos()))
+            QToolTip::showText(he->globalPos(), tr("Activity"), this, activityRect());
+        else if (searchRect().contains(he->pos()))
+            QToolTip::showText(he->globalPos(), tr("Search Basecamp"), this, searchRect());
+        else
+            QToolTip::hideText();
+        return true;
+    }
+    return QWidget::event(e);
 }
 
 void DesktopStatusBar::mouseMoveEvent(QMouseEvent* e)
 {
     const bool hover = searchRect().contains(e->position().toPoint());
     const bool tileHover = tileRect().contains(e->position().toPoint());
-    if (hover != m_searchHover || tileHover != m_tileHover) {
+    const bool activityHover = activityRect().contains(e->position().toPoint());
+    if (hover != m_searchHover || tileHover != m_tileHover || activityHover != m_activityHover) {
         m_searchHover = hover;
         m_tileHover = tileHover;
-        setCursor(hover || tileHover ? Qt::PointingHandCursor : Qt::ArrowCursor);
+        m_activityHover = activityHover;
+        setCursor(hover || tileHover || activityHover ? Qt::PointingHandCursor : Qt::ArrowCursor);
         update();
     }
 }
@@ -711,12 +759,15 @@ void DesktopStatusBar::mouseReleaseEvent(QMouseEvent* e)
         emit searchClicked();
     else if (e->button() == Qt::LeftButton && tileRect().contains(e->position().toPoint()))
         emit tileClicked();
+    else if (e->button() == Qt::LeftButton && activityRect().contains(e->position().toPoint()))
+        emit activityClicked();
 }
 
 void DesktopStatusBar::leaveEvent(QEvent*)
 {
     m_searchHover = false;
     m_tileHover = false;
+    m_activityHover = false;
     update();
 }
 
@@ -883,7 +934,7 @@ void GlassInfo::refresh()
 {
     if (!m_root || !m_widget)
         return;
-    // Works for widgets outside the root too (Spotlight floats over it).
+    // Works for widgets outside the root too (the Basecamp overlay floats over it).
     m_offset = m_widget->mapToGlobal(QPoint(0, 0)) - m_root->mapToGlobal(QPoint(0, 0));
     emit changed();
 }

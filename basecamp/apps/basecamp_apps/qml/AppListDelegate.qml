@@ -7,6 +7,7 @@ import Logos.Theme
 // Shared with the shell (its welcome page and install dialog use them).
 import Basecamp.AppManager
 import Basecamp.Backend 1.0
+import Basecamp.Icons
 
 ItemDelegate {
     id: root
@@ -68,7 +69,7 @@ ItemDelegate {
         readonly property string nameText:      root.appData ? (root.appData.name || "") : ""
         readonly property string displayName:   root.appData ? (root.appData.displayName || root.appData.name || "") : ""
         // The sandbox can't read other apps' files: the host serves installed icons.
-        readonly property string iconUrl:      root.appData && String(root.appData.iconUrl || "").startsWith("file:")
+        readonly property string iconUrl:      root.appData && /^(file|qrc):/.test(String(root.appData.iconUrl || ""))
                                                ? "image://basecamp/appicon/" + root.appData.name : ""
         readonly property string description:   root.appData ? (root.appData.description || "") : ""
         // 0.4.0+ guarantees a validated 256x256 icon, so it can fill the
@@ -147,19 +148,18 @@ ItemDelegate {
         anchors.rightMargin: Theme.spacing.medium
         spacing: Theme.spacing.medium
 
-        LogosTile {
+        BasecampAppTile {
             Layout.preferredWidth: d.tileSize
             Layout.preferredHeight: d.tileSize
             Layout.alignment: Qt.AlignVCenter
-            label: d.nameText
+            size: d.tileSize
+            label: d.displayName
             source: d.iconUrl
             fallbackColor: d.isInstalled
                            ? Theme.palette.surfaceRaised
                            : AppColors.colorForApp(d.nameText)
-            tileSize: d.tileSize
             dimOpacity: d.tileOpacity
-            insetArtwork: !d.fullBleedIcon
-            interactive: false
+            fullBleed: d.fullBleedIcon
         }
 
         // Name + (optional) description.

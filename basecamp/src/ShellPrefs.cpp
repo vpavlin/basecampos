@@ -1,4 +1,5 @@
 #include "ShellPrefs.h"
+#include "ShellChoice.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -233,10 +234,19 @@ QJsonObject readJson(const QString& path)
 QVariantList ShellPrefs::shellPackages() const
 {
     QVariantList out;
+    const QDir bundled(QCoreApplication::applicationDirPath() + QStringLiteral("/../plugins/shells"));
+    // The default shell shipped with the app is the one that loads, even with
+    // an older basecampium package installed (window.cpp shellPath), so that
+    // package is not listed.
+    const bool defaultBundled =
+        !QDir(bundled.filePath(ShellChoice::defaultShell()))
+             .entryList({ QStringLiteral("main_ui.*") }, QDir::Files).isEmpty();
     const QDir plugins(userPluginsDir());
     for (const QFileInfo& fi : plugins.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
         const QJsonObject m = readJson(fi.absoluteFilePath() + QStringLiteral("/manifest.json"));
         if (m.value(QStringLiteral("type")).toString() != QLatin1String("ui_shell"))
+            continue;
+        if (defaultBundled && m.value(QStringLiteral("name")).toString() == ShellChoice::defaultShell())
             continue;
         QFile vf(fi.absoluteFilePath() + QStringLiteral("/variant"));
         QString variant;
@@ -247,7 +257,10 @@ QVariantList ShellPrefs::shellPackages() const
         const QJsonObject signer = sig.value(QStringLiteral("signer")).toObject();
         QVariantMap e;
         e[QStringLiteral("id")] = m.value(QStringLiteral("name")).toString();
-        e[QStringLiteral("name")] = m.value(QStringLiteral("display_name")).toString(m.value(QStringLiteral("name")).toString());
+        // Basecampium is shown as "Basecamp", whatever its package says.
+        e[QStringLiteral("name")] = ShellChoice::displayName(
+            m.value(QStringLiteral("name")).toString(),
+            m.value(QStringLiteral("display_name")).toString(m.value(QStringLiteral("name")).toString()));
         e[QStringLiteral("version")] = m.value(QStringLiteral("version")).toString();
         e[QStringLiteral("author")] = m.value(QStringLiteral("author")).toString();
         e[QStringLiteral("description")] = m.value(QStringLiteral("description")).toString();
@@ -258,8 +271,8 @@ QVariantList ShellPrefs::shellPackages() const
         e[QStringLiteral("file")] = main.isEmpty() ? QString() : fi.absoluteFilePath() + QLatin1Char('/') + main;
         out << e;
     }
-    // Shells shipped next to the app (development builds only).
-    const QDir bundled(QCoreApplication::applicationDirPath() + QStringLiteral("/../plugins/shells"));
+    // Shells shipped next to the app: the default shell, Basecampium, and in
+    // development builds any other.
     for (const QFileInfo& fi : bundled.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
         bool dup = false;
         for (const QVariant& v : out)
@@ -270,9 +283,12 @@ QVariantList ShellPrefs::shellPackages() const
         e[QStringLiteral("id")] = fi.fileName();
         QString n = fi.fileName();
         if (!n.isEmpty()) n[0] = n[0].toUpper();
-        e[QStringLiteral("name")] = n;
-        e[QStringLiteral("author")] = tr("bundled for development");
+        const bool builtIn = fi.fileName() == ShellChoice::defaultShell();
+        e[QStringLiteral("name")] = ShellChoice::displayName(fi.fileName(), n);
+        e[QStringLiteral("author")] = builtIn ? QStringLiteral("Logos") : tr("bundled for development");
         e[QStringLiteral("signed")] = false;
+        // Ships with Basecamp: Settings switches to it without the package checks.
+        e[QStringLiteral("builtIn")] = builtIn;
         const QDir d(fi.absoluteFilePath());
         const QStringList libs = d.entryList({ QStringLiteral("main_ui.*") }, QDir::Files);
         e[QStringLiteral("file")] = libs.isEmpty() ? QString() : d.absoluteFilePath(libs.first());
@@ -368,27 +384,28 @@ QVariantList ShellPrefs::checkShell(const QString& id) const
 
 void ShellPrefs::switchShell(const QString& id)
 {
-    QSettings().setValue(QLatin1String(kShellKey), id == QLatin1String("default") ? QString() : id);
+    QSettings().setValue(QLatin1String(kShellKey), ShellChoice::isLegacy(id) ? ShellChoice::legacyValue() : id);
     QSettings().sync();
     emit shellChanged();
     restart();
 }
 
+// "" = Basecamp Legacy (ShellChoice.h). Nothing saved = whatever started.
 QString ShellPrefs::shell() const
 {
     QSettings s;
     if (!s.contains(QLatin1String(kShellKey)))
         return activeShell();
     const QString v = s.value(QLatin1String(kShellKey)).toString();
-    return v == QLatin1String("default") ? QString() : v;
+    return ShellChoice::isLegacy(v) ? QString() : v;
 }
 
 void ShellPrefs::setShell(const QString& name)
 {
-    const QString v = name == QLatin1String("default") ? QString() : name;
-    if (v == shell() && QSettings().contains(QLatin1String(kShellKey)))
+    const bool legacy = ShellChoice::isLegacy(name);
+    if ((legacy ? QString() : name) == shell() && QSettings().contains(QLatin1String(kShellKey)))
         return;
-    QSettings().setValue(QLatin1String(kShellKey), v);
+    QSettings().setValue(QLatin1String(kShellKey), legacy ? ShellChoice::legacyValue() : name);
     emit shellChanged();
 }
 

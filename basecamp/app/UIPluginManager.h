@@ -13,6 +13,7 @@
 #include <memory>
 
 #include "utils/HostProfile.h"
+#include "RecentApps.h"
 #include "RecentlyClosedStore.h"
 #include "logos_api.h"
 #include "logos_api_client.h"
@@ -96,6 +97,10 @@ public:
     // Same row shape as launcherApps(), most-recently-closed first, filtered
     // to apps that are still installed.
     QVariantList recentlyClosedApps() const;
+    // Home's Recent apps: recently closed and recently installed, newest
+    // first, one row per app. Same row shape plus "recentKind" ("closed" or
+    // "installed"), filtered to apps that are still installed.
+    QVariantList recentApps() const;
     QString      currentVisibleApp() const;
     QStringList  loadingModules() const;
 
@@ -126,6 +131,10 @@ public:
     //   forWidgetIcon=false → "file://…" (the form QML's Image wants)
     //   forWidgetIcon=true  → raw "qrc:…" path (for QWidget::setWindowIcon)
     QString pluginIconUrl(const QString& moduleName, bool forWidgetIcon = false) const;
+
+    // The host's own icon drawn for a system app in place of its package's
+    // ("qrc:/…"), or empty. Only the Package Manager has one.
+    static QString systemIconUrl(const QString& moduleName);
 
     // Manifest schema version of an installed UI plugin. Feeds the full-bleed
     // icon gate on both the sidebar and App Manager paths.
@@ -187,6 +196,7 @@ signals:
     void uiModulesChanged();
     void launcherAppsChanged();
     void recentlyClosedAppsChanged();
+    void recentAppsChanged();
     void loadingModulesChanged();
     void currentVisibleAppChanged();
     void navigateToApps();
@@ -381,6 +391,10 @@ private:
 
     // Recently-closed list, persisted under LogosBasecampPaths::baseDirectory().
     std::unique_ptr<RecentlyClosedStore> m_recentlyClosed;
+    // Recently-installed list, next to it (recently-installed.ini). Recorded
+    // when an app first shows up in a plugin-list refresh (m_installWatch).
+    std::unique_ptr<RecentlyClosedStore> m_recentlyInstalled;
+    RecentApps::InstallWatch m_installWatch;
 
     // Row shape shared by launcherApps() and recentlyClosedApps().
     QVariantMap buildAppRow(const QString& pluginName) const;

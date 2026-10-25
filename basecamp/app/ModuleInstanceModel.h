@@ -49,6 +49,7 @@ private:
         QString type;
         QString version;
         QString iconPath;
+        bool    supportsFullBleedIcon = false;
         QString installType;
         bool    isLoaded       = false;
         bool    isMainUi       = false;

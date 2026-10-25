@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QTimer>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
@@ -71,6 +72,13 @@ class ShellApi : public QObject {
     // search (Basecampium's phone layout); home then hides its own field.
     Q_PROPERTY(bool searchInBar READ searchInBar NOTIFY homeQueryChanged)
     Q_PROPERTY(QString homeQuery READ homeQuery NOTIFY homeQueryChanged)
+    // Home is shown as the desktop's Activity sidebar: only the search, the
+    // pills and the cards (basecamp-experiments#44).
+    Q_PROPERTY(bool feedOnly READ feedOnly NOTIFY feedOnlyChanged)
+    // Recent apps: recently closed and recently installed, newest first, in
+    // installedApps' row shape plus recentKind ("closed" | "installed").
+    // Empty on a fresh profile; home then shows the role apps.
+    Q_PROPERTY(QVariantList recentApps READ recentApps NOTIFY recentAppsChanged)
 
 public:
     ShellApi(MainUIBackend* backend, const QString& appName, QObject* parent = nullptr);
@@ -109,6 +117,8 @@ public:
 
     bool searchInBar() const;
     QString homeQuery() const;
+    bool feedOnly() const;
+    QVariantList recentApps() const;
 
     // settings
     Q_INVOKABLE void refreshRepositories();
@@ -147,6 +157,22 @@ public:
 
     // home: turn the New tab this page is shown in into `name`.
     Q_INVOKABLE void launch(const QString& name);
+    // home: the apps matching `query` for its Apps block (basecamp-experiments#32),
+    // installed and catalog ones, best first (AppSearch.h): [{ name, title,
+    // icon, fullBleed, state }], state "running" | "installed" | "installing" |
+    // "available". icon is served by the host and only for a local file, ""
+    // otherwise (draw letters). The first query fetches the catalog; asked
+    // again on appResultsChanged.
+    Q_INVOKABLE QVariantList findApps(const QString& query);
+    // home: the installed apps that hold objects of `type` (a type pill,
+    // basecamp-experiments#36), most first, in findApps' row shape; apps
+    // switched off in Settings -> Search are left out. Read again on
+    // relatedAppsChanged and on appResultsChanged.
+    Q_INVOKABLE QVariantList relatedApps(const QString& type);
+    // home: install an app found by findApps, through the shell's own install
+    // dialog (nothing is installed without it). The host picks the repository.
+    // An installed app opens instead.
+    Q_INVOKABLE void installApp(const QString& name);
     // home: what the shell's bar reads while it searches this page, naming
     // the active filter ("Search transactions"); "" gives the shell's own back.
     // Plain text, one line, at most 60 characters.
@@ -191,6 +217,14 @@ signals:
     void appsChanged();
     void launcherSearchRequested(const QString& query);
     void homeQueryChanged();
+    void feedOnlyChanged();
+    void recentAppsChanged();
+    // home: findApps would answer differently (an app opened, closed,
+    // installed or removed, the catalog arrived). Coalesced.
+    void appResultsChanged();
+    // home: relatedApps would answer differently (some app published,
+    // retracted or was switched off). Coalesced.
+    void relatedAppsChanged();
     // Enter in the shell's bar while home is shown: open the first result.
     void homeQueryAccepted();
     // search: a view wants results; answer(requestId, ids) within 500 ms or
@@ -204,6 +238,10 @@ private:
     bool holdsAny() const;
     bool isView() const { return holds("home") || holds("launcher"); }
 
+    void scheduleAppResults();
+
     QPointer<MainUIBackend> m_backend;
     QString m_app;
+    QTimer* m_appResultsTimer = nullptr;
+    QTimer* m_relatedTimer = nullptr;
 };

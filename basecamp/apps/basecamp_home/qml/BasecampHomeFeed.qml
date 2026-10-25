@@ -4,11 +4,9 @@ import Logos.Controls
 import Logos.Theme
 import Basecamp.Objects
 
-import "BasecampHomeModules.js" as M
-
 // Home's feed (SHELL-OBJECTS-SPEC §7): every object the bar and the pill
-// leave, newest first, one card each, with how many are new since the user
-// last looked. Grows with its rows; the page around it scrolls.
+// leave, newest first, one card each, under an "Activity" label. Unseen
+// cards carry a dot. Grows with its rows; the page around it scrolls.
 Column {
     id: feed
 
@@ -16,8 +14,6 @@ Column {
     property var rows: []
     property real now: Date.now()
     property var newIds: ({})
-    // When the previous visit started (0: this is the first).
-    property real since: 0
     // Cards drawn at once; "Show more" adds a page.
     property int shown: 30
     // How many objects the bar and the pill match in all: a results model
@@ -26,22 +22,16 @@ Column {
 
     signal raiseRequested(string id, string action, string text)
 
-    readonly property int newCount: M.newCount(feed.rows, feed.newIds)
-
     objectName: "home.feed"
     spacing: Theme.spacing.small
 
     LogosText {
-        objectName: "home.feed.newSince"
+        objectName: "home.feed.title"
         width: parent.width
-        text: feed.newCount === 0
-              ? (feed.rows.length === 0 ? "" : qsTr("Nothing new"))
-              : feed.since > 0 ? qsTr("%1 new since %2").arg(feed.newCount).arg(ObjectCardFormat.clock(feed.since))
-                               : qsTr("%1 new").arg(feed.newCount)
-        visible: text.length > 0
-        color: feed.newCount > 0 ? Theme.palette.accentOrange : Theme.palette.textTertiary
+        text: qsTr("Activity")
         font.pixelSize: Theme.typography.secondaryText
-        font.weight: Theme.typography.weightMedium
+        font.weight: Font.Medium
+        color: Theme.palette.textSecondary
     }
 
     Repeater {

@@ -445,6 +445,8 @@ Dialog {
                                    ? Theme.palette.surfaceRaised
                                    : AppColors.colorForApp(d.targetName)
                     tileSize: d.tileSize
+                    // The app tiles' shape (BasecampAppTile): one radius ratio everywhere.
+                    radius: Math.round(d.tileSize * Theme.spacing.radiusXlarge / 80)
                     interactive: false
                 }
 

@@ -50,6 +50,7 @@ QVariant ModuleInstanceModel::data(const QModelIndex& index, int role) const
     case StatusTextRole:      return r.statusText();
     case CpuRole:             return r.cpu;
     case MemoryRole:          return r.memory;
+    case SupportsFullBleedIconRole: return r.supportsFullBleedIcon;
     }
     return {};
 }
@@ -71,6 +72,7 @@ QHash<int, QByteArray> ModuleInstanceModel::roleNames() const
         {StatusTextRole,      "statusText"},
         {CpuRole,             "cpu"},
         {MemoryRole,          "memory"},
+        {SupportsFullBleedIconRole, "supportsFullBleedIcon"},
     };
 }
 
@@ -85,6 +87,7 @@ ModuleInstanceModel::Row ModuleInstanceModel::toRow(const QVariantMap& m)
     r.type           = m.value(QStringLiteral("type")).toString();
     r.version        = m.value(QStringLiteral("version")).toString();
     r.iconPath       = m.value(QStringLiteral("iconPath")).toString();
+    r.supportsFullBleedIcon = m.value(QStringLiteral("supportsFullBleedIcon")).toBool();
     r.installType    = m.value(QStringLiteral("installType")).toString();
     r.isLoaded       = m.value(QStringLiteral("isLoaded")).toBool();
     r.isMainUi       = m.value(QStringLiteral("isMainUi")).toBool();
@@ -111,6 +114,7 @@ QList<int> ModuleInstanceModel::diffRoles(const Row& a, const Row& b)
     if (a.type           != b.type)           roles.append(TypeRole);
     if (a.version        != b.version)        roles.append(VersionRole);
     if (a.iconPath       != b.iconPath)       roles.append(IconPathRole);
+    if (a.supportsFullBleedIcon != b.supportsFullBleedIcon) roles.append(SupportsFullBleedIconRole);
     if (a.installType    != b.installType)    roles.append(InstallTypeRole);
     if (a.isLoaded       != b.isLoaded)       roles.append(IsLoadedRole);
     if (a.isMainUi       != b.isMainUi)       roles.append(IsMainUiRole);

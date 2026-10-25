@@ -15,11 +15,6 @@ Rectangle {
     readonly property bool granted: typeof shell !== "undefined" && shell !== null
                                     && shell.roles.home === "basecamp_home"
 
-    // The shell's own apps, by role rather than by a built-in screen.
-    readonly property var roleForKey: ({
-        "sys:applications": "launcher", "sys:settings": "settings", "sys:packages": "packages"
-    })
-
     // Called by the shell (desktop New tab: focus the page's own search).
     function focusSearch() { if (page.item) page.item.focusSearch() }
     function clearSearch() { if (page.item) page.item.clearSearch() }
@@ -32,8 +27,8 @@ Rectangle {
             id: newTab
             searchInBar: shell.searchInBar
             barQuery: shell.homeQuery
+            feedOnly: shell.feedOnly
             onLaunchApp: name => shell.launch(name)
-            onOpenSystemApp: key => shell.openRole(root.roleForKey[key] || "")
 
             Connections {
                 target: shell

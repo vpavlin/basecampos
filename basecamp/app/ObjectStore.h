@@ -67,6 +67,12 @@ public:
     QString publish(const QString& app, const QVariantMap& params,
                     int* badIndex = nullptr, QStringList* ids = nullptr);
 
+    // The host publishing on `app`'s behalf: its notifications, mirrored into
+    // the feed (NotificationObjects). The same checks and the same switch, but
+    // not counted against the app's own rate, and every object in it is news
+    // again (unseen), even when it replaces one with the same key.
+    QString publishFromHost(const QString& app, const QVariantMap& params);
+
     // `{ keys: [ … ] }` or `{ all: true }`. Unknown keys are not an error.
     QString retract(const QString& app, const QVariantMap& params);
 
@@ -83,6 +89,10 @@ public:
     Q_INVOKABLE QVariantList list(const QVariantMap& filter = QVariantMap()) const;
     // Types that have at least one object, sorted.
     Q_INVOKABLE QStringList types() const;
+    // How many objects of `type` each app holds (app -> count, no zeros),
+    // switched-off apps left out: the apps home names as related to a type
+    // pill (basecamp-experiments#36).
+    QHash<QString, int> countsOfType(const QString& type) const;
     Q_INVOKABLE QVariantMap get(const QString& id) const;
     Q_INVOKABLE void markSeen(const QStringList& ids);
 
@@ -103,6 +113,9 @@ public:
 
     // Who draws each publisher: an icon URL for an app name ("" = none).
     void setIconResolver(std::function<QString(const QString&)> resolver) { m_iconFor = std::move(resolver); }
+    // Whether that icon fills its tile (a 0.4.0+ manifest's validated square)
+    // or is a small glyph drawn inset: stamped as `iconFullBleed`.
+    void setIconFullBleedResolver(std::function<bool(const QString&)> resolver) { m_iconFullBleedFor = std::move(resolver); }
     // Tests replace the clock (ms since epoch) to exercise expiry and the rate
     // window without waiting.
     void setClock(std::function<qint64()> clock) { m_now = std::move(clock); }
@@ -115,6 +128,8 @@ signals:
     void disabledAppsChanged();
 
 private:
+    QString publishBatch(const QString& app, const QVariantMap& params,
+                         int* badIndex, QStringList* ids, bool fromHost);
     qint64 now() const;
     bool allow(const QString& app);
     // Validate one envelope. Returns the cleaned object (host fields not yet
@@ -130,6 +145,7 @@ private:
     QSet<QString> m_disabled;
     QHash<QString, std::deque<qint64>> m_recent;   // app -> publish times (ms)
     std::function<QString(const QString&)> m_iconFor;
+    std::function<bool(const QString&)> m_iconFullBleedFor;
     std::function<qint64()> m_now;
     QTimer* m_expiry = nullptr;
 };

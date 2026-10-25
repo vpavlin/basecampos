@@ -116,6 +116,8 @@ class MainUIBackend : public QObject {
     Q_PROPERTY(QString lastSearchRanker READ lastSearchRanker NOTIFY lastSearchRankerChanged)
     // Most-recently-closed apps, persisted across restarts.
     Q_PROPERTY(QVariantList recentlyClosedApps READ recentlyClosedApps NOTIFY recentlyClosedAppsChanged)
+    // Home's Recent apps: recently closed and recently installed, newest first.
+    Q_PROPERTY(QVariantList recentApps READ recentApps NOTIFY recentAppsChanged)
     // role -> the app filling it ("" when nothing can): home, launcher, packages,
     // settings, search (SHELL-ROLES-SPEC.md). The shell opens roles, not apps.
     Q_PROPERTY(QVariantMap roles READ roles NOTIFY rolesChanged)
@@ -182,6 +184,7 @@ public:
     // Delegations to UIPluginManager.
     QVariantList launcherApps() const;
     QVariantList recentlyClosedApps() const;
+    QVariantList recentApps() const;
     QString      currentVisibleApp() const;
     QStringList  loadingModules() const;
 
@@ -212,6 +215,9 @@ public:
     Q_INVOKABLE void setNotificationsEnabled(const QString& app, bool enabled);
     QObject* objectStore() const;
     QVariantList searchApps() const;
+    // The apps whose objects the store keeps: those that publish, and those
+    // that notify (their notifications are feed cards). Rows of searchApps.
+    QStringList objectPublishers() const;
     // Emits searchAppsChanged only if searchApps() differs from what was last
     // announced. Called at once for a switch or a registry rebuild, and through
     // a coalescing timer for store activity.
@@ -258,6 +264,15 @@ public:
     // Applications (the `launcher` role) opened on a search, e.g. from the
     // shell's own search. Kept until the app takes it, like the Settings section.
     Q_INVOKABLE bool requestLauncherSearch(const QString& query);
+    // Applications shows everything again (home's "All apps"): any search
+    // handed over earlier, or still pending, is dropped. Does not open it.
+    void clearLauncherSearch();
+    // An install asked for from home (shell.installApp): its dialog opens over
+    // home, and the shell leaves the user there instead of bringing
+    // Applications forward filtered to the app. Until that dialog closes.
+    void setHomeInstall(const QString& name) { m_homeInstall = name; }
+    Q_INVOKABLE bool isHomeInstall(const QString& name) const
+    { return !name.isEmpty() && name == m_homeInstall; }
     QString pendingLauncherSearch() const { return m_pendingLauncherSearch; }
     QString takePendingLauncherSearch();
 
@@ -267,6 +282,11 @@ public:
     Q_INVOKABLE void acceptHomeQuery() { emit homeQueryAccepted(); }
     QString homeQuery() const { return m_homeQuery; }
     bool homeSearchInBar() const { return m_homeSearchInBar; }
+    // The desktop's Activity sidebar shows home in its feed mode: the search,
+    // the pills and the cards, no Recent apps or Apps block
+    // (basecamp-experiments#44). The shell sets it each time it shows home.
+    Q_INVOKABLE void setHomeFeedOnly(bool on);
+    bool homeFeedOnly() const { return m_homeFeedOnly; }
     // What the bar reads while it searches home ("Search transactions"),
     // set by the home app; "" = the shell's own ("Search apps…").
     Q_INVOKABLE void setHomePlaceholder(const QString& text);
@@ -430,6 +450,7 @@ signals:
     void launcherSearchRequested(const QString& query);
     void homeQueryChanged();
     void homeQueryAccepted();
+    void homeFeedOnlyChanged();
     void homePlaceholderChanged();
     // From the home app: the shell turns the New tab into this app / role.
     void homeLaunchRequested(const QString& name);
@@ -451,6 +472,7 @@ signals:
     void catalogInstallFailed(const QString& name, const QString& error);
     void launcherAppsChanged();
     void recentlyClosedAppsChanged();
+    void recentAppsChanged();
     void currentVisibleAppChanged();
     void loadingModulesChanged();
     void navigateToApps();
@@ -614,9 +636,11 @@ private:
     QPointer<QObject>    m_shellPreferences;
     QString              m_pendingSettingsSection;
     QString              m_pendingLauncherSearch;
+    QString              m_homeInstall;
     QString              m_homeQuery;
     QString              m_homePlaceholder;
     bool                 m_homeSearchInBar = false;
+    bool                 m_homeFeedOnly = false;
     LinkRequestCoordinator* m_linkRequests = nullptr;
     // False until wireIntents() has done its bootstrap rebuild, so the
     // cold-start link gate opens on a registry that has actually seen disk.

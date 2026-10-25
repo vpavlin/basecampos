@@ -50,7 +50,10 @@ Rectangle {
             Connections {
                 target: shell
                 function onLauncherSearchRequested(query) {
-                    appManagerView.applySearch(shell.takePendingSearch() || query)
+                    const q = shell.takePendingSearch() || query
+                    // Empty from outside is home's "All apps": the full list.
+                    if (q) appManagerView.applySearch(q)
+                    else appManagerView.showAll()
                 }
             }
 

@@ -162,6 +162,8 @@ IntentDialog {
                         label: root.displayNameLookup(modelData.moduleName)
                         fallbackColor: root.fallbackColorFor(modelData.moduleName)
                         tileSize: side
+                        // The app tiles' shape (BasecampAppTile): one radius ratio everywhere.
+                        radius: Math.round(side * Theme.spacing.radiusXlarge / 80)
                         interactive: false
                     }
 

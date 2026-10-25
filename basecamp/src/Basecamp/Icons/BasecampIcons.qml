@@ -7,6 +7,9 @@ import Logos.Theme
 // the tents artwork and the workspace hexagon are not replaceable.
 QtObject {
     readonly property url logo:       Qt.resolvedUrl("logos-lambda.svg")
+    // Basecamp's own tile (the dock's first entry): a full-bleed square with
+    // a smaller λ than the home app's icon, so it sits level with app icons.
+    readonly property url basecampTile: Qt.resolvedUrl("basecamp-dock.svg")
     readonly property url tents:      Qt.resolvedUrl("tent.png")
     readonly property url dashboard:  Theme.iconOr("dashboard", Qt.resolvedUrl("dashboard.svg"))
     readonly property url filter:     Theme.iconOr("filter", Qt.resolvedUrl("filter.svg"))

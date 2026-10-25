@@ -89,9 +89,10 @@ pkgs.stdenv.mkDerivation {
     fi
     echo "Installed $_found"
 
-    # Basecampium is NOT part of Basecamp: it ships as its own shell package
-    # (tools/make-shell-lgx.sh turns this into basecampium.lgx). Kept outside
-    # plugins/ so the app bundle doesn't pick it up.
+    # Basecampium, the default shell (shown as "Basecamp"; ShellChoice.h). Kept
+    # outside plugins/: nix/app.nix stages it into plugins/shells/basecampium/,
+    # where a fresh profile finds it, and tools/make-shell-lgx.sh can still
+    # turn it into a basecampium.lgx shell package.
     mkdir -p $out/shell-packages/basecampium
     for _ext in dylib dll so; do
       if [ -f "build-basecampium/main_ui.$_ext" ]; then

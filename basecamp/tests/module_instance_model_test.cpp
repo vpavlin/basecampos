@@ -61,7 +61,7 @@ private slots:
             "name", "label", "description", "category", "type",
             "version", "iconPath", "installType",
             "isLoaded", "isMainUi", "hasMissingDeps",
-            "statusText", "cpu", "memory",
+            "statusText", "cpu", "memory", "supportsFullBleedIcon",
         };
         QHash<QByteArray, bool> seen;
         for (auto it = roles.cbegin(); it != roles.cend(); ++it)
@@ -82,10 +82,12 @@ private slots:
                 {"type",        "core"},
                 {"version",     "1.2.3"},
                 {"installType", "user"},
+                {"supportsFullBleedIcon", true},
             }),
         });
 
         QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(fieldFor(model, 0, "supportsFullBleedIcon").toBool(), true);
         QCOMPARE(fieldFor(model, 0, "name").toString(),        "waku");
         QCOMPARE(fieldFor(model, 0, "label").toString(),       "Waku");
         QCOMPARE(fieldFor(model, 0, "description").toString(), "The transport");

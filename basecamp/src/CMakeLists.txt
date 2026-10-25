@@ -48,6 +48,9 @@ set(SOURCES
     DesktopArea.cpp
     TabArea.h
     TabArea.cpp
+    AppTileIcon.h
+    HomeOverlayGeometry.h
+    AppTileIcon.cpp
     ShellPrefs.h
     ShellPrefs.cpp
     ShortcutBridge.h
@@ -162,6 +165,7 @@ qt_add_qml_module(basecamp_shell_qml
         Basecamp/Shell/UninstallDialog.qml
         Basecamp/Shell/WelcomePage.qml
         Basecamp/Shell/DockPanel.qml
+        Basecamp/Shell/HomeOverlay.qml
         Basecamp/Shell/NotificationLayer.qml
 )
 
@@ -202,9 +206,11 @@ qt_add_qml_module(basecamp_icons_qml
     QML_FILES
         Basecamp/Icons/BasecampIcons.qml
         Basecamp/Icons/BasecampLogo.qml
+        Basecamp/Icons/BasecampAppTile.qml
         Basecamp/Icons/TintedSvg.qml
     RESOURCES
         Basecamp/Icons/logos-lambda.svg
+        Basecamp/Icons/basecamp-dock.svg
         Basecamp/Icons/dashboard.svg
         Basecamp/Icons/filter.svg
         Basecamp/Icons/module.svg
@@ -215,6 +221,7 @@ qt_add_qml_module(basecamp_icons_qml
         Basecamp/Icons/glowing-tents.jpg
         Basecamp/Icons/workspace.svg
         Basecamp/Icons/bell.svg
+        Basecamp/Icons/activity.svg
 )
 
 

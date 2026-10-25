@@ -23,10 +23,10 @@ p = sys.argv[1]; m = json.load(open(p))
 m.update({
     "type": "ui_shell",
     "category": "shell",
-    "display_name": os.environ.get("SHELL_DISPLAY_NAME", "Basecampium"),
+    "display_name": os.environ.get("SHELL_DISPLAY_NAME", "Basecamp"),
     "author": os.environ.get("SHELL_AUTHOR", "Alisher (xAlisher)"),
     "description": os.environ.get("SHELL_DESCRIPTION",
-        "A Chrome-like shell for Basecamp: tabs, a New tab page, no address bar."),
+        "Basecamp's default shell: tabs, a home page, no address bar."),
     "version": os.environ.get("SHELL_VERSION", "0.1.0"),
     "hostAbiVersion": 3,
 })

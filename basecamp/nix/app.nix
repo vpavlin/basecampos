@@ -872,6 +872,15 @@ WRAPPER_EOF
       exit 1
     fi
 
+    # The default shell, Basecampium ("Basecamp"), next to the app where
+    # app/window.cpp looks for a bundled shell; plugins/main_ui above is kept
+    # as Basecamp Legacy.
+    if [ -d "${mainUIPlugin}/shell-packages/basecampium" ]; then
+      mkdir -p "$out/plugins/shells/basecampium"
+      cp -r "${mainUIPlugin}/shell-packages/basecampium/." "$out/plugins/shells/basecampium/"
+      echo "Installed the default shell, basecampium"
+    fi
+
     # Basecamp's own apps that fill shell roles (ADR-067): plain QML apps from
     # apps/, bundled like any pre-installed plugin. Settings is the first.
     if [ -d "${src}/apps" ]; then

@@ -5,19 +5,28 @@ import Logos.Theme
 import Logos.Controls
 import Basecamp.Icons
 
-// The desktop layout's dock: the shell's own apps, a separator, then the
-// installed apps. A dot marks every app with a window; the front-most one's
-// dot is wider. The C++ side sets `openKeys` and `activeKey` and places the
-// view; the root is sized to its content (SizeViewToRootObject), with room
-// above the panel for the hover label.
+// The desktop layout's dock: Basecamp pinned first, then one tile per open
+// app window (basecamp-experiments#42). There are no fixed entries: the
+// shell's role apps (Applications, Package Manager, Settings) show up here
+// like any app while they have a window. The home and search role holders
+// never do. A dot marks every window; the front-most one's dot is wider. The
+// C++ side sets `windows`, `hiddenApps`, `activeKey` and `homeOpen` and
+// places the view; the root is sized to its content (SizeViewToRootObject),
+// with room above the panel for the hover label.
 Item {
     id: root
 
-    // Window keys: a module name, or "sys:applications" / "sys:packages" / "sys:settings".
-    property var openKeys: []
+    // Open windows in opening order, home and search already left out:
+    // [{ key, title }]. A key is a module name, or "sys:<name>" for the
+    // shell's own page shown when nothing fills that role.
+    property var windows: []
+    // Never shown here, even while loading: the home and search role holders.
+    property var hiddenApps: []
     property string activeKey: ""
+    // The Basecamp overlay is open (basecamp-experiments#43): Basecamp's dot.
+    property bool homeOpen: false
 
-    signal openSystemApp(string key)
+    signal openHome()
     signal launchApp(string name)
 
     readonly property int tileSize: 48
@@ -25,12 +34,37 @@ Item {
     readonly property int labelRoom: 34
     readonly property int panelHeight: 72
 
-    readonly property var systemApps: [
-        { key: "sys:applications", name: qsTr("Applications"),    icon: BasecampIcons.dashboard },
-        { key: "sys:packages",     name: qsTr("Package Manager"), icon: BasecampIcons.modules },
-        { key: "sys:settings",     name: qsTr("Settings"),        icon: BasecampIcons.settings }
-    ]
-    readonly property var apps: backend.launcherApps || []
+    readonly property var installed: backend.launcherApps || []
+    readonly property var loadingNames: backend.loadingModules || []
+
+    function appRow(name) {
+        for (var i = 0; i < installed.length; ++i)
+            if (installed[i].name === name) return installed[i]
+        return null
+    }
+
+    // One tile per window, then the apps still loading (no window yet).
+    readonly property var entries: {
+        var out = []
+        var seen = {}
+        function add(key, title, loading) {
+            if (seen[key] || hiddenApps.indexOf(key) >= 0) return
+            seen[key] = true
+            var row = appRow(key)
+            out.push({
+                key: key,
+                label: (row && row.displayName) || title || key,
+                artwork: (row && row.iconPath) || "",
+                fullBleed: !!row && row.supportsFullBleedIcon === true,
+                loading: loading
+            })
+        }
+        for (var i = 0; i < windows.length; ++i)
+            add(windows[i].key, windows[i].title, loadingNames.indexOf(windows[i].key) >= 0)
+        for (var j = 0; j < loadingNames.length; ++j)
+            add(loadingNames[j], "", true)
+        return out
+    }
 
     width: panel.width
     height: labelRoom + panelHeight
@@ -52,20 +86,18 @@ Item {
             id: row
             anchors.centerIn: parent
 
-            Repeater {
-                model: root.systemApps
-                delegate: DockItem {
-                    required property var modelData
-                    objectName: "dock." + modelData.key
-                    key: modelData.key
-                    label: modelData.name
-                    glyph: modelData.icon
-                    onActivated: root.openSystemApp(modelData.key)
-                }
+            DockItem {
+                objectName: "dock.basecamp"
+                key: "basecamp"
+                label: qsTr("Basecamp")
+                artwork: BasecampIcons.basecampTile
+                fullBleed: true
+                shown: root.homeOpen
+                onActivated: root.openHome()
             }
 
             Item {
-                visible: root.apps.length > 0
+                visible: root.entries.length > 0
                 width: 17
                 height: root.tileSize
                 Rectangle {
@@ -77,16 +109,16 @@ Item {
             }
 
             Repeater {
-                model: root.apps
+                model: root.entries
                 delegate: DockItem {
                     required property var modelData
-                    objectName: "dock.app." + modelData.name
-                    key: modelData.name
-                    label: modelData.displayName || modelData.name
-                    artwork: modelData.iconPath || ""
-                    fullBleed: modelData.supportsFullBleedIcon === true
-                    loading: backend.loadingModules.indexOf(modelData.name) >= 0
-                    onActivated: root.launchApp(modelData.name)
+                    objectName: "dock.app." + modelData.key
+                    key: modelData.key
+                    label: modelData.label
+                    artwork: modelData.artwork
+                    fullBleed: modelData.fullBleed
+                    loading: modelData.loading
+                    onActivated: root.launchApp(modelData.key)
                 }
             }
         }
@@ -97,13 +129,14 @@ Item {
 
         property string key
         property string label
-        property url glyph: ""
         property string artwork: ""
         property bool fullBleed: false
         property bool loading: false
+        // Open without a window (Basecamp: its overlay is up).
+        property bool shown: false
 
-        readonly property bool open: root.openKeys.indexOf(key) >= 0
-        readonly property bool front: root.activeKey === key
+        readonly property bool open: shown || root.windows.some(function(w) { return w.key === item.key })
+        readonly property bool front: shown || root.activeKey === key
 
         signal activated()
 
@@ -124,37 +157,19 @@ Item {
 
             LogosGlow {
                 anchors.fill: parent
-                radius: Theme.spacing.radiusLarge
+                radius: appTile.radius
                 active: item.hovered
             }
 
-            // Shell apps: a glyph on a surface tile.
-            Rectangle {
-                anchors.fill: parent
-                visible: item.artwork.length === 0
-                radius: Theme.spacing.radiusLarge
-                color: item.pressed ? Theme.palette.accentOrange : Theme.palette.surfaceRaised
-
-                LogosIcon {
-                    anchors.centerIn: parent
-                    width: 26
-                    height: 26
-                    source: item.glyph
-                    color: item.pressed ? Theme.palette.accentForeground : Theme.palette.text
-                    brightness: 1.0
-                }
-            }
-
-            // Installed apps: their own artwork, as in the sidebar.
-            LogosTile {
+            // The app's icon, or its letters when it has none.
+            BasecampAppTile {
+                id: appTile
                 anchors.centerIn: parent
-                visible: item.artwork.length > 0 && !item.loading
-                label: item.key
+                visible: !item.loading
+                size: root.tileSize
+                label: item.label
                 source: item.artwork
-                fallbackColor: Theme.palette.surfaceRaised
-                insetArtwork: !item.fullBleed
-                interactive: false
-                tileSize: root.tileSize
+                fullBleed: item.fullBleed
             }
 
             BusyIndicator {

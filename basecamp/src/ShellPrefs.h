@@ -21,11 +21,13 @@ class ShellPrefs : public QObject
     Q_PROPERTY(QUrl builtinWallpaperUrl READ builtinWallpaperUrl CONSTANT)
     Q_PROPERTY(QUrl customWallpaperUrl READ customWallpaperUrl NOTIFY wallpaperChanged)
     // Shell packages (prototype): installed shells under plugins/shells/, the
-    // saved choice ("" = default; applies after a restart), and whether this
-    // build is the Basecampium (tabs) shell.
+    // saved choice ("" = Basecamp Legacy, the host's built-in shell; applies
+    // after a restart), and whether this build is the Basecampium (tabs)
+    // shell, the default one, shown as "Basecamp" (ShellChoice.h).
     Q_PROPERTY(QStringList shells READ shells NOTIFY shellsChanged)
     // Installed shell packages (manifest type "ui_shell"), each
-    // {id, name, version, author, description, signed, signer, signerUrl, did, file}.
+    // {id, name, version, author, description, signed, signer, signerUrl, did, file},
+    // plus builtIn for the default shell when it ships next to the app.
     Q_PROPERTY(QVariantList shellPackages READ shellPackages NOTIFY shellsChanged)
     Q_PROPERTY(QString shell READ shell WRITE setShell NOTIFY shellChanged)
     Q_PROPERTY(QString activeShell READ activeShell CONSTANT)

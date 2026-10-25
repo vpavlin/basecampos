@@ -78,6 +78,14 @@ UIPluginManager::UIPluginManager(LogosAPI* logosAPI,
     connect(this, &UIPluginManager::launcherAppsChanged,
             this, &UIPluginManager::recentlyClosedAppsChanged);
 
+    // Recently installed, for home's Recent apps. Its own file and key, so the
+    // welcome page's recently-closed list is unchanged.
+    m_recentlyInstalled = std::make_unique<RecentlyClosedStore>(
+        LogosBasecampPaths::baseDirectory() + "/recently-installed.ini",
+        QStringLiteral("recentlyInstalled"));
+    connect(this, &UIPluginManager::recentlyClosedAppsChanged,
+            this, &UIPluginManager::recentAppsChanged);
+
     m_pluginLoader = new PluginLoader(m_logosAPI, m_coreModuleManager, this);
     connect(m_pluginLoader, &PluginLoader::pluginLoaded,
             this, &UIPluginManager::onPluginLoaded);
@@ -171,6 +179,18 @@ void UIPluginManager::onUiPluginsFetched(const QVariantList& uiPlugins)
         m_uiPluginMetadata[name] = pluginInfo;
     }
 
+    // An app that was not in the previous list was just installed: it goes
+    // first in home's Recent apps. Shell internals never show there.
+    bool installed = false;
+    for (const QString& name : m_installWatch.update(findAvailableUiPlugins())) {
+        if (isShellInternalApp(name) || !m_recentlyInstalled) continue;
+        qDebug() << "Recently installed:" << name;
+        m_recentlyInstalled->record(name);
+        installed = true;
+    }
+    if (installed)
+        emit recentAppsChanged();
+
     for (auto it = m_qmlPluginWidgets.cbegin(); it != m_qmlPluginWidgets.cend(); ++it)
         reloadLoadedPluginIcon(it.key(), it.value());
     for (auto it = m_uiModuleWidgets.cbegin(); it != m_uiModuleWidgets.cend(); ++it)
@@ -248,6 +268,8 @@ QVariantList UIPluginManager::uiModules() const
         module["isLoaded"] = m_loadedUiModules.contains(pluginName) || m_qmlPluginWidgets.contains(pluginName);
         module["isMainUi"] = (pluginName == "main_ui");
         module["iconPath"] = pluginIconUrl(pluginName);
+        module["supportsFullBleedIcon"] =
+            AppsModel::supportsFullBleedIcon(pluginManifestVersion(pluginName));
         module["displayName"] = meta.value("displayName");
         module["description"] = meta.value("description");
         module["repositoryUrl"] = meta.value("repositoryUrl");
@@ -900,6 +922,28 @@ QVariantList UIPluginManager::recentlyClosedApps() const
     return apps;
 }
 
+QVariantList UIPluginManager::recentApps() const
+{
+    QVariantList apps;
+    if (!m_recentlyClosed || !m_recentlyInstalled) {
+        return apps;
+    }
+
+    // Filtered against what is installed now, like recentlyClosedApps().
+    const QStringList available = findAvailableUiPlugins();
+    for (const RecentApps::Item& item :
+         RecentApps::merge(m_recentlyClosed->entries(), m_recentlyInstalled->entries())) {
+        if (isShellInternalApp(item.name) || !available.contains(item.name)) {
+            continue;
+        }
+        QVariantMap row = buildAppRow(item.name);
+        row["recentKind"] = item.kind;
+        apps.append(row);
+    }
+
+    return apps;
+}
+
 void UIPluginManager::onAppLauncherClicked(const QString& appName)
 {
     qDebug() << "App launcher clicked:" << appName;
@@ -1282,6 +1326,10 @@ void UIPluginManager::teardownUiPluginWidgetNow(const QString& moduleName)
         m_recentlyClosed->forget(moduleName);
         emit recentlyClosedAppsChanged();
     }
+    if (m_recentlyInstalled) {
+        m_recentlyInstalled->forget(moduleName);
+        emit recentAppsChanged();
+    }
 
     if (m_currentVisibleApp == moduleName) {
         m_currentVisibleApp.clear();
@@ -1402,6 +1450,14 @@ QString UIPluginManager::pluginIconUrl(const QString& pluginName, bool forWidget
         return "";
     }
 
+    // The Package Manager is a separate package whose own icon is a grey glyph
+    // on a transparent square. It is one of the three system apps, so Basecamp
+    // draws it with the system look Applications and Settings ship: a square
+    // on the shared background, rounded by the tile (basecamp-experiments#40).
+    const QString systemIcon = systemIconUrl(pluginName);
+    if (!systemIcon.isEmpty())
+        return forWidgetIcon ? systemIcon.mid(3) : systemIcon;
+
     const QVariantMap& meta = m_uiPluginMetadata[pluginName];
     QString iconPath = meta.value("icon").toString();
     QString installDir = meta.value("installDir").toString();
@@ -1431,6 +1487,14 @@ QString UIPluginManager::pluginIconUrl(const QString& pluginName, bool forWidget
     const qint64 mtimeMs = QFileInfo(filePath).lastModified().toMSecsSinceEpoch();
     return QUrl::fromLocalFile(filePath).toString()
          + QStringLiteral("?v=") + QString::number(mtimeMs);
+}
+
+QString UIPluginManager::systemIconUrl(const QString& pluginName)
+{
+    static const QString kSystemPackagesIcon = QStringLiteral(":/icons/system/package_manager.svg");
+    if (pluginName == QLatin1String("package_manager_ui") && QFile::exists(kSystemPackagesIcon))
+        return QStringLiteral("qrc") + kSystemPackagesIcon;
+    return QString();
 }
 
 QString UIPluginManager::pluginManifestVersion(const QString& pluginName) const

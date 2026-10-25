@@ -6,7 +6,6 @@
 #include <QSettings>
 
 namespace {
-constexpr auto kArrayKey = "recentlyClosed";
 constexpr auto kNameKey  = "name";
 constexpr auto kClosedAt = "closedAt";
 
@@ -19,8 +18,9 @@ bool hasName(const QList<RecentlyClosedStore::Entry>& entries, const QString& na
 }
 }
 
-RecentlyClosedStore::RecentlyClosedStore(QString filePath)
+RecentlyClosedStore::RecentlyClosedStore(QString filePath, QString arrayKey)
     : m_path(std::move(filePath))
+    , m_arrayKey(std::move(arrayKey))
 {
     load();
 }
@@ -38,7 +38,7 @@ QStringList RecentlyClosedStore::names() const
 void RecentlyClosedStore::load()
 {
     QSettings settings(m_path, QSettings::IniFormat);
-    const int count = settings.beginReadArray(kArrayKey);
+    const int count = settings.beginReadArray(m_arrayKey);
     for (int i = 0; i < count; ++i) {
         settings.setArrayIndex(i);
         const QString name = settings.value(kNameKey).toString();
@@ -67,8 +67,8 @@ void RecentlyClosedStore::save() const
     QSettings settings(m_path, QSettings::IniFormat);
     // remove() first: beginWriteArray leaves stale higher indices behind when
     // the list shrinks, which would resurrect forgotten apps on the next load.
-    settings.remove(kArrayKey);
-    settings.beginWriteArray(kArrayKey, m_entries.size());
+    settings.remove(m_arrayKey);
+    settings.beginWriteArray(m_arrayKey, m_entries.size());
     for (int i = 0; i < m_entries.size(); ++i) {
         settings.setArrayIndex(i);
         settings.setValue(kNameKey, m_entries.at(i).name);

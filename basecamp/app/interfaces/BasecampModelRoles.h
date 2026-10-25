@@ -86,5 +86,6 @@ struct ModuleInstanceRoles {
         StatusTextRole,        // derived: Main UI / Missing deps / Loaded / Not loaded
         CpuRole,               // core modules only; 0 when unknown
         MemoryRole,            // core modules only; 0 when unknown
+        SupportsFullBleedIconRole, // the icon fills the tile (manifest 0.4.0+)
     };
 };

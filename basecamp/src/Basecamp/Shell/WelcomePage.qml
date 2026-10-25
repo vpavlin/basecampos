@@ -19,31 +19,12 @@ Item {
     LogosSurface {
         anchors.fill: parent
         z: -1
-        visible: !root.spotlight
         slot: "workspace"
         color: Theme.palette.background
     }
 
-    // Spotlight (desktop layout, Ctrl+K): the same search and Recently Closed
-    // in a floating panel over a dimmed desktop; no greeting, no cards.
-    property bool spotlight: false
     property bool searchShortcutEnabled: true
-    signal dismissRequested()
     function focusSearch() { searchField.forceActiveFocus() }
-
-    Rectangle {
-        anchors.fill: parent
-        z: -2
-        visible: root.spotlight
-        color: Qt.rgba(0, 0, 0, 0.45)
-    }
-
-    Keys.onEscapePressed: if (root.spotlight) root.dismissRequested()
-    Shortcut {
-        sequence: "Escape"
-        enabled: root.spotlight && root.visible
-        onActivated: root.dismissRequested()
-    }
 
     signal discoverApplicationsClicked()
     signal managePackagesClicked()
@@ -63,7 +44,7 @@ Item {
         objectName: "welcomePage.searchShortcut"
         sequence: "Ctrl+K"
         context: Qt.WindowShortcut
-        // Off where the shell owns Ctrl+K (the desktop layout's Spotlight):
+        // Off where the shell owns Ctrl+K (the desktop and tabs layouts):
         // two live Ctrl+K shortcuts are ambiguous and neither fires.
         enabled: root.visible && root.searchShortcutEnabled
         onActivated: searchField.forceActiveFocus()
@@ -77,13 +58,13 @@ Item {
                 ? (backend.recentlyClosedApps || []).slice(0, maxRecent)
                 : []
 
-        readonly property int columnWidth: root.spotlight ? 760 : 992
+        readonly property int columnWidth: 992
         readonly property int sectionSpacing: 48
         readonly property int cardGap: 24
         readonly property int greetingSize: 40
         // Depends only on the window, so typing never moves the page.
         readonly property int topMargin:
-            Math.round(Math.max(Theme.spacing.xxlarge, scroller.availableHeight * (root.spotlight ? 0.16 : 0.12)))
+            Math.round(Math.max(Theme.spacing.xxlarge, scroller.availableHeight * 0.12))
         readonly property int sectionGap: 42
 
         readonly property int tileSize: 120
@@ -149,62 +130,6 @@ Item {
             height: Math.max(scroller.availableHeight,
                              column.implicitHeight + d.topMargin + Theme.spacing.xxlarge)
 
-            // A click outside the panel closes Spotlight.
-            MouseArea {
-                anchors.fill: parent
-                enabled: root.spotlight
-                onClicked: root.dismissRequested()
-            }
-
-            // Spotlight's panel, behind the column: frosted glass (the blurred
-            // wallpaper, rounded by a mask) under a tint, like the windows.
-            Item {
-                id: spotPanel
-                visible: root.spotlight
-                x: column.x - Theme.spacing.xxlarge
-                y: column.y - Theme.spacing.xxlarge
-                width: column.width + 2 * Theme.spacing.xxlarge
-                height: column.height + 2 * Theme.spacing.xxlarge
-                readonly property var info: typeof glass !== "undefined" ? glass : null
-                readonly property point at: { x; y; return mapToItem(root, 0, 0) }
-
-                Item {
-                    anchors.fill: parent
-                    visible: spotPanel.info !== null
-                    layer.enabled: visible
-                    layer.effect: MultiEffect {
-                        maskEnabled: true
-                        maskSource: spotMask
-                        maskThresholdMin: 0.5
-                        maskSpreadAtMin: 1.0
-                    }
-                    Image {
-                        x: spotPanel.info ? -(spotPanel.info.offsetX + spotPanel.at.x) : 0
-                        y: spotPanel.info ? -(spotPanel.info.offsetY + spotPanel.at.y) : 0
-                        width: spotPanel.info ? spotPanel.info.rootWidth : 0
-                        height: spotPanel.info ? spotPanel.info.rootHeight : 0
-                        source: spotPanel.info ? "image://backdrop/blur?" + spotPanel.info.revision : ""
-                        cache: false
-                    }
-                }
-                Rectangle {
-                    id: spotMask
-                    anchors.fill: parent
-                    radius: Theme.spacing.radiusXlarge
-                    visible: false
-                    layer.enabled: true
-                }
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Theme.spacing.radiusXlarge
-                    color: spotPanel.info ? Theme.colors.getColor(Theme.palette.backgroundSecondary, 0.88)
-                                          : Theme.palette.backgroundSecondary
-                    border.color: Theme.palette.border
-                }
-                // Clicks on the panel stay on the panel.
-                MouseArea { anchors.fill: parent }
-            }
-
             // Anchored to the top, not centred: the results below the search
             // change height while typing, and centring made the page jump.
             ColumnLayout {
@@ -215,7 +140,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Math.min(d.columnWidth,
                                 scroller.availableWidth - 2 * Theme.spacing.xxlarge)
-                spacing: root.spotlight ? 32 : d.sectionSpacing
+                spacing: d.sectionSpacing
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -224,7 +149,6 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.medium
-                        visible: !root.spotlight
 
                         LogosText {
                             objectName: "welcomePage.greeting"
@@ -296,7 +220,7 @@ Item {
                 GridLayout {
                     objectName: "welcomePage.actions"
                     Layout.fillWidth: true
-                    visible: !d.searching && !root.spotlight
+                    visible: !d.searching
                     columns: d.narrow ? 1 : 2
                     columnSpacing: d.cardGap
                     rowSpacing: d.cardGap

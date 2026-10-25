@@ -9,7 +9,9 @@ import Logos.Controls
 //
 // Floats top-right under the shell's bar, in its own translucent view sized to
 // this item: zero height when there is nothing to show, so it never covers the
-// page. The data is backend.notifications (NotificationCenter, host-side).
+// page. On a phone it sits low, above the bottom bar, and shows one toast at a
+// time, the newest (MainContainer::positionNotifications). The data is
+// backend.notifications (NotificationCenter, host-side).
 Item {
     id: root
 
@@ -24,6 +26,11 @@ Item {
     property int availableWidth: 1000
     property int availableHeight: 800
     readonly property int cardWidth: compact ? Math.max(200, availableWidth - 16) : 360
+    // Toasts at once: a phone has room for one; repeats replace it.
+    readonly property int maxToasts: compact ? 1 : 3
+    onMaxToastsChanged: {
+        while (toasts.count > maxToasts) toasts.remove(toasts.count - 1)
+    }
 
     function togglePanel() {
         panelOpen = !panelOpen
@@ -71,10 +78,17 @@ Item {
                 const t = toasts.get(i)
                 if (n.tag !== "" && t.app === n.app && t.tag === n.tag) { toasts.remove(i); break }
             }
+            // A phone's one slot: a calm toast never pushes out a warning or
+            // an error (Reopen after a crash); it is a card in the feed anyway.
+            // A desktop keeps three and trims the oldest, as before.
+            if (root.compact && calm && toasts.count >= root.maxToasts) {
+                const last = toasts.get(toasts.count - 1)
+                if (last.level !== "info" && last.level !== "success") return
+            }
             toasts.insert(0, { nid: n.id, app: n.app, title: n.title, body: n.body,
                                level: n.level, tag: n.tag, icon: n.icon || "",
                                actionLabel: n.action ? n.action.label : "" })
-            while (toasts.count > 3) toasts.remove(toasts.count - 1)
+            while (toasts.count > root.maxToasts) toasts.remove(toasts.count - 1)
         }
         function onItemsChanged() {
             // A dismissed or cleared notification takes its toast with it.

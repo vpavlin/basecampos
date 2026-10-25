@@ -181,7 +181,7 @@ const QStringList kEnvelopeFields = {
 };
 const QStringList kHostFields = {
     QStringLiteral("id"), QStringLiteral("app"), QStringLiteral("updated"),
-    QStringLiteral("seen"), QStringLiteral("icon"),
+    QStringLiteral("seen"), QStringLiteral("icon"), QStringLiteral("iconFullBleed"),
 };
 
 bool stringList(const QVariant& v, int maxItems, int maxEach)
@@ -423,6 +423,17 @@ QVariantMap ObjectStore::validate(const QString& app, int index, const QVariantM
 QString ObjectStore::publish(const QString& app, const QVariantMap& params,
                              int* badIndex, QStringList* ids)
 {
+    return publishBatch(app, params, badIndex, ids, /*fromHost=*/false);
+}
+
+QString ObjectStore::publishFromHost(const QString& app, const QVariantMap& params)
+{
+    return publishBatch(app, params, nullptr, nullptr, /*fromHost=*/true);
+}
+
+QString ObjectStore::publishBatch(const QString& app, const QVariantMap& params,
+                                  int* badIndex, QStringList* ids, bool fromHost)
+{
     if (badIndex) *badIndex = -1;
     if (app.isEmpty())
         return QStringLiteral("bad_request");
@@ -467,7 +478,7 @@ QString ObjectStore::publish(const QString& app, const QVariantMap& params,
         clean << o;
     }
 
-    if (!allow(app)) {
+    if (!fromHost && !allow(app)) {
         qWarning().noquote() << "ObjectStore:" << app << "publish refused — over"
                              << kRateRequests << "requests per" << kRateWindowMs / 1000 << "s";
         return QStringLiteral("failed");
@@ -485,19 +496,22 @@ QString ObjectStore::publish(const QString& app, const QVariantMap& params,
 
     const qint64 t = now();
     const QString icon = m_iconFor ? m_iconFor(app) : QString();
+    const bool iconFullBleed = m_iconFullBleedFor && m_iconFullBleedFor(app);
     QSet<QString>& mine = m_byApp[app];
     for (QVariantMap o : std::as_const(clean)) {
         const QString id = idFor(app, o.value(QStringLiteral("key")).toString());
         o[QStringLiteral("id")] = id;
         o[QStringLiteral("app")] = app;
         o[QStringLiteral("icon")] = icon;
+        o[QStringLiteral("iconFullBleed")] = iconFullBleed;
         o[QStringLiteral("updated")] = t;
         if (!o.contains(QStringLiteral("time")))
             o[QStringLiteral("time")] = t;
         // An update in place (a transfer's progress) is not news: replacing
-        // keeps whether a view has shown it. Only a new key starts unseen.
+        // keeps whether a view has shown it. Only a new key starts unseen,
+        // and a notification, whose replacement is news by definition.
         const auto existing = m_objects.constFind(id);
-        o[QStringLiteral("seen")] = existing != m_objects.cend()
+        o[QStringLiteral("seen")] = !fromHost && existing != m_objects.cend()
             && existing->value(QStringLiteral("seen")).toBool();
         m_objects.insert(id, o);
         mine.insert(id);
@@ -676,6 +690,24 @@ QStringList ObjectStore::types() const
         set.insert(o.value(QStringLiteral("type")).toString());
     QStringList out(set.begin(), set.end());
     out.sort();
+    return out;
+}
+
+QHash<QString, int> ObjectStore::countsOfType(const QString& type) const
+{
+    const_cast<ObjectStore*>(this)->purgeExpired();
+    QHash<QString, int> out;
+    if (type.isEmpty())
+        return out;
+    for (const QVariantMap& o : std::as_const(m_objects)) {
+        if (o.value(QStringLiteral("type")).toString() != type)
+            continue;
+        const QString app = o.value(QStringLiteral("app")).toString();
+        // Off already deletes an app's objects; checked again so a race with
+        // the switch never names an app the user turned off.
+        if (!app.isEmpty() && isEnabled(app))
+            ++out[app];
+    }
     return out;
 }
 

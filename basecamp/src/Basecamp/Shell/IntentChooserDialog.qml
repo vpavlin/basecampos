@@ -276,6 +276,8 @@ IntentDialog {
                             label: modelData.displayName || modelData.moduleName
                             source: modelData.iconSource || ""
                             tileSize: side
+                            // The app tiles' shape (BasecampAppTile): one radius ratio everywhere.
+                            radius: Math.round(side * Theme.spacing.radiusXlarge / 80)
                             interactive: false
                         }
 
@@ -486,6 +488,8 @@ IntentDialog {
                         Layout.alignment: Qt.AlignVCenter
                         label: modelData.displayName || modelData.moduleName
                         tileSize: side
+                        // The app tiles' shape (BasecampAppTile): one radius ratio everywhere.
+                        radius: Math.round(side * Theme.spacing.radiusXlarge / 80)
                         interactive: false
                     }
 

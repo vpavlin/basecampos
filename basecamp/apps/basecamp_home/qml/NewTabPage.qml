@@ -10,13 +10,23 @@ import Basecamp.Objects
 import "BasecampHomeModules.js" as M
 
 // Basecamp's home page (the `home` role, ADR-067): what a New tab shows.
-// The bar's text searches both your apps and what apps share with Basecamp
+// The bar's text searches both apps and what apps share with Basecamp
 // (SHELL-OBJECTS-SPEC §7): pills narrow the objects by type or app; below,
-// either the modules (saved filters, a grid that is one column on a phone)
-// or the feed (everything, newest first). Picking a tile asks the shell to
-// turn the current New tab into that app; a card's actions go to the app
-// that published it. It reads only `shell`, the role-gated object the host
-// injects.
+// either the feed (everything, newest first; the default) or the modules
+// (saved filters, a grid that is one column on a phone). Above them, with
+// nothing typed, Recent apps: the ones closed or installed lately, newest
+// first, then Applications, Packages and Settings, which are apps like any
+// other (basecamp-experiments#30). With a query, the Apps block instead: the
+// installed and catalog apps that match, one row each, Running or with an
+// Open or Install button (basecamp-experiments#32). Under a type pill, the
+// same block lists the installed apps that share that type, whatever is
+// typed (basecamp-experiments#36).
+// In the desktop's Activity sidebar (feedOnly, basecamp-experiments#44) only
+// the search, the pills and the feed show: no Recent apps, Apps block or
+// modules.
+// Picking a tile asks the shell to turn the current New tab into that app; a
+// card's actions go to the app that published it. It reads only `shell`, the
+// role-gated object the host injects.
 //
 // The modules (order, size, pin, notify, the custom ones) live in memory
 // only: home has no settings store of its own yet, so a restart brings back
@@ -24,7 +34,6 @@ import "BasecampHomeModules.js" as M
 Rectangle {
     id: root
 
-    signal openSystemApp(string key)
     signal launchApp(string name)
 
     function focusSearch() { search.forceActiveFocus() }
@@ -39,6 +48,8 @@ Rectangle {
     // (docs/MOBILE-LAYOUT.md §8): this page then shows the results only.
     property bool searchInBar: false
     property string barQuery: ""
+    // The desktop's Activity sidebar: the search, the pills and the feed only.
+    property bool feedOnly: false
     readonly property string rawQuery: (searchInBar ? barQuery : search.text).trim()
     readonly property string query: rawQuery.toLowerCase()
     // Phone width (Basecampium's compact layout): tighter margins and tiles.
@@ -47,20 +58,36 @@ Rectangle {
     readonly property int contentWidth: Math.min(width - 2 * sideMargin, 1200)
     // Tiles the size of the Applications grid's (80), so an app looks the same in both.
     readonly property int tileSize: 80
+    // Art plus a label of up to two lines ("Package Manager" at 390).
+    readonly property int tileHeight: tileSize + 56
     readonly property int pitch: compact ? 108 : 124
 
-    readonly property var systemApps: [
-        { key: "sys:applications", name: qsTr("Applications"),    icon: BasecampIcons.dashboard },
-        { key: "sys:settings",     name: qsTr("Settings"),        icon: BasecampIcons.settings },
-        { key: "sys:packages",     name: qsTr("Package Manager"), icon: BasecampIcons.modules }
-    ]
-    readonly property var apps: {
-        // Apps that fill a role are already in the row below (or are this page).
+    // Every installed app you can open, by name. Applications, Packages and
+    // Settings are among them; home itself and the search ranker are not.
+    readonly property var hidden: {
         const roles = shell.roles || ({})
-        const roleApps = Object.keys(roles).map(r => roles[r])
-        const list = (shell.installedApps || []).filter(a => roleApps.indexOf(a.name) < 0)
+        return [roles.home || "", roles.search || ""].filter(n => n.length > 0)
+    }
+    readonly property var apps: {
+        const list = (shell.installedApps || []).filter(a => root.hidden.indexOf(a.name) < 0)
         list.sort((a, b) => (a.displayName || a.name).localeCompare(b.displayName || b.name))
         return list
+    }
+    // Recent apps: closed or installed lately, newest first (the host keeps
+    // both), then whichever of Applications, Packages and Settings is not
+    // already there. A fresh profile shows just those three.
+    readonly property int maxRecent: 12
+    readonly property var recentApps: {
+        const out = []
+        const add = a => {
+            if (a && root.hidden.indexOf(a.name) < 0 && !out.some(o => o.name === a.name))
+                out.push(a)
+        }
+        for (const a of (shell.recentApps || [])) add(a)
+        const roles = shell.roles || ({})
+        for (const role of ["launcher", "packages", "settings"])
+            add((shell.installedApps || []).find(a => a.name === (roles[role] || "")))
+        return out.slice(0, root.maxRecent)
     }
     readonly property var appNames: {
         const names = {}
@@ -68,25 +95,52 @@ Rectangle {
         return names
     }
 
-    function matches(label) {
-        return root.query.length === 0 || label.toLowerCase().indexOf(root.query) >= 0
+    // The Apps block: what shell.findApps answers for the bar's text, best
+    // first ({ name, title, icon, fullBleed, state }). Asked again when the
+    // text changes and when the host says the answer would differ (an app
+    // opened, closed or installed, the catalog arrived).
+    property var appHits: []
+    readonly property int maxAppHits: 5
+    function refreshApps() {
+        root.appHits = root.rawQuery.length > 0 ? (shell.findApps(root.rawQuery) || []) : []
     }
-    readonly property var shownSystem: systemApps.filter(a => matches(a.name))
-    readonly property var shownApps: apps.filter(a => matches(a.displayName || a.name))
+    // Under a type pill: shell.relatedApps, the installed apps that publish
+    // that type, in the same row shape. Asked again when the pill changes and
+    // when the host says the store or the apps changed; not with the pill's
+    // results, which follow the text and miss objects it does not match.
+    property var relatedHits: []
+    function refreshRelated() {
+        root.relatedHits = root.pill && root.pill.type ? (shell.relatedApps(root.pill.type) || []) : []
+    }
+    // What the Apps block lists: the related apps under a type pill, the
+    // apps found for the text without a pill, nothing under an app pill.
+    readonly property var shownAppHits: !root.pill ? root.appHits
+                                      : root.pill.type ? root.relatedHits : []
+    Connections {
+        target: shell
+        function onAppResultsChanged() { root.refreshApps(); root.refreshRelated() }
+        function onRelatedAppsChanged() { root.refreshRelated() }
+    }
 
+    function openApp(hit) {
+        if (hit.state === "available") shell.installApp(hit.name)
+        else if (hit.state !== "installing") root.launchApp(hit.name)
+    }
+    // Enter: the first app found that is installed (never an install).
     function openFirst() {
-        if (shownApps.length > 0)
-            root.launchApp(shownApps[0].name)
-        else if (shownSystem.length > 0)
-            root.openSystemApp(shownSystem[0].key)
+        if (root.feedOnly) return
+        const hit = root.appHits.find(a => a.state === "running" || a.state === "installed")
+        if (root.query.length > 0 && hit) root.launchApp(hit.name)
     }
 
     // ── objects ─────────────────────────────────────────────────────────
 
     // { type, app } narrowing every module and the feed; null = all.
     property var pill: null
-    // "grid" (modules) or "feed".
-    property string view: "grid"
+    // "feed" (the default) or "grid" (modules), as the toggle left it;
+    // the sidebar's feed mode always shows the feed.
+    property string chosenView: "feed"
+    readonly property string view: root.feedOnly ? "feed" : root.chosenView
     property var modules: M.defaultModules().map(M.sanitizeModule)
     readonly property var shownModules: M.ordered(root.modules)
 
@@ -115,15 +169,20 @@ Rectangle {
     // last markSeen. A visit starts when the shell shows a New tab.
     property var newIds: ({})
     property var toMark: []
-    property real visitAt: 0
-    property real lastVisitAt: 0
     property int visit: 0
     property real now: Date.now()
+    // On screen: the shell hides home's view behind other tabs, which hides
+    // its window. Nothing is marked seen while it is hidden.
+    readonly property bool onScreen: Window.window !== null && Window.window.visibility !== Window.Hidden
+    // Deferred: the shell shows the view before it starts the visit
+    // (clearSearch), and marking first would make the hidden visit "seen".
+    onOnScreenChanged: if (root.onScreen) Qt.callLater(root.noteFeedShown)
+    function noteFeedShown() {
+        if (root.view === "feed") root.noteShown(root.feedRows.slice(0, feed.shown))
+    }
 
     function startVisit() {
-        root.lastVisitAt = root.visitAt
-        root.visitAt = Date.now()
-        root.now = root.visitAt
+        root.now = Date.now()
         root.newIds = ({})
         root.toMark = []
         root.visit += 1
@@ -132,7 +191,9 @@ Rectangle {
 
     // `rows` are on screen: the unseen among them are new for this visit and
     // are marked seen shortly (they keep their dot until the next visit).
+    // Hidden, they are left alone, so the first look still counts them new.
     function noteShown(rows) {
+        if (!root.onScreen) return
         const r = M.addUnseen(root.newIds, rows)
         if (r.added.length === 0) return
         root.newIds = r.map
@@ -153,7 +214,7 @@ Rectangle {
 
     // What the bar reads (§7): what it searches. The shell's bar on a phone
     // (shell.setBarPlaceholder), this page's own on a desktop.
-    readonly property string barPlaceholder: !root.pill ? qsTr("Search everything…")
+    readonly property string barPlaceholder: !root.pill ? qsTr("Search Basecamp…")
         : root.pill.type ? qsTr("Search %1…").arg(root.pillLabel(root.pill).toLowerCase())
                          : qsTr("Search %1…").arg(root.pillLabel(root.pill))
     onBarPlaceholderChanged: shell.setBarPlaceholder(root.barPlaceholder)
@@ -183,6 +244,7 @@ Rectangle {
         if (root.view === "feed" && !root.pill) root.noteShown(root.feedRows.slice(0, feed.shown))
     }
     function refreshPill() {
+        root.refreshRelated()
         if (!root.pill) { root.pillRows = []; return }
         if (root.pillResults) root.pillResults.update(root.rawQuery, M.pillFilter(root.pill))
         else root.pillResults = shell.search(root.rawQuery, M.pillFilter(root.pill))
@@ -200,7 +262,7 @@ Rectangle {
         return rows
     }
 
-    onRawQueryChanged: refreshAll()
+    onRawQueryChanged: { refreshAll(); refreshApps() }
     onPillChanged: refreshPill()
     onViewChanged: if (root.view === "feed") root.noteShown(root.feedRows.slice(0, feed.shown))
     Connections {
@@ -274,60 +336,21 @@ Rectangle {
         search.textInput.cursorDelegate = calmCursor
         shell.setBarPlaceholder(root.barPlaceholder)
         root.refreshAll()
+        root.refreshApps()
         root.startVisit()
     }
 
-    Flickable {
-        id: scroll
-        objectName: "home.scroll"
-        anchors.fill: parent
-        contentWidth: width
-        contentHeight: page.implicitHeight
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-
-    Column {
-        id: page
-        x: root.sideMargin + (root.width - 2 * root.sideMargin - root.contentWidth) / 2
-        width: root.contentWidth
-        topPadding: root.compact ? Theme.spacing.medium : Theme.spacing.xlarge * 2
-        spacing: root.compact ? Theme.spacing.medium : Theme.spacing.large
-
-        // Who made this shell, above the search (desktop only: on a phone
-        // the bar is the shell's).
-        LogosText {
-            objectName: "newTab.brand"
-            visible: !root.compact
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: "Basecampium"
-            font.pixelSize: 40
-            font.weight: Font.Bold
-            color: Theme.palette.textSecondary
-        }
-
-        LogosSearchBar {
-            id: search
-            objectName: "home.bar"
-            visible: !root.searchInBar
-            focus: true
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: Math.min(parent.width, 720)
-            height: Theme.components.search.height
-            // The bar names what it narrows (§7).
-            placeholderText: root.barPlaceholder
-            shortcutHint: "Ctrl+K"
-            onSubmitted: root.openFirst()
-            Keys.onReturnPressed: root.openFirst()
-            Keys.onEnterPressed: root.openFirst()
-        }
-
-        // Pills: All, one per type, one per app; scrolls sideways. The view
-        // toggle (modules / feed) stays at the end.
+    // Pills: All, one per type, one per app; scrolls sideways. The view
+    // toggle (modules / feed) stays at the end. On a desktop they sit under
+    // the page's own search; on a phone, where the search is the shell's
+    // bottom bar, they sit just above it, under the thumb with the query
+    // (basecamp-experiments#34).
+    readonly property bool hasPills: root.allRows.length > 0 || root.pill !== null
+    readonly property bool pillsAtBottom: root.compact && root.searchInBar
+    Component {
+        id: pillsBar
         Item {
             objectName: "home.pills"
-            visible: root.allRows.length > 0 || root.pill !== null
-            width: parent.width
             height: Theme.minTouchTarget
 
             // A Flickable over a Row, not a ListView: every pill exists, so
@@ -336,7 +359,7 @@ Rectangle {
                 id: pillList
                 anchors.left: parent.left
                 anchors.right: viewToggle.left
-                anchors.rightMargin: Theme.spacing.small
+                anchors.rightMargin: viewToggle.visible ? Theme.spacing.small : 0
                 height: parent.height
                 contentWidth: pillRow.width
                 contentHeight: height
@@ -375,26 +398,112 @@ Rectangle {
             LogosIconButton {
                 id: viewToggle
                 objectName: "home.viewToggle"
+                visible: !root.feedOnly
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
+                width: visible ? Theme.minTouchTarget : 0
                 size: Theme.minTouchTarget
                 iconSource: root.view === "grid" ? LogosIcons.list : LogosIcons.grid
                 Accessible.name: root.view === "grid" ? qsTr("Show the feed") : qsTr("Show the modules")
-                onClicked: root.view = root.view === "grid" ? "feed" : "grid"
+                onClicked: root.chosenView = root.view === "grid" ? "feed" : "grid"
             }
         }
+    }
 
-        // Your apps that match, in one row that scrolls sideways.
+    // The phone's pills, docked on the page's bottom edge (the shell's
+    // search bar is just below it); the page above stops at the dock, so
+    // no card hides behind the pills.
+    Rectangle {
+        id: pillDock
+        objectName: "home.pillDock"
+        visible: root.hasPills && root.pillsAtBottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: Theme.minTouchTarget + 2 * Theme.spacing.small
+        color: Theme.palette.background
+
+        Rectangle {
+            width: parent.width
+            height: 1
+            color: Theme.palette.borderHairline
+        }
+
+        Loader {
+            active: pillDock.visible
+            x: root.sideMargin
+            width: parent.width - 2 * root.sideMargin
+            height: Theme.minTouchTarget
+            anchors.verticalCenter: parent.verticalCenter
+            sourceComponent: pillsBar
+        }
+    }
+
+    Flickable {
+        id: scroll
+        objectName: "home.scroll"
+        anchors.fill: parent
+        anchors.bottomMargin: pillDock.visible ? pillDock.height : 0
+        contentWidth: width
+        contentHeight: page.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+    Column {
+        id: page
+        x: root.sideMargin + (root.width - 2 * root.sideMargin - root.contentWidth) / 2
+        width: root.contentWidth
+        topPadding: root.compact ? Theme.spacing.medium : Theme.spacing.xlarge * 2
+        spacing: root.compact ? Theme.spacing.medium : Theme.spacing.large
+
+        LogosSearchBar {
+            id: search
+            objectName: "home.bar"
+            visible: !root.searchInBar
+            focus: true
+            // As wide as the feed cards below, so its edges line up with them.
+            width: parent.width
+            height: Theme.components.search.height
+            // The bar names what it narrows (§7).
+            placeholderText: root.barPlaceholder
+            // In the sidebar Ctrl+K opens the overlay instead.
+            shortcutHint: root.feedOnly ? "" : "Ctrl+K"
+            onSubmitted: root.openFirst()
+            Keys.onReturnPressed: root.openFirst()
+            Keys.onEnterPressed: root.openFirst()
+        }
+
+        Loader {
+            active: root.hasPills && !root.pillsAtBottom
+            visible: active
+            width: parent.width
+            height: active ? Theme.minTouchTarget : 0
+            sourceComponent: pillsBar
+        }
+
+        LogosText {
+            objectName: "home.recentApps.title"
+            visible: appRow.visible && root.query.length === 0
+            width: parent.width
+            text: qsTr("Recent apps")
+            font.pixelSize: Theme.typography.secondaryText
+            font.weight: Font.Medium
+            color: Theme.palette.textSecondary
+        }
+
+        // Recent apps, in one row that scrolls sideways.
         ListView {
             id: appRow
             objectName: "newTab.grid"
-            visible: root.pill === null && root.shownApps.length > 0
+            visible: !root.feedOnly && root.pill === null && root.query.length === 0
+                     && root.recentApps.length > 0
             width: parent.width
-            height: visible ? root.tileSize + 48 : 0
+            height: visible ? root.tileHeight : 0
             orientation: ListView.Horizontal
             clip: true
             boundsBehavior: Flickable.StopAtBounds
-            model: root.shownApps
+            model: root.recentApps
             delegate: Tile {
                 required property var modelData
                 objectName: "newTab.app." + modelData.name
@@ -408,7 +517,8 @@ Rectangle {
         }
 
         LogosText {
-            visible: root.apps.length === 0 && root.allRows.length === 0 && root.query.length === 0
+            visible: !root.feedOnly && root.apps.length === 0 && root.allRows.length === 0
+                     && root.query.length === 0
             width: parent.width
             wrapMode: Text.Wrap
             text: qsTr("No apps yet. Find some in Applications.")
@@ -416,9 +526,62 @@ Rectangle {
             font.pixelSize: Theme.typography.secondaryText
         }
 
+        // ── apps found (basecamp-experiments#32) ────────────────────────
+        Column {
+            id: appsBlock
+            objectName: "home.apps"
+            visible: !root.feedOnly && root.shownAppHits.length > 0
+            // The content column's width, like the bar and the cards.
+            width: parent.width
+
+            Item {
+                width: parent.width
+                height: Theme.minTouchTarget
+
+                LogosText {
+                    objectName: "home.apps.title"
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("Apps")
+                    font.pixelSize: Theme.typography.secondaryText
+                    font.weight: Font.Medium
+                    color: Theme.palette.textSecondary
+                }
+
+                LogosLink {
+                    objectName: "home.apps.all"
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    // The whole header's height is the tap target, text centred.
+                    width: Math.max(Theme.minTouchTarget, labelItem.implicitWidth + 2 * Theme.spacing.small)
+                    height: Theme.minTouchTarget
+                    leftPadding: (width - labelItem.implicitWidth) / 2
+                    rightPadding: leftPadding
+                    topPadding: Math.max(0, (height - labelItem.implicitHeight) / 2)
+                    bottomPadding: topPadding
+                    text: qsTr("All apps")
+                    underline: false
+                    onActivated: shell.openRole("launcher")
+                }
+            }
+
+            Repeater {
+                model: root.shownAppHits.slice(0, root.maxAppHits)
+                delegate: AppRow {
+                    required property var modelData
+                    width: appsBlock.width
+                    hit: modelData
+                }
+            }
+        }
+
         LogosText {
             objectName: "home.nothing"
-            visible: root.query.length > 0 && root.shownApps.length === 0 && root.allRows.length === 0
+            // Under a pill the Apps block lists related apps, not matches,
+            // so then only the pill's own results count.
+            visible: root.query.length > 0
+                     && (root.pill !== null || root.appHits.length === 0 || root.feedOnly)
+                     && (root.pill ? root.pillRows.length === 0 : root.allRows.length === 0)
             width: parent.width
             wrapMode: Text.Wrap
             text: qsTr("Nothing matches “%1”.").arg(root.rawQuery)
@@ -515,7 +678,6 @@ Rectangle {
             total: root.feedTotal
             now: root.now
             newIds: root.newIds
-            since: root.lastVisitAt
             onRaiseRequested: (id, action, text) => root.raise(id, action, text)
             onShownChanged: root.noteShown(root.feedRows.slice(0, feed.shown))
         }
@@ -532,11 +694,10 @@ Rectangle {
             font.pixelSize: Theme.typography.secondaryText
         }
 
-        // The shell's own apps: small round buttons under a subtle divider,
-        // at the end of the page and centred. Search still finds them by name.
+        // The page's foot: a subtle divider and the credit, centred.
         Column {
-            id: systemRow
-            objectName: "newTab.systemRow"
+            objectName: "newTab.footer"
+            visible: !root.feedOnly
             anchors.horizontalCenter: parent.horizontalCenter
             topPadding: Theme.spacing.xlarge
             bottomPadding: Theme.spacing.xlarge * 1.5
@@ -547,58 +708,6 @@ Rectangle {
                 width: Math.min(root.width - 2 * root.sideMargin, 480)
                 height: 1
                 color: Theme.palette.borderHairline
-            }
-
-            Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: Theme.spacing.large
-
-                Repeater {
-                    model: root.systemApps
-                    delegate: AbstractButton {
-                        id: sys
-                        required property var modelData
-                        objectName: "newTab." + modelData.key
-                        readonly property bool matched: root.query.length === 0 || root.matches(modelData.name)
-                        width: Theme.minTouchTarget
-                        height: Theme.minTouchTarget
-                        hoverEnabled: true
-                        opacity: matched ? 1.0 : 0.35
-                        onClicked: root.openSystemApp(modelData.key)
-                        Accessible.name: modelData.name
-
-                        LogosGlow {
-                            anchors.fill: parent
-                            radius: width / 2
-                            active: sys.hovered
-                        }
-
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: width / 2
-                            color: sys.pressed ? Theme.palette.accentOrange
-                                 : sys.hovered ? Theme.palette.backgroundTertiary
-                                 : Theme.palette.backgroundSecondary
-                            border.color: sys.hovered ? Theme.palette.border : Theme.palette.borderHairline
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            LogosIcon {
-                                anchors.centerIn: parent
-                                width: 18
-                                height: 18
-                                source: sys.modelData.icon
-                                color: sys.pressed ? Theme.palette.accentForeground
-                                     : sys.hovered ? Theme.palette.text : Theme.palette.textSecondary
-                                brightness: 1.0
-                            }
-                        }
-
-                        ToolTip.visible: sys.hovered
-                        ToolTip.delay: 300
-                        ToolTip.text: modelData.name
-                    }
-                }
             }
 
             LogosText {
@@ -613,12 +722,91 @@ Rectangle {
     }
     }
 
+    // One app in the Apps block: icon (letters when there is no local one),
+    // name, and on the right what it is: Running, or Open, or Install. The
+    // whole row does what the right side says; Running switches to it.
+    component AppRow: AbstractButton {
+        id: appRowItem
+
+        property var hit: ({})
+        readonly property string appState: hit.state || ""
+
+        objectName: "home.app." + (hit.name || "")
+        height: 56
+        hoverEnabled: true
+        Accessible.name: hit.title || hit.name || ""
+        Accessible.description: stateLabel.visible ? stateLabel.text : actionButton.text
+        onClicked: root.openApp(hit)
+
+        background: Rectangle {
+            radius: Theme.spacing.radiusMedium
+            color: appRowItem.pressed ? Theme.palette.backgroundTertiary
+                 : appRowItem.hovered ? Theme.palette.backgroundSecondary : "transparent"
+        }
+
+        BasecampAppTile {
+            id: appIcon
+            anchors.left: parent.left
+            anchors.leftMargin: Theme.spacing.tiny
+            anchors.verticalCenter: parent.verticalCenter
+            size: 40
+            label: appRowItem.hit.title || appRowItem.hit.name || ""
+            source: appRowItem.hit.icon || ""
+            fullBleed: appRowItem.hit.fullBleed === true
+        }
+
+        LogosText {
+            anchors.left: appIcon.right
+            anchors.leftMargin: Theme.spacing.medium
+            anchors.right: rowEnd.left
+            anchors.rightMargin: Theme.spacing.medium
+            anchors.verticalCenter: parent.verticalCenter
+            elide: Text.ElideRight
+            text: appRowItem.hit.title || appRowItem.hit.name || ""
+            color: Theme.palette.text
+        }
+
+        Item {
+            id: rowEnd
+            anchors.right: parent.right
+            anchors.rightMargin: Theme.spacing.tiny
+            anchors.verticalCenter: parent.verticalCenter
+            width: stateLabel.visible ? stateLabel.implicitWidth : actionButton.width
+            height: Theme.minTouchTarget
+
+            LogosText {
+                id: stateLabel
+                objectName: "home.app.state." + (appRowItem.hit.name || "")
+                visible: appRowItem.appState === "running" || appRowItem.appState === "installing"
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                text: appRowItem.appState === "running" ? qsTr("Running") : qsTr("Installing…")
+                font.pixelSize: Theme.typography.secondaryText
+                color: Theme.palette.textSecondary
+            }
+
+            LogosButton {
+                id: actionButton
+                objectName: "home.app.action." + (appRowItem.hit.name || "")
+                visible: !stateLabel.visible
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                height: Theme.minTouchTarget
+                width: Math.max(implicitWidth, 88)
+                text: appRowItem.appState === "available" ? qsTr("Install") : qsTr("Open")
+                variant: appRowItem.appState === "available" ? LogosButton.Variant.Primary
+                                                           : LogosButton.Variant.Secondary
+                Accessible.name: qsTr("%1 %2").arg(text).arg(appRowItem.hit.title || appRowItem.hit.name || "")
+                onClicked: root.openApp(appRowItem.hit)
+            }
+        }
+    }
+
     component Tile: AbstractButton {
         id: tile
 
         property string key
         property string label
-        property url glyph: ""
         property string artwork: ""
         property bool fullBleed: false
         property bool loading: false
@@ -626,7 +814,7 @@ Rectangle {
         signal activated()
 
         width: root.pitch
-        height: root.tileSize + 48
+        height: root.tileHeight
         hoverEnabled: true
         onClicked: tile.activated()
 
@@ -649,35 +837,19 @@ Rectangle {
 
             LogosGlow {
                 anchors.fill: parent
-                radius: Theme.spacing.radiusLarge
+                radius: artTile.radius
                 active: tile.hovered
             }
 
-            Rectangle {
-                anchors.fill: parent
-                visible: tile.artwork.length === 0
-                radius: Theme.spacing.radiusLarge
-                color: tile.pressed ? Theme.palette.accentOrange : Theme.palette.surfaceRaised
-
-                LogosIcon {
-                    anchors.centerIn: parent
-                    width: 30
-                    height: 30
-                    source: tile.glyph
-                    color: tile.pressed ? Theme.palette.accentForeground : Theme.palette.text
-                    brightness: 1.0
-                }
-            }
-
-            LogosTile {
+            // The app's icon, or its letters when it has none.
+            BasecampAppTile {
+                id: artTile
                 anchors.centerIn: parent
-                visible: tile.artwork.length > 0 && !tile.loading
-                label: tile.key
+                visible: !tile.loading
+                size: root.tileSize
+                label: tile.label
                 source: tile.artwork
-                fallbackColor: Theme.palette.surfaceRaised
-                insetArtwork: !tile.fullBleed
-                interactive: false
-                tileSize: root.tileSize
+                fullBleed: tile.fullBleed
             }
 
             BusyIndicator {
@@ -695,7 +867,10 @@ Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width - 8
             horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
             elide: Text.ElideRight
+            lineHeight: 1.1
             text: tile.label
             font.pixelSize: Theme.typography.secondaryText
             color: tile.hovered ? Theme.palette.text : Theme.palette.textSecondary
