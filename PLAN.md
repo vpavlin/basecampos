@@ -51,6 +51,14 @@ window returned it to Debian. Fixed after it: zram in the kernel, default backli
 the working cmdline documented. Still untested there: Wi-Fi connect, UI touch gestures, Brave, suspend, rotation,
 audio, cameras (no drivers yet).
 
+**2026-10-25, run 6: an agent session runs inside BasecampOS on the Duet** (the Duet agent's Debian shrooms
+daemon + agent in a chroot, so the mesh identity and Claude login stay in place). Verified hands-on: dock → foot,
+Shrooms Agents lists the fleet, System app (power, sound, brightness, rotation lock, OSK, Bluetooth), Wi-Fi
+connected, sound card + ath10k present, 1.3 GiB used, Basecamp ~20% CPU. Lessons for a native in-OS agent
+(not built; needs BasecampOS to mount Debian's root and /home, safe only because the two never run together):
+the daemon needs iproute2 on PATH; never share /run/nscd with a Debian chroot (NSS then resolves NixOS users and
+Debian sudo fails). Open: default volume came up at 0%.
+
 Next:
 - ~~Boot-test the ISO~~ (done: boots under UEFI into Basecamp + System); then an installer path (disk image + `nixos-install` flow).
 - Try Alisher's `shell-roles` branch (Settings/Packages/Applications as role apps). System could become
