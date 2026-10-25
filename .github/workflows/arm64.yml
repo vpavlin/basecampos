@@ -119,9 +119,19 @@ jobs:
             deltaNote="Delta from $prev ($(wc -l < new-paths.txt) new store paths, $(du -h rel/delta-from-*.tar.zst | cut -f1)): on a root holding $prev (e.g. a btrfs snapshot of it): zstd -dc delta-from-${prev#duet-test-}.tar.zst | tar -C ROOT -xpf - ; then either boot it (the first boot registers the paths) or, running in it, sudo duet-apply-generation (live switch when the kernel is unchanged)."
           fi
           (cd rel && sha256sum * > SHA256SUMS)
-          gh release create "$tag" rel/* --prerelease --target "$GITHUB_SHA" \
+          # Create first, then upload file by file with retries: a 2 GB upload
+          # that fails once must not lose the round (74ca827 did).
+          gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
             --title "Duet test build ${GITHUB_SHA::7}" \
             --notes "Duet test build (watchdog, 20-minute test window unless /var/lib/basecampos-test/keep exists, reports in /var/log/basecampos-test). Rootfs parts: cat basecampos-duet-rootfs.tar.zst.part* > basecampos-duet-rootfs.tar.zst. Kernel modules: $(cat rel/modules-version.txt). Image sha256: $(sha256sum rel/Image | cut -c1-16)…. $deltaNote"
+          for f in rel/*; do
+            ok=
+            for i in 1 2 3 4; do
+              gh release upload "$tag" "$f" --clobber && { ok=1; break; }
+              echo "upload of $f failed (try $i), retrying"; sleep 60
+            done
+            [ -n "$ok" ] || { echo "::error::cannot upload $f"; exit 1; }
+          done
           df -h / /nix
 
       - name: Diagnostics (always; published as a release when the run fails)
