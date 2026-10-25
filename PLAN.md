@@ -76,6 +76,14 @@ takes typing and runs commands, Brave browses. Lessons:
 Open: clipboard between Basecamp and embedded apps, popups/menus placement, GPU (would need Basecamp's
 compositor to offer linux-dmabuf), performance on the Duet.
 
+**2026-10-25: split view in the Basecamp shell.** Our shell patches live on branch `basecamp-shell` of this
+repo (Alisher's `basecamp-os-theme` + our commits; the flake's `basecamp` input points there). Following
+Alisher = rebase that branch on his, push, `nix flake update basecamp alisher-ds`. Split: a title-bar button,
+the other half offers the window's usual partners (pairs remembered in `split-pairs.json`, ranked by use with
+a one-week half-life; closed ones are launched) and the open windows; divider snaps to ⅓/½/⅔, double-click
+swaps. Next: "Split with…" on a dock tile's long-press, pairs in Spotlight, grid instead of N columns for
+Tile all.
+
 Next:
 - ~~Boot-test the ISO~~ (done: boots under UEFI into Basecamp + System); then an installer path (disk image + `nixos-install` flow).
 - Try Alisher's `shell-roles` branch (Settings/Packages/Applications as role apps). System could become
