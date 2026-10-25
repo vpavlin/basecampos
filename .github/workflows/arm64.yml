@@ -83,7 +83,8 @@ jobs:
             cp duet-rootfs/* lse-report.txt out-duet/
             cp duet-kernel/Image out-duet/kernel/
             cp duet-kernel/dtbs/mediatek/mt8183-kukui-krane-sku*.dtb out-duet/kernel/
-            ls duet-kernel/lib/modules > out-duet/kernel/modules-version.txt
+            # modules are a separate output of the kernel; its version names their dir
+            nix eval --raw .#packages.aarch64-linux.duet-test-kernel.modDirVersion > out-duet/kernel/modules-version.txt
             sha256sum out-duet/kernel/* > out-duet/kernel/SHA256SUMS
             ls -laR out-duet
           } 2>&1 | tee diag/rootfs-step.log
