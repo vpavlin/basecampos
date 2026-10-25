@@ -199,9 +199,9 @@
         # The unattended first test on the tablet (watchdog, 20-min window, reports).
         basecampos-duet-test = mkHost "aarch64-linux" [ ./hosts/duet.nix {
           basecampos.duet.testMode = true;
-          # The Duet agent works from inside the test boot, so a longer window.
+          # The Duet agent works from inside the test boot (it keeps the boot
+          # alive with /var/lib/basecampos-test/keep when it needs longer).
           basecampos.duet.agentChroot.enable = true;
-          basecampos.duet.testWindowMinutes = 90;
         } ];
         basecampos-duet-usb = mkHost "aarch64-linux" [ ./hosts/duet.nix { basecampos.duet.boot = "usb"; } ];
       };

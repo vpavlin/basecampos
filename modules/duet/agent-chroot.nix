@@ -113,6 +113,9 @@ in
       after = [ "network-online.target" "NetworkManager.service" ];
       wants = [ "network-online.target" ];
       wantedBy = [ "multi-user.target" ];
+      # A live switch (duet-apply-generation) must not cut off the session doing it.
+      restartIfChanged = false;
+      stopIfChanged = false;
       path = with pkgs; [ bash coreutils util-linux kmod networkmanager iproute2 iputils curl jq gnugrep gnused ];
       serviceConfig = {
         ExecStart = start;

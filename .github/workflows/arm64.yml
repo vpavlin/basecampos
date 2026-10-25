@@ -99,10 +99,29 @@ jobs:
           cp out-duet/lse-report.txt out-duet/README.txt rel/
           # release assets are limited to 2 GB each
           split -b 1900M -d out-duet/basecampos-duet-rootfs.tar.zst rel/basecampos-duet-rootfs.tar.zst.part
+          # Delta against the previous Duet test release (store paths it lacks +
+          # the full registration + profile links), and this release's own path
+          # list for the next delta. Applying: see the notes below.
+          export LC_ALL=C   # comm needs both lists sorted the same way
+          nix path-info -r ./duet | sort > rel/store-paths.txt
+          system=$(readlink -f ./duet); echo "$system" > rel/system.txt
+          prev=$(gh release list --limit 30 --json tagName,createdAt \
+            -q '[.[] | select(.tagName | startswith("duet-test-")) | select(.tagName != "'"$tag"'")] | sort_by(.createdAt) | last | .tagName // ""')
+          deltaNote="No delta (no previous release with store-paths.txt)."
+          if [ -n "$prev" ] && gh release download "$prev" -p store-paths.txt -O prev-paths.txt; then
+            comm -13 prev-paths.txt rel/store-paths.txt > new-paths.txt
+            mkdir -p delta/nix/var/nix/profiles
+            ln -s "$system" delta/nix/var/nix/profiles/system-$GITHUB_RUN_NUMBER-link
+            ln -s system-$GITHUB_RUN_NUMBER-link delta/nix/var/nix/profiles/system
+            nix-store --dump-db $(cat rel/store-paths.txt) > delta/nix-path-registration
+            tar --sort=name --owner=0 --group=0 --numeric-owner -cf - -C delta . -C / $(sed 's|^/||' new-paths.txt) |
+              zstd -T0 -12 -o rel/delta-from-${prev#duet-test-}.tar.zst
+            deltaNote="Delta from $prev ($(wc -l < new-paths.txt) new store paths, $(du -h rel/delta-from-*.tar.zst | cut -f1)): on a root holding $prev (e.g. a btrfs snapshot of it): zstd -dc delta-from-${prev#duet-test-}.tar.zst | tar -C ROOT -xpf - ; then either boot it (the first boot registers the paths) or, running in it, sudo duet-apply-generation (live switch when the kernel is unchanged)."
+          fi
           (cd rel && sha256sum * > SHA256SUMS)
           gh release create "$tag" rel/* --prerelease --target "$GITHUB_SHA" \
             --title "Duet test build ${GITHUB_SHA::7}" \
-            --notes "Unattended first test on the Duet (watchdog, 20-minute test window, reports in /var/log/basecampos-test). Rootfs parts: cat basecampos-duet-rootfs.tar.zst.part* > basecampos-duet-rootfs.tar.zst. Kernel modules: $(cat rel/modules-version.txt)."
+            --notes "Duet test build (watchdog, 20-minute test window unless /var/lib/basecampos-test/keep exists, reports in /var/log/basecampos-test). Rootfs parts: cat basecampos-duet-rootfs.tar.zst.part* > basecampos-duet-rootfs.tar.zst. Kernel modules: $(cat rel/modules-version.txt). Image sha256: $(sha256sum rel/Image | cut -c1-16)…. $deltaNote"
           df -h / /nix
 
       - name: Diagnostics (always; published as a release when the run fails)

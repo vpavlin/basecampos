@@ -83,6 +83,32 @@ in
         { assertion = config.swapDevices == [ ]; message = "duet subvol: no swap devices (zram only)"; }
         { assertion = !config.services.shrooms.enable; message = "duet subvol: shrooms off (the tablet's mesh credential must not be duplicated)"; }
       ];
+      # A new generation without the full tarball: unpack a release's
+      # delta-from-<prev>.tar.zst onto this root (new store paths, the full
+      # registration, the profile links), then run this as root. It registers
+      # the paths and, when the kernel is the booted one, switches live
+      # ("test": nothing is installed, the profile already points at it for
+      # the next boot). A new kernel needs a reboot with its signed Image.
+      environment.systemPackages = [ (pkgs.writeShellScriptBin "duet-apply-generation" ''
+        set -euo pipefail
+        PATH=${lib.makeBinPath [ config.nix.package pkgs.coreutils ]}:$PATH
+        [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
+        if [ -f /nix-path-registration ]; then
+          nix-store --load-db < /nix-path-registration
+          rm -f /nix-path-registration
+        fi
+        new=$(readlink -f /nix/var/nix/profiles/system)
+        [ -x "$new/bin/switch-to-configuration" ] || { echo "not a system: $new" >&2; exit 1; }
+        nix-store --check-validity $(nix-store -qR "$new") || { echo "closure of $new incomplete" >&2; exit 1; }
+        echo "system: $new"
+        if [ "$(readlink -f "$new/kernel")" = "$(readlink -f /run/booted-system/kernel)" ]; then
+          "$new/bin/switch-to-configuration" test
+          echo "switched live (same kernel); the next boot uses it too"
+        else
+          echo "kernel changed: reboot with the release's signed Image (the profile already points at $new)"
+        fi
+      '') ];
+
       # First boot from the unpacked tarball: register its store paths.
       boot.postBootCommands = ''
         if [ -f /nix-path-registration ]; then
@@ -143,6 +169,16 @@ in
         check "touch device (hid-multitouch/goodix)" "grep -qiE 'goodix|touch' $d/libinput.txt"
         check "wifi device (ath10k)" "nmcli -t -f TYPE dev | grep -q wifi"
         check "Basecamp running" "pgrep -f bin/LogosBasecamp"
+        check "zram swap active" "grep -q zram /proc/swaps"
+        check "brightness above 30%" "[ \$(brightnessctl -m | cut -d, -f4 | tr -d %) -gt 30 ]"
+        check "firewall trusts the mesh interfaces" "${pkgs.nftables}/bin/nft list ruleset | grep -q shrooms"
+        uid=$(id -u ${user})
+        check "PulseAudio has an output sink" "runuser -u ${user} -- env XDG_RUNTIME_DIR=/run/user/$uid ${pkgs.pulseaudio}/bin/pactl list short sinks | grep -q alsa_output"
+        ${lib.optionalString config.basecampos.duet.agentChroot.enable ''
+          check "exactly one shrooms daemon" "[ \$(pgrep -fc '/opt/shrooms/bin/shrooms daemon') -eq 1 ]"
+          check "agent socket up" "test -S /run/user/$uid/shrooms-agent/agent.sock"
+          check "shrooms socket usable by ${user} (Shrooms app)" "runuser -u ${user} -- test -w /run/shrooms/shrooms.sock"
+        ''}
         chmod -R a+rX ${logDir}
       '';
       # Runs in the Sway session as the user: outputs, inputs, tree, screenshot.
