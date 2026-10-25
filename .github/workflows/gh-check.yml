@@ -1,0 +1,38 @@
+# Quick check that the release path works (the arm64 build takes an hour to
+# reach its publish step). Output goes to the ci-diag branch, readable without a login.
+name: gh-check
+on:
+  workflow_dispatch:
+  push:
+    paths: [ .github/workflows/gh-check.yml ]
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-24.04-arm
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: gh release round trip
+        run: |
+          mkdir -p diag
+          {
+            set -x
+            gh --version
+            gh auth status || true
+            gh release list --limit 5 || true
+            echo hello > probe.txt
+            gh release create "gh-check-${GITHUB_SHA::7}" --prerelease --target "$GITHUB_SHA" --title probe --notes probe && \
+              gh release upload "gh-check-${GITHUB_SHA::7}" probe.txt --clobber && \
+              gh release delete "gh-check-${GITHUB_SHA::7}" --yes --cleanup-tag
+            echo "exit=$?"
+            df -h / /mnt 2>/dev/null
+          } > diag/gh-check.log 2>&1 || true
+          d=$(mktemp -d); git -C $d init -q; git -C $d checkout -q -b ci-diag
+          mkdir $d/gh-check-${GITHUB_SHA::7}; cp diag/* $d/gh-check-${GITHUB_SHA::7}/
+          git -C $d -c user.name=ci -c user.email=ci@localhost add -A
+          git -C $d -c user.name=ci -c user.email=ci@localhost commit -q -m "gh-check ${GITHUB_SHA::7}"
+          git -C $d fetch -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" ci-diag 2>/dev/null &&
+            git -C $d rebase -q FETCH_HEAD || true
+          git -C $d push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" ci-diag:ci-diag

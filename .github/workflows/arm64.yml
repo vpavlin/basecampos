@@ -93,6 +93,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          mkdir -p diag
+          exec > >(tee diag/publish.log) 2>&1
+          set -x
+          gh --version; gh auth status || true
           tag=duet-test-${GITHUB_SHA::7}
           mkdir rel
           cp out-duet/kernel/Image out-duet/kernel/*.dtb out-duet/kernel/modules-version.txt rel/
@@ -147,6 +151,14 @@ jobs:
           if [ "${{ job.status }}" != "success" ]; then
             gh release create "ci-diag-${GITHUB_SHA::7}" diag/* --prerelease --target "$GITHUB_SHA" \
               --title "CI diagnostics ${GITHUB_SHA::7}" --notes "Diagnostics of a failed arm64 run." || true
+            # Also with plain git (needs no gh): branch ci-diag, dir <sha7>/, readable without a login.
+            d=$(mktemp -d); git -C $d init -q; git -C $d checkout -q -b ci-diag
+            mkdir $d/${GITHUB_SHA::7}; cp diag/* $d/${GITHUB_SHA::7}/ 2>/dev/null || true
+            git -C $d -c user.name=ci -c user.email=ci@localhost add -A
+            git -C $d -c user.name=ci -c user.email=ci@localhost commit -q -m "diagnostics ${GITHUB_SHA::7}"
+            git -C $d fetch -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" ci-diag 2>/dev/null &&
+              git -C $d rebase -q FETCH_HEAD || true
+            git -C $d push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" ci-diag:ci-diag || true
           fi
 
       - uses: actions/upload-artifact@v4
