@@ -339,11 +339,11 @@
     "duet-kit": {
       "flake": false,
       "locked": {
-        "lastModified": 1792150105,
-        "narHash": "sha256-v5rtYC14qEZbPuh+ugUTN0rAk+AV2pMU/H4/zvZ9cJ8=",
+        "lastModified": 1792943070,
+        "narHash": "sha256-csRM134O2OJOJUTamNJhviJI7F2AwkAJ7vyeqpMHK0g=",
         "owner": "vpavlin",
         "repo": "duet-kit",
-        "rev": "f80d6b90c2ea8662e46c965f502b7daed830b393",
+        "rev": "4dfd57bcd78b2a523288e58ae1d379974b1a31e0",
         "type": "github"
       },
       "original": {

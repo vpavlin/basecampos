@@ -82,6 +82,9 @@ let
     ".config/systemd/user/camera-" ".config/systemd/user/screen-share.service"
     ".config/libcamera/" ".config/xdg-desktop-portal" ".config/mako/"
     ".config/gtk-3.0/" ".config/gtk-4.0/" ".config/foot/" ".config/wayvnc/"
+    # Keeps the camera WirePlumber video-only: if it enumerates the sound card
+    # too, it holds the device and PulseAudio gets no working profile (no sink).
+    ".config/wireplumber/"
   ];
   homeFiles = builtins.filter keep (listFiles "${kit}/home" "");
   bin = "${homeTree}/.local/bin";
@@ -120,17 +123,6 @@ let
   };
   tablerFont = pkgs.runCommand "tabler-icons-font" { } ''
     install -Dm644 ${tablerIcons} $out/share/fonts/truetype/tabler-icons.ttf
-  '';
-
-  # alsa-ucm-conf with the MT8183 HiFi verb's "Mic" device removed (see the audio section).
-  duetUcm = pkgs.runCommand "alsa-ucm-conf-duet" { } ''
-    mkdir -p $out/share/alsa
-    cp -r ${pkgs.alsa-ucm-conf}/share/alsa/ucm2 $out/share/alsa/
-    chmod -R u+w $out
-    f=$out/share/alsa/ucm2/MediaTek/mt8183/mt8183_mt6358_ts3a227_max98357/HiFi.conf
-    sed -i '/^SectionDevice."Mic" {/,/^}/d' $f
-    ! grep -q 'SectionDevice."Mic"' $f
-    grep -q 'SectionDevice."Speaker"' $f
   '';
 
   batteryLimit = pkgs.writeScript "battery-limit" (
@@ -231,12 +223,8 @@ in
     # The MT8183's speakers/headset only switch on through ALSA UCM profiles
     # (alsa-ucm-conf has mt8183_mt6358_ts3a227_max98357); without them PulseAudio
     # sees no usable output (silent, volume reads 0%). Debian finds them in /usr/share.
-    # Without the internal Mic: on our kernel + mainline dtb its PCM (hw:0,5) fails
-    # hw_params, and PulseAudio then drops the whole HiFi profile - no sink at all
-    # (found by the Duet agent, run 8). Speakers come back; the mic needs the
-    # kernel/dtb side fixed (Debian's -cam kernel does not have the problem).
-    environment.sessionVariables.ALSA_CONFIG_UCM2 = "${duetUcm}/share/alsa/ucm2";
-    systemd.user.services.pulseaudio.environment.ALSA_CONFIG_UCM2 = "${duetUcm}/share/alsa/ucm2";
+    environment.sessionVariables.ALSA_CONFIG_UCM2 = "${pkgs.alsa-ucm-conf}/share/alsa/ucm2";
+    systemd.user.services.pulseaudio.environment.ALSA_CONFIG_UCM2 = "${pkgs.alsa-ucm-conf}/share/alsa/ucm2";
     # The tablet's shrooms daemon + agent (Debian's, in a chroot, or ours) serve
     # on the mesh interfaces; NixOS's firewall would drop the agent's port 7387
     # (run 7: ping worked, a2a timed out).
