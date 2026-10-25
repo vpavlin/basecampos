@@ -172,6 +172,8 @@ in
       exec ${pkgs.mako}/bin/mako
       # The panel's backlight comes up at its minimum (1/1023): near black.
       exec ${pkgs.brightnessctl}/bin/brightnessctl -q -c backlight set 70%
+      # ...and the speakers at 0% on a fresh profile (PulseAudio restores it after).
+      exec sh -c 'sleep 5; [ -e ~/.local/state/basecampos-volume-set ] || { ${pkgs.pulseaudio}/bin/pactl set-sink-volume @DEFAULT_SINK@ 50% && mkdir -p ~/.local/state && touch ~/.local/state/basecampos-volume-set; }' 
 
       # projector mirror (wl-mirror, started by the System app) never takes focus
       for_window [app_id="at.yrlf.wl_mirror"] no_focus, border none
