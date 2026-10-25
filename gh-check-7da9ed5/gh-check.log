@@ -1,0 +1,26 @@
++ gh --version
+gh version 2.102.0 (2026-09-30)
+https://github.com/cli/cli/releases/tag/v2.102.0
++ gh auth status
+github.com
+  ✓ Logged in to github.com account github-actions[bot] (GH_TOKEN)
+  - Active account: true
+  - Git operations protocol: https
+  - Token: ghs_*************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************
++ gh release list --limit 5
+Duet test build 67aab60	Pre-release	duet-test-67aab60	2026-10-25T16:10:49Z
+Duet test build 3707b96	Pre-release	duet-test-3707b96	2026-10-25T15:37:52Z
+Duet test build 844ec3c	Pre-release	duet-test-844ec3c	2026-10-25T14:56:28Z
+Duet test build 5ea36ea	Pre-release	duet-test-5ea36ea	2026-10-25T14:04:44Z
+Duet test build 6d9dc22	Pre-release	duet-test-6d9dc22	2026-10-25T13:24:32Z
++ echo hello
++ gh release create gh-check-7da9ed5 --prerelease --target 7da9ed5093830981c10b1697ccf17dc0158df926 --title probe --notes probe
+https://github.com/vpavlin/basecampos/releases/tag/gh-check-7da9ed5
++ gh release upload gh-check-7da9ed5 probe.txt --clobber
++ gh release delete gh-check-7da9ed5 --yes --cleanup-tag
++ echo exit=0
+exit=0
++ df -h / /mnt
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/root       145G   37G  108G  26% /
+/dev/root       145G   37G  108G  26% /
