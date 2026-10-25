@@ -170,6 +170,8 @@ in
       exec ${bin}/kbd-layout-keeper
       exec ${bin}/idle-dim
       exec ${pkgs.mako}/bin/mako
+      # The panel's backlight comes up at its minimum (1/1023): near black.
+      exec ${pkgs.brightnessctl}/bin/brightnessctl -q -c backlight set 70%
 
       # projector mirror (wl-mirror, started by the System app) never takes focus
       for_window [app_id="at.yrlf.wl_mirror"] no_focus, border none

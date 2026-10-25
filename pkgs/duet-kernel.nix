@@ -20,7 +20,25 @@ linuxManualConfig {
     url = "mirror://kernel/linux/kernel/v6.x/linux-6.12.50.tar.xz";
     sha256 = "19bjzhxasj4r6m1lhsa486a96axfigbm06kqa2lwa7y2s5sbsdf4";
   };
-  configfile = "${hexkernel}/config.cbm-6.12.50-stb-cbm+";
+  # hexdump0815's config, plus zram (the Duet has 3.8 GB of RAM and no other
+  # swap). Every visible ZRAM option is spelled out so `make oldconfig` has
+  # nothing to ask; done at eval time, so evaluating needs no aarch64 build.
+  configfile = builtins.toFile "config-6.12.50-stb-cbm-basecampos" (builtins.replaceStrings
+    [ "# CONFIG_ZRAM is not set\n" ]
+    [ ''
+      CONFIG_ZRAM=m
+      CONFIG_ZRAM_BACKEND_LZ4=y
+      # CONFIG_ZRAM_BACKEND_LZ4HC is not set
+      CONFIG_ZRAM_BACKEND_ZSTD=y
+      # CONFIG_ZRAM_BACKEND_DEFLATE is not set
+      # CONFIG_ZRAM_BACKEND_842 is not set
+      CONFIG_ZRAM_DEF_COMP_ZSTD=y
+      # CONFIG_ZRAM_WRITEBACK is not set
+      # CONFIG_ZRAM_TRACK_ENTRY_ACTIME is not set
+      # CONFIG_ZRAM_MEMORY_TRACKING is not set
+      # CONFIG_ZRAM_MULTI_COMP is not set
+    '' ]
+    (builtins.readFile "${hexkernel}/config.cbm-6.12.50-stb-cbm+"));
   kernelPatches = map (n: { name = n; patch = "${patchDir}/${n}"; }) patches;
   # Lets NixOS read the config to check what it requires (needs IFD).
   allowImportFromDerivation = true;

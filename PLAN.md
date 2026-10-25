@@ -43,6 +43,14 @@ System core module and live alone on their own workspaces; Super+Esc / 3-finger 
 app absorbs the tablet panels (display, Bluetooth, battery, rotation, on-screen keyboard, mirroring). On the
 Duet, duet-kit supplies hardware fixes and tablet daemons only. arm64 builds run on GitHub Actions.
 
+**2026-10-25: BasecampOS boots on the Lenovo Duet (arm64, real hardware).** Our kernel (hexdump0815's stb-cbm
+6.12.50 config + patches, built on GitHub's arm runners), no initrd, root on a btrfs subvolume of the tablet's
+/home partition, signed and booted once from the spare kernel slot by the Duet agent; all checks passed (touch,
+Wi-Fi device, keyboard cover, modules, no failed units, Basecamp at ~300 MB / 4.5% CPU), and the 20-minute test
+window returned it to Debian. Fixed after it: zram in the kernel, default backlight, root dirs in the tarball,
+the working cmdline documented. Still untested there: Wi-Fi connect, UI touch gestures, Brave, suspend, rotation,
+audio, cameras (no drivers yet).
+
 Next:
 - ~~Boot-test the ISO~~ (done: boots under UEFI into Basecamp + System); then an installer path (disk image + `nixos-install` flow).
 - Try Alisher's `shell-roles` branch (Settings/Packages/Applications as role apps). System could become

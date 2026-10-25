@@ -53,8 +53,12 @@ in
 
     (lib.mkIf (bootMode == "subvol") {
       # The kernel mounts root itself (eMMC, btrfs built in) and runs NixOS's
-      # stage 2 directly: cmdline
-      #   root=LABEL=home rootflags=subvol=@basecampos rootwait init=/nix/var/nix/profiles/system/init
+      # stage 2 directly. Working cmdline (verified on the tablet, run 4):
+      #   root=/dev/mmcblk0p1 rootfstype=btrfs rootflags=subvol=@basecampos rootwait rw
+      #   console=tty1 panic=10 net.ifnames=0 init=/nix/var/nix/profiles/system/init
+      # Without an initrd the kernel cannot resolve root=LABEL=..., and rootflags
+      # go to btrfs raw: VFS flags such as noatime there make the mount fail
+      # (NixOS applies the fileSystems options when it remounts later).
       # NixOS sees only its subvolume, never the Debian /home tree beside it.
       boot.initrd.enable = false;
       boot.loader.grub.enable = false;
@@ -87,7 +91,8 @@ in
         closure = pkgs.closureInfo { rootPaths = [ config.system.build.toplevel ]; };
         toplevel = config.system.build.toplevel;
       in pkgs.runCommand "basecampos-duet-rootfs" { nativeBuildInputs = [ pkgs.zstd pkgs.gnutar ]; } ''
-        mkdir -p root/nix/var/nix/profiles root/etc
+        # The kernel mounts devtmpfs and stage 2 mounts proc/sys/run onto these.
+        mkdir -p root/nix/var/nix/profiles root/etc root/dev root/proc root/sys root/run root/tmp root/var root/home
         ln -s ${toplevel} root/nix/var/nix/profiles/system-1-link
         ln -s system-1-link root/nix/var/nix/profiles/system
         cp ${closure}/registration root/nix-path-registration
@@ -103,8 +108,9 @@ in
         BasecampOS for the Duet: unpack into an empty btrfs subvolume, e.g.
           btrfs subvolume create /home/@basecampos
           zstd -dc basecampos-duet-rootfs.tar.zst | tar -C /home/@basecampos -xpf -
-        then boot your kernel with:
-          root=LABEL=home rootflags=subvol=@basecampos rootwait init=/nix/var/nix/profiles/system/init
+        then boot this release's kernel (Image + dtb, nothing else matches the modules) with:
+          root=/dev/mmcblk0p1 rootfstype=btrfs rootflags=subvol=@basecampos rootwait rw console=tty1 panic=10 net.ifnames=0 init=/nix/var/nix/profiles/system/init
+        (no root=LABEL= without an initrd; no noatime in rootflags)
         System: ${toplevel}
         EOF
         sed -i 's/^        //' $out/README.txt
