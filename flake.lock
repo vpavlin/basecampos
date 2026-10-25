@@ -64,11 +64,11 @@
       },
       "locked": {
         "dir": "basecamp",
-        "lastModified": 1792952697,
-        "narHash": "sha256-xFor1wyrUdqhITqtohwr9Vjh6unUcojlLaQV1SoEnSY=",
+        "lastModified": 1792961049,
+        "narHash": "sha256-obFVd2irCpgKlN4Zq5V8p2WEMrrKCSJ2FWDqkYxOFZI=",
         "owner": "vpavlin",
         "repo": "basecampos",
-        "rev": "0595cb3917569ccf11cead11e1dc4f3b35be0c01",
+        "rev": "1e618b0f16deada197182026ca882e13e64d3176",
         "type": "github"
       },
       "original": {

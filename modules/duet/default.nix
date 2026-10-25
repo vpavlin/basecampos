@@ -223,6 +223,13 @@ in
     # The MT8183's speakers/headset only switch on through ALSA UCM profiles
     # (alsa-ucm-conf has mt8183_mt6358_ts3a227_max98357); without them PulseAudio
     # sees no usable output (silent, volume reads 0%). Debian finds them in /usr/share.
+    # The card's mixer must be set up before PulseAudio probes it (with
+    # defaults, the Mic PCM fails hw_params and PulseAudio drops the whole
+    # profile: only auto_null). Debian restores /var/lib/alsa/asound.state at
+    # boot; so do we, seeded with Debian's state (duet/duet, run 9).
+    # (seeded by the tmpfiles rule below; also brings alsa-utils' udev rule,
+    # which restores it whenever the card appears)
+    hardware.alsa.enablePersistence = true;
     environment.sessionVariables.ALSA_CONFIG_UCM2 = "${pkgs.alsa-ucm-conf}/share/alsa/ucm2";
     systemd.user.services.pulseaudio.environment.ALSA_CONFIG_UCM2 = "${pkgs.alsa-ucm-conf}/share/alsa/ucm2";
     # The tablet's shrooms daemon + agent (Debian's, in a chroot, or ours) serve
@@ -279,6 +286,8 @@ in
         "w /sys/devices/system/cpu/cpufreq/policy4/scaling_governor - - - - schedutil"
         # owned by the user so the quick-settings slider can write it
         "C /etc/default/battery-limit 0644 ${cfg.user} users - ${kit}/etc/default/battery-limit"
+        # Debian's mixer state, restored at boot (see hardware.alsa above); only if none yet
+        "C /var/lib/alsa/asound.state 0644 root root - ${./asound.state}"
       ];
 
     # Wi-Fi power save off (else the tablet stops answering ARP); DNS via resolved.
