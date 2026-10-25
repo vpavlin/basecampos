@@ -54,6 +54,10 @@ public:
     /// Shows a native app full screen: focuses its window, or starts it.
     std::string openExternal(const std::string& id);
 
+    /// Starts a native app on a Basecamp-hosted Wayland socket (an app view that is
+    /// a compositor shows it inside its own window). socket: basecamp-<name>.
+    std::string openEmbedded(const std::string& id, const std::string& socket);
+
     /// Opens an http(s) URL in the system browser (the external app "browser").
     std::string openUrl(const std::string& url);
 

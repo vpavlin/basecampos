@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <spawn.h>
 #include <sys/wait.h>
+#include <pwd.h>
 #include <unistd.h>
 
 extern char** environ;
@@ -124,7 +125,8 @@ Result run(std::vector<std::string> argv)
 
 // Starts argv in its own session, detached: stdio on /dev/null and through
 // `setsid -f`, so the app outlives logos_host and never holds our pipes.
-Result detach(std::vector<std::string> argv)
+Result detach(std::vector<std::string> argv, const std::vector<std::string>& extraEnv = {},
+              const std::vector<std::string>& dropEnv = {})
 {
     argv.insert(argv.begin(), { findTool("setsid"), "-f" });
     argv[2] = findTool(argv[2]);
@@ -137,9 +139,28 @@ Result detach(std::vector<std::string> argv)
     for (auto& a : argv)
         args.push_back(const_cast<char*>(a.c_str()));
     args.push_back(nullptr);
+    // Environment: the child environment, minus dropEnv keys, plus extraEnv.
+    std::vector<std::string> envStore;
+    for (const auto& kv : childEnvStorage()) {
+        bool drop = false;
+        for (const auto& k : dropEnv)
+            if (kv.rfind(k + "=", 0) == 0)
+                drop = true;
+        for (const auto& e : extraEnv)
+            if (kv.rfind(e.substr(0, e.find('=') + 1), 0) == 0)
+                drop = true;
+        if (!drop)
+            envStore.push_back(kv);
+    }
+    for (const auto& e : extraEnv)
+        envStore.push_back(e);
+    std::vector<char*> envp;
+    for (auto& e : envStore)
+        envp.push_back(const_cast<char*>(e.c_str()));
+    envp.push_back(nullptr);
     Result r;
     pid_t pid = 0;
-    if (posix_spawn(&pid, args[0], &fa, nullptr, args.data(), childEnv()) == 0) {
+    if (posix_spawn(&pid, args[0], &fa, nullptr, args.data(), envp.data()) == 0) {
         int status = 0;
         waitpid(pid, &status, 0);
         r.code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
@@ -419,10 +440,10 @@ struct ExternalApp {
 
 // /etc/basecampos/external-apps, written by the NixOS module (root-owned):
 // one app per line, tab-separated: id, sway app_id, display name, argv...
-std::vector<ExternalApp> externalConfig()
+std::vector<ExternalApp> externalConfig(const char* path = "/etc/basecampos/external-apps")
 {
     std::vector<ExternalApp> apps;
-    std::ifstream f("/etc/basecampos/external-apps");
+    std::ifstream f(path);
     std::string line;
     while (std::getline(f, line)) {
         if (line.empty() || line[0] == '#')
@@ -487,6 +508,34 @@ std::string BasecamposSystemImpl::openExternal(const std::string& id)
     if (windowOpen(tree, a->appId))
         return okOrError(run({ "swaymsg", "[app_id=\"" + a->appId + "\"] focus" }));
     return okOrError(detach(a->argv));
+}
+
+std::string BasecamposSystemImpl::openEmbedded(const std::string& id, const std::string& socket)
+{
+    auto apps = externalConfig("/etc/basecampos/embedded-apps");
+    const ExternalApp* a = findExternal(apps, id);
+    if (!a)
+        return error(id + " cannot run inside Basecamp");
+    if (socket.rfind("basecamp-", 0) != 0 || !safeCriterion(socket))
+        return error("socket must be basecamp-<name>");
+    // "~/" at the start of an argument or after "=" is the user's home (a profile
+    // of its own, e.g. --user-data-dir=~/...). No shell: nothing else expands.
+    std::string home;
+    for (const auto& kv : childEnvStorage())
+        if (kv.rfind("HOME=", 0) == 0)
+            home = kv.substr(5);
+    std::vector<std::string> argv = a->argv;
+    for (auto& arg : argv) {
+        size_t at = arg.rfind("~/", 0) == 0 ? 0 : arg.find("=~/");
+        if (!home.empty() && at != std::string::npos)
+            arg.replace(at == 0 ? 0 : at + 1, 1, home);
+    }
+    // The app talks only to Basecamp's socket: no X fallback, no Sway socket.
+    // SHELL: the session never set one, and terminals fall back to plain sh.
+    std::vector<std::string> env = { "WAYLAND_DISPLAY=" + socket };
+    if (const passwd* pw = getpwuid(getuid()); pw && pw->pw_shell && *pw->pw_shell)
+        env.push_back(std::string("SHELL=") + pw->pw_shell);
+    return okOrError(detach(argv, env, { "DISPLAY", "SWAYSOCK" }));
 }
 
 std::string BasecamposSystemImpl::openUrl(const std::string& url)

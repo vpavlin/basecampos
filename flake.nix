@@ -76,21 +76,28 @@
         # Each gets a launcher app in Basecamp's dock and a line in
         # /etc/basecampos/external-apps for the basecampos_system module.
         externalApps = [
-          {
+          rec {
             id = "browser"; appId = "brave-browser"; name = "Browser";
             command = [ "${pkgsUnfree.brave}/bin/brave" "--ozone-platform=wayland" ];
+            # Inside Basecamp: software rendering (Qt's compositor offers clients no
+            # EGL) and a profile of its own, so it never hands off to a running Brave.
+            embedCommand = command ++ [ "--disable-gpu" "--user-data-dir=~/.config/BraveSoftware/Brave-Basecamp" ];
             icon = "${pkgsUnfree.brave}/share/icons/hicolor/256x256/apps/brave-browser.png";
           }
           {
             id = "terminal"; appId = "foot"; name = "Terminal";
             command = [ "${pkgs.foot}/bin/foot" ];
+            # Inside Basecamp: qterminal. foot needs newer wl_seat/data-device versions
+            # than Qt's compositor has, and winit apps (alacritty) bind the seat twice
+            # while Qt sends keys to one keyboard per client: they never get any.
+            embedCommand = [ "${pkgs.lxqt.qterminal}/bin/qterminal" ];
             icon = pkgs.runCommand "foot-icon.png" { } ''
               ${pkgs.librsvg}/bin/rsvg-convert -w 256 -h 256 ${pkgs.foot}/share/icons/hicolor/scalable/apps/foot.svg -o $out
             '';
           }
         ];
         launcherMeta = app: {
-          name = "basecampos_${app.id}";
+          name = "basecampos_${app.launcherId or app.id}";
           display_name = app.name;
           version = "0.1.0";
           type = "ui_qml";
@@ -101,16 +108,24 @@
           dependencies = [ "basecampos_system" ];
           nix = { packages = { build = [ ]; runtime = [ ]; }; external_libraries = [ ]; cmake = { find_packages = [ ]; }; };
         };
-        mkExternalLauncher = app: (logos-module-builder.lib.mkLogosQmlModule {
-          src = pkgs.runCommand "launcher-${app.id}-src" { } ''
+        # embedded = false: the app runs beside Basecamp on its own workspace;
+        # embedded = true: inside the launcher's Basecamp window (the view is a
+        # Wayland compositor; apps/external-embedded).
+        mkExternalLauncher' = embedded: app0: let
+          app = if embedded then app0 // { name = "${app0.name} (in Basecamp)"; launcherId = "${app0.id}_embedded"; }
+                else app0 // { launcherId = app0.id; };
+        in (logos-module-builder.lib.mkLogosQmlModule {
+          src = pkgs.runCommand "launcher-${app.launcherId}-src" { } ''
             mkdir $out
-            sed -e 's|@ID@|${app.id}|g' -e 's|@NAME@|${app.name}|g' ${./apps/external/Main.qml} > $out/Main.qml
+            sed -e 's|@ID@|${app0.id}|g' -e 's|@NAME@|${app.name}|g' \
+              ${if embedded then ./apps/external-embedded/Main.qml else ./apps/external/Main.qml} > $out/Main.qml
             cp ${app.icon} $out/icon.png
             cp ${builtins.toFile "metadata.json" (builtins.toJSON (launcherMeta app))} $out/metadata.json
           '';
           configFile = builtins.toFile "metadata.json" (builtins.toJSON (launcherMeta app));
           flakeInputs = { inherit logos-module-builder; basecampos_system = system-core; };
         }).packages.${system}.lgx-portable;
+        mkExternalLauncher = mkExternalLauncher' false;
 
         systemApps = [
           system-core.packages.${system}.lgx-portable
@@ -136,8 +151,9 @@
             basecampos.shell.package = lib.mkDefault basecamp.packages.${system}.bin-bundle-dir;
             services.shrooms.agent.package = shrooms-agent;
             basecampos.shell.lgpm = lgpm;
-            basecampos.shell.apps = systemApps ++ map mkExternalLauncher externalApps ++ catalogApps;
-            basecampos.shell.externalApps = map (a: { inherit (a) id appId name command; }) externalApps;
+            basecampos.shell.apps = systemApps ++ map mkExternalLauncher externalApps
+              ++ map (mkExternalLauncher' true) (lib.filter (a: a ? embedCommand) externalApps) ++ catalogApps;
+            basecampos.shell.externalApps = map (a: { inherit (a) id appId name command; embedCommand = a.embedCommand or null; }) externalApps;
             basecampos.shell.repositories = [ "https://apps.vpavlin.xyz/logos-repo.json" ];
           })
         ];

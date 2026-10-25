@@ -82,6 +82,14 @@ in
           appId = lib.mkOption { type = lib.types.str; description = "Wayland app_id of its window."; };
           name = lib.mkOption { type = lib.types.str; };
           command = lib.mkOption { type = lib.types.listOf lib.types.str; };
+          embedCommand = lib.mkOption {
+            type = lib.types.nullOr (lib.types.listOf lib.types.str);
+            default = null;
+            description = ''
+              Command for running it inside a Basecamp window (apps/external-embedded),
+              if it can: Qt's compositor speaks older protocol versions than some
+              clients need (foot, for one, will not start on it).'';
+          };
         };
       });
       default = [ ];
@@ -132,6 +140,10 @@ in
     # the module only ever runs what is listed here).
     environment.etc."basecampos/external-apps".text = lib.concatMapStrings (a:
       lib.concatStringsSep "\t" ([ a.id a.appId a.name ] ++ a.command) + "\n") cfg.externalApps;
+    # The same, for the apps that may run inside a Basecamp window.
+    environment.etc."basecampos/embedded-apps".text = lib.concatMapStrings (a:
+      lib.concatStringsSep "\t" ([ a.id a.appId a.name ] ++ a.embedCommand) + "\n")
+      (lib.filter (a: a.embedCommand != null) cfg.externalApps);
 
     assertions = [ {
       assertion = cfg.apps == [ ] || cfg.lgpm != null;

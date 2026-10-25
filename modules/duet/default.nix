@@ -203,8 +203,11 @@ in
         id = "browser"; appId = "brave-browser"; name = "Browser";
         command = [ "${pkgs.brave}/bin/brave" "--ozone-platform=wayland" "--use-gl=angle" "--use-angle=gles"
           "--password-store=basic" "--enable-features=WebRtcPipeWireCamera,WebRTCPipeWireCapturer" ];
+        embedCommand = [ "${pkgs.brave}/bin/brave" "--ozone-platform=wayland" "--disable-gpu" "--password-store=basic"
+          "--user-data-dir=~/.config/BraveSoftware/Brave-Basecamp" ];
       }
-      { id = "terminal"; appId = "foot"; name = "Terminal"; command = [ "${pkgs.foot}/bin/foot" ]; }
+      { id = "terminal"; appId = "foot"; name = "Terminal"; command = [ "${pkgs.foot}/bin/foot" ];
+        embedCommand = [ "${pkgs.lxqt.qterminal}/bin/qterminal" ]; }
     ];
 
     # Audio as on the device: PulseAudio for sound, PipeWire only as the

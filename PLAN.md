@@ -59,6 +59,23 @@ connected, sound card + ath10k present, 1.3 GiB used, Basecamp ~20% CPU. Lessons
 the daemon needs iproute2 on PATH; never share /run/nscd with a Debian chroot (NSS then resolves NixOS users and
 Debian sudo fails). Open: default volume came up at 0%.
 
+**2026-10-25: native apps INSIDE Basecamp windows** (`apps/external-embedded`, launchers "Terminal (in
+Basecamp)" and "Browser (in Basecamp)"). The app view is a Wayland compositor (QtWayland.Compositor ships in
+the bundle and the QML sandbox allows it) on a private socket `basecamp-<id>-<n>`; `basecampos_system.openEmbedded`
+starts the app's `embedCommand` (from `/etc/basecampos/embedded-apps`) on it. Verified in the VM: qterminal
+takes typing and runs commands, Brave browses. Lessons:
+- The WaylandOutput must be bound to the QQuickWindow the view is drawn in, and that window changes after
+  creation: create the output per window (an output with a stale window stops frame callbacks: one frame, then
+  nothing). A compositor finding its socket locked qFatal()s all of Basecamp: unique socket per instance.
+- Offer xdg-decoration (server side): client-drawn title bars grow their shm pool while Qt holds the old one
+  and libwayland rejects the next buffer (protocol error, app dies).
+- Qt 6.9's compositor: wl_seat v4 / data-device v1 (foot will not start); keys go to ONE wl_keyboard per client
+  (winit apps such as alacritty bind twice and never get keys). Qt/GTK clients are fine. No EGL for clients:
+  Brave needs `--disable-gpu` (software; ~45 s first start in the VM) and its own profile.
+- Testing: wtype and QEMU sendkey do not reach Basecamp (XWayland); xdotool on :0 and `swaymsg seat ... cursor` do.
+Open: clipboard between Basecamp and embedded apps, popups/menus placement, GPU (would need Basecamp's
+compositor to offer linux-dmabuf), performance on the Duet.
+
 Next:
 - ~~Boot-test the ISO~~ (done: boots under UEFI into Basecamp + System); then an installer path (disk image + `nixos-install` flow).
 - Try Alisher's `shell-roles` branch (Settings/Packages/Applications as role apps). System could become
