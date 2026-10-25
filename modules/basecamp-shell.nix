@@ -233,7 +233,11 @@ in
     # Basecamp is the session: if it exits or crashes, it comes back.
     runBasecamp = pkgs.writeShellScript "basecamp-session" ''
       while true; do
-        env ${env} ${lib.concatStringsSep " " ([ "${cfg.package}/bin/LogosBasecamp" ] ++ cfg.extraArgs)}
+        # ~/.config/basecampos/env (KEY=value lines) overrides the defaults, e.g.
+        # QT_QPA_PLATFORM=wayland to try native Wayland without a rebuild.
+        overrides=""
+        [ -f "$HOME/.config/basecampos/env" ] && overrides=$(grep -E '^[A-Z_]+=' "$HOME/.config/basecampos/env" | tr '\n' ' ')
+        env ${env} $overrides ${lib.concatStringsSep " " ([ "${cfg.package}/bin/LogosBasecamp" ] ++ cfg.extraArgs)}
         sleep 2
       done
     '';

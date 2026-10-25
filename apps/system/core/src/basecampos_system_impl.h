@@ -98,4 +98,34 @@ public:
 
     /// Mirrors the internal screen onto the external one ("on") or stops ("off").
     std::string setMirror(const std::string& state);
+
+    /// The internal screen's scale factor (Sway), e.g. 1.2.
+    std::string scale();
+
+    /// Sets the internal screen's scale, in percent (100-250).
+    std::string setScale(int64_t percent);
+
+    /// Microphone (default source): volume in percent and whether it is muted.
+    std::string microphone();
+
+    /// Sets the microphone volume in percent (0-300; the Duet's DMIC is quiet).
+    std::string setMicrophone(int64_t percent);
+
+    /// Toggles the microphone mute.
+    std::string toggleMicrophone();
+
+    /// Keyboard layouts of the physical keyboard, and the active one.
+    std::string keyboardLayout();
+
+    /// Switches the physical keyboard to its next layout.
+    std::string nextKeyboardLayout();
+
+    /// Screen sharing over VNC (the session's screen-share unit): available, active.
+    std::string screenShare();
+
+    /// Starts ("on") or stops ("off") screen sharing.
+    std::string setScreenShare(const std::string& state);
+
+    /// Takes a screenshot of the whole screen into ~/Pictures; returns its path.
+    std::string screenshot();
 };

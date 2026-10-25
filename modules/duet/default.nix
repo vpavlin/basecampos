@@ -219,6 +219,11 @@ in
     # sees no usable output (silent, volume reads 0%). Debian finds them in /usr/share.
     environment.sessionVariables.ALSA_CONFIG_UCM2 = "${pkgs.alsa-ucm-conf}/share/alsa/ucm2";
     systemd.user.services.pulseaudio.environment.ALSA_CONFIG_UCM2 = "${pkgs.alsa-ucm-conf}/share/alsa/ucm2";
+    # The tablet's shrooms daemon + agent (Debian's, in a chroot, or ours) serve
+    # on the mesh interfaces; NixOS's firewall would drop the agent's port 7387
+    # (run 7: ping worked, a2a timed out).
+    networking.firewall.trustedInterfaces = [ "shrooms+" ];
+
     hardware.bluetooth = {
       enable = true;
       powerOnBoot = true;

@@ -1,6 +1,8 @@
 #include "basecampos_system_impl.h"
 
 #include <algorithm>
+#include <ctime>
+#include <cmath>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -9,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <spawn.h>
 #include <sys/wait.h>
@@ -249,15 +252,33 @@ std::string BasecamposSystemImpl::info()
     std::string uptime = readFile("/proc/uptime");
     long up = std::atol(uptime.c_str());
 
+    // Any power supply of type Battery (laptops: BAT0; the Duet's ChromeOS EC
+    // names its own), with a time estimate from the gauge where it has one.
     std::string battery;
-    for (const char* bat : { "BAT0", "BAT1" }) {
-        std::string base = std::string("/sys/class/power_supply/") + bat;
-        std::string cap = readFile(base + "/capacity");
-        if (!cap.empty()) {
-            battery = ",\"battery\":{\"percent\":" + std::to_string(std::atoi(cap.c_str()))
-                + ",\"status\":\"" + esc(readFile(base + "/status")) + "\"}";
+    if (DIR* d = opendir("/sys/class/power_supply")) {
+        while (dirent* e = readdir(d)) {
+            if (e->d_name[0] == '.')
+                continue;
+            std::string base = std::string("/sys/class/power_supply/") + e->d_name;
+            if (readFile(base + "/type") != "Battery" || readFile(base + "/capacity").empty())
+                continue;
+            std::string status = readFile(base + "/status");
+            long secs = std::atol(readFile(base + (status == "Charging" ? "/time_to_full_avg" : "/time_to_empty_avg")).c_str());
+            if (secs <= 0) {
+                // energy/power or charge/current, whichever the gauge reports
+                double now = std::atof(readFile(base + "/energy_now").c_str()), rate = std::atof(readFile(base + "/power_now").c_str());
+                if (now <= 0 || rate <= 0) {
+                    now = std::atof(readFile(base + "/charge_now").c_str());
+                    rate = std::atof(readFile(base + "/current_now").c_str());
+                }
+                if (now > 0 && rate > 0 && status == "Discharging")
+                    secs = static_cast<long>(now / std::abs(rate) * 3600);
+            }
+            battery = ",\"battery\":{\"percent\":" + std::to_string(std::atoi(readFile(base + "/capacity").c_str()))
+                + ",\"status\":\"" + esc(status) + "\",\"minutes\":" + std::to_string(secs / 60) + "}";
             break;
         }
+        closedir(d);
     }
 
     return "{\"hostname\":\"" + esc(readFile("/proc/sys/kernel/hostname"))
@@ -695,4 +716,118 @@ std::string BasecamposSystemImpl::setMirror(const std::string& state)
     // A transient user unit, so the mirror outlives this call and stops cleanly.
     return okOrError(run({ "systemd-run", "--user", "--quiet", "--unit=display-mirror", "--collect",
         findTool("wl-mirror"), "--fullscreen-output", outs[1], "--scaling", "fit", "--no-show-cursor", outs[0] }));
+}
+
+// ---- scale, microphone, keyboard layout, screen sharing, screenshot --------
+
+std::string BasecamposSystemImpl::scale()
+{
+    std::string j = run({ "swaymsg", "-t", "get_outputs", "-r" }).out;
+    auto pos = j.find("\"scale\": ");
+    if (pos == std::string::npos)
+        return "{\"available\":false}";
+    double sc = std::atof(j.c_str() + pos + 9);
+    return "{\"available\":true,\"percent\":" + std::to_string(static_cast<int>(sc * 100 + 0.5)) + "}";
+}
+
+std::string BasecamposSystemImpl::setScale(int64_t percent)
+{
+    auto outs = outputs();
+    if (outs.empty())
+        return error("no display");
+    percent = std::clamp<int64_t>(percent, 100, 250);
+    char buf[16];
+    std::snprintf(buf, sizeof buf, "%.2f", percent / 100.0);
+    return okOrError(run({ "swaymsg", "output " + outs[0] + " scale " + buf }));
+}
+
+std::string BasecamposSystemImpl::microphone()
+{
+    Result r = run({ "wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@" });
+    if (r.code == 0) {
+        double v = 0;
+        std::sscanf(r.out.c_str(), "Volume: %lf", &v);
+        return "{\"available\":true,\"percent\":" + std::to_string(static_cast<int>(v * 100 + 0.5))
+            + ",\"muted\":" + (r.out.find("MUTED") != std::string::npos ? "true" : "false") + "}";
+    }
+    Result p = run({ "pactl", "get-source-volume", "@DEFAULT_SOURCE@" });
+    if (p.code != 0)
+        return "{\"available\":false}";
+    int pct = 0;
+    auto slash = p.out.find('/');
+    if (slash != std::string::npos)
+        pct = std::atoi(p.out.c_str() + slash + 1);
+    bool muted = run({ "pactl", "get-source-mute", "@DEFAULT_SOURCE@" }).out.find("yes") != std::string::npos;
+    return "{\"available\":true,\"percent\":" + std::to_string(pct) + ",\"muted\":" + (muted ? "true" : "false") + "}";
+}
+
+std::string BasecamposSystemImpl::setMicrophone(int64_t percent)
+{
+    std::string v = std::to_string(std::clamp<int64_t>(percent, 0, 300)) + "%";
+    if (run({ "wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", v }).code == 0)
+        return "{\"ok\":true}";
+    return okOrError(run({ "pactl", "set-source-volume", "@DEFAULT_SOURCE@", v }));
+}
+
+std::string BasecamposSystemImpl::toggleMicrophone()
+{
+    if (run({ "wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle" }).code == 0)
+        return "{\"ok\":true}";
+    return okOrError(run({ "pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle" }));
+}
+
+std::string BasecamposSystemImpl::keyboardLayout()
+{
+    // The first physical keyboard's layouts ("xkb_layout_names") and active one.
+    std::string j = run({ "swaymsg", "-t", "get_inputs", "-r" }).out;
+    auto kb = j.find("\"type\": \"keyboard\"");
+    if (kb == std::string::npos)
+        return "{\"available\":false}";
+    auto act = j.find("\"xkb_active_layout_name\": \"", kb);
+    auto names = j.find("\"xkb_layout_names\": [", kb);
+    if (act == std::string::npos || names == std::string::npos)
+        return "{\"available\":false}";
+    act += 27;
+    std::string active = j.substr(act, j.find('"', act) - act);
+    std::string list = j.substr(names + 21, j.find(']', names) - names - 21);
+    int count = 0;
+    for (char c : list)
+        if (c == ',')
+            ++count;
+    return "{\"available\":true,\"active\":\"" + esc(active) + "\",\"layouts\":" + std::to_string(count + 1) + "}";
+}
+
+std::string BasecamposSystemImpl::nextKeyboardLayout()
+{
+    return okOrError(run({ "swaymsg", "input type:keyboard xkb_switch_layout next" }));
+}
+
+std::string BasecamposSystemImpl::screenShare()
+{
+    bool exists = run({ "systemctl", "--user", "cat", "screen-share.service" }).code == 0;
+    if (!exists)
+        return "{\"available\":false}";
+    bool active = run({ "systemctl", "--user", "is-active", "--quiet", "screen-share.service" }).code == 0;
+    return std::string("{\"available\":true,\"active\":") + (active ? "true" : "false") + "}";
+}
+
+std::string BasecamposSystemImpl::setScreenShare(const std::string& state)
+{
+    if (state != "on" && state != "off")
+        return error("state must be on or off");
+    return okOrError(run({ "systemctl", "--user", state == "on" ? "start" : "stop", "screen-share.service" }));
+}
+
+std::string BasecamposSystemImpl::screenshot()
+{
+    std::string dir = home() + "/Pictures";
+    run({ "mkdir", "-p", dir });
+    char name[64];
+    std::time_t t = std::time(nullptr);
+    std::strftime(name, sizeof name, "/screenshot-%Y%m%d-%H%M%S.png", std::localtime(&t));
+    std::string path = dir + name;
+    Result r = run({ "grim", path });
+    if (r.code != 0)
+        return error(r.out.empty() ? "screenshot failed" : r.out);
+    return "{\"ok\":true,\"path\":\"" + esc(path) + "\"}";
 }

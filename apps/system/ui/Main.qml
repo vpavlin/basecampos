@@ -27,6 +27,11 @@ Item {
     property var charge: ({})
     property var tab: ({})
     property var disp: ({})
+    property var scl: ({})
+    property var mic: ({})
+    property var kbd: ({})
+    property var share: ({})
+    property string shotMessage: ""
     property bool btScanning: false
     property string btMessage: ""
     property var wifi: []
@@ -49,14 +54,24 @@ Item {
         }
     }
 
-    function refresh() {
-        sys = call("info")
-        net = call("network")
+    // Every call below starts a program and blocks Basecamp's UI thread until
+    // it returns, so the periodic refresh reads only the cheap values; the rest
+    // loads on open, after an action, and from the Refresh button.
+    function refreshLight() {
         vol = call("volume")
         light = call("brightness")
+        sys = call("info")
+    }
+    function refresh() {
+        refreshLight()
+        net = call("network")
         charge = call("chargeLimit")
         tab = call("tablet")
         disp = call("displays")
+        scl = call("scale")
+        mic = call("microphone")
+        kbd = call("keyboardLayout")
+        share = call("screenShare")
         if (!btScanning)
             bt = call("bluetooth")
     }
@@ -76,7 +91,7 @@ Item {
     }
 
     Component.onCompleted: { refresh(); scan() }
-    Timer { interval: 5000; running: true; repeat: true; onTriggered: root.refresh() }
+    Timer { interval: 10000; running: root.visible; repeat: true; onTriggered: root.refreshLight() }
     Timer { id: disarm; interval: 4000; onTriggered: root.powerArmed = "" }
 
     Rectangle { anchors.fill: parent; color: Theme.palette.background }
@@ -135,6 +150,12 @@ Item {
                     }
                 }
                 Item { Layout.fillWidth: true }
+                LogosButton {
+                    objectName: "refresh"
+                    text: "Refresh"
+                    Layout.alignment: Qt.AlignTop
+                    onClicked: root.refresh()
+                }
             }
 
             // --- Power ------------------------------------------------------
@@ -201,6 +222,27 @@ Item {
                         onToggled: { root.call("toggleMute"); root.vol = root.call("volume") }
                     }
                 }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.medium
+                    visible: !!root.mic.available
+                    LogosText { text: "Microphone"; Layout.preferredWidth: 110 }
+                    LogosSlider {
+                        id: micSlider
+                        objectName: "micSlider"
+                        Layout.fillWidth: true
+                        from: 0; to: 300; stepSize: 5
+                        value: root.mic.percent || 0
+                        onMoved: root.call("setMicrophone", [Math.round(value)])
+                    }
+                    LogosText { text: Math.round(micSlider.value) + "%"; Layout.preferredWidth: 48; color: Theme.palette.textSecondary }
+                    LogosSwitch {
+                        objectName: "micMute"
+                        text: "Mute"
+                        checked: !!root.mic.muted
+                        onToggled: { root.call("toggleMicrophone"); root.mic = root.call("microphone") }
+                    }
+                }
                 LogosText {
                     visible: !!root.vol.error
                     text: root.vol.error || ""
@@ -211,7 +253,7 @@ Item {
             // --- Display ----------------------------------------------------
             Section {
                 title: "Display"
-                visible: !!root.light.available || !!root.tab.keyboard || !!root.tab.orientationSensor || !!root.disp.external
+                visible: !!root.light.available || !!root.tab.keyboard || !!root.tab.orientationSensor || !!root.disp.external || !!root.scl.available
                 RowLayout {
                     Layout.fillWidth: true
                     visible: !!root.light.available
@@ -251,6 +293,49 @@ Item {
                         checked: !!root.disp.mirroring
                         onToggled: { root.call("setMirror", [checked ? "on" : "off"]); root.disp = root.call("displays") }
                     }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: !!root.scl.available
+                    spacing: Theme.spacing.medium
+                    LogosText { text: "Scale"; Layout.preferredWidth: 110 }
+                    LogosSlider {
+                        id: scaleSlider
+                        objectName: "scaleSlider"
+                        Layout.fillWidth: true
+                        from: 100; to: 250; stepSize: 10
+                        value: root.scl.percent || 100
+                        // applied on release: every step re-lays out the whole screen
+                        onPressedChanged: if (!pressed) root.call("setScale", [Math.round(value)])
+                    }
+                    LogosText { text: (scaleSlider.value / 100).toFixed(1) + "×"; Layout.preferredWidth: 48; color: Theme.palette.textSecondary }
+                }
+                RowLayout {
+                    spacing: Theme.spacing.large
+                    LogosButton {
+                        objectName: "screenshot"
+                        text: "Screenshot"
+                        onClicked: { let r = root.call("screenshot"); root.shotMessage = r.error || ("Saved " + r.path) }
+                    }
+                    LogosButton {
+                        objectName: "keyboardLayout"
+                        visible: !!root.kbd.available && root.kbd.layouts > 1
+                        text: "Keyboard: " + (root.kbd.active || "") + " → next"
+                        onClicked: { root.call("nextKeyboardLayout"); root.kbd = root.call("keyboardLayout") }
+                    }
+                    LogosSwitch {
+                        objectName: "screenShare"
+                        visible: !!root.share.available
+                        text: "Share screen (VNC on the mesh)"
+                        checked: !!root.share.active
+                        onToggled: { root.call("setScreenShare", [checked ? "on" : "off"]); root.share = root.call("screenShare") }
+                    }
+                }
+                LogosText {
+                    visible: text.length > 0
+                    text: root.shotMessage
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.secondaryText
                 }
             }
 
@@ -329,7 +414,11 @@ Item {
                 visible: !!root.sys.battery || !!root.charge.available
                 LogosText {
                     visible: !!root.sys.battery
-                    text: root.sys.battery ? root.sys.battery.percent + "% · " + root.sys.battery.status : ""
+                    text: root.sys.battery ? root.sys.battery.percent + "% · " + root.sys.battery.status
+                          + (root.sys.battery.minutes > 0
+                             ? " · " + Math.floor(root.sys.battery.minutes / 60) + " h " + (root.sys.battery.minutes % 60) + " min "
+                               + (root.sys.battery.status === "Charging" ? "to full" : "left")
+                             : "") : ""
                     color: Theme.palette.textSecondary
                 }
                 RowLayout {
