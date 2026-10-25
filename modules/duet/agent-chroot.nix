@@ -24,7 +24,15 @@ let
     mountpoint -q $D/run || { mount --bind /run $D/run; mount --make-rslave $D/run; }
     # NixOS's nscd socket would make NSS in the chroot resolve the uid as our
     # user, and Debian's sudo breaks.
-    mountpoint -q $D/run/nscd || { mkdir -p /run/nscd-hidden; mount --bind /run/nscd-hidden $D/run/nscd; }
+    # Re-checked by the health loop: a restarted nscd (a live switch) makes a new
+    # /run/nscd that shows through again, and Debian's sudo asks for a password.
+    hideNscd() {
+      if [ -e $D/run/nscd/socket ] || ! mountpoint -q $D/run/nscd; then
+        mkdir -p /run/nscd-hidden $D/run/nscd
+        mount --bind /run/nscd-hidden $D/run/nscd && echo "$(date +%T) nscd hidden in the chroot"
+      fi
+    }
+    hideNscd
     mountpoint -q $D/tmp || mount --bind /tmp $D/tmp
     mkdir -p /run/systemd/resolve
     { grep -h '^nameserver' /etc/resolv.conf 2>/dev/null; echo "nameserver 9.9.9.9"; echo "nameserver 1.1.1.1"; } > /run/systemd/resolve/stub-resolv.conf
@@ -72,6 +80,7 @@ let
     ( BAD=0; while sleep 30; do
         P=$(shrooms status 2>/dev/null | sed -n 's/.*peers [0-9]* (\([0-9]*\) online.*/\1/p')
         openSocket
+        hideNscd
         N=$(nmcli -t -f STATE general 2>/dev/null | head -1)
         if ping -c1 -W3 1.1.1.1 >/dev/null 2>&1; then I=up; else I=down; fi
         echo "$(date +%T) peers_online=''${P:-?} nm=$N internet=$I" >> $log/health.log

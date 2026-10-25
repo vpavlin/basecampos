@@ -244,7 +244,10 @@ in
     } // cfg.environment));
     # Basecamp is the session: if it exits or crashes, it comes back.
     runBasecamp = pkgs.writeShellScript "basecamp-session" ''
-      while true; do
+      # Restarts Basecamp while its compositor lives, and no longer: a loop that
+      # outlives its sway (greetd restarted) would respawn an old bundle forever.
+      alive() { [ -z "''${WAYLAND_DISPLAY:-}" ] || [ -S "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$WAYLAND_DISPLAY" ]; }
+      while alive; do
         # ~/.config/basecampos/env (KEY=value lines) overrides the defaults, e.g.
         # QT_QPA_PLATFORM=wayland to try native Wayland without a rebuild.
         overrides=""
