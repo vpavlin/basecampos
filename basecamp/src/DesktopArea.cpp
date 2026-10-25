@@ -77,8 +77,9 @@ protected:
 
     int buttonAt(const QPoint& p) const
     {
+        // The whole bar height and half the gaps: fingers on a tablet miss 14 px circles.
         for (int b = Split; b <= Close; ++b)
-            if (buttonRect(b).adjusted(-4, -4, 4, 4).contains(p))
+            if (buttonRect(b).adjusted(-5, -(height() - 14) / 2, 5, (height() - 14) / 2).contains(p))
                 return b;
         return None;
     }
@@ -1277,9 +1278,11 @@ QRect DesktopArea::splitRect(int side) const
 
 QRect DesktopArea::dividerRect() const
 {
+    // The gap plus a finger's width over both windows' edges (it sits above them).
+    const int grab = 12;
     const QRect r = splitRect(0);
-    return splitVertical() ? QRect(r.left(), r.bottom() + 1, r.width(), kSplitGap)
-                           : QRect(r.right() + 1, r.top(), kSplitGap, r.height());
+    return splitVertical() ? QRect(r.left(), r.bottom() + 1 - grab, r.width(), kSplitGap + 2 * grab)
+                           : QRect(r.right() + 1 - grab, r.top(), kSplitGap + 2 * grab, r.height());
 }
 
 void DesktopArea::layoutSplit()
