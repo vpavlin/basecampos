@@ -1,0 +1,42 @@
+{
+  "author": "Alisher (xAlisher)",
+  "category": "development",
+  "dependencies": [],
+  "description": "Keychain stub: holds two Ed25519 test keys, registers their public halves with Keychain and signs what you approve.",
+  "display_name": "Stub Signer",
+  "icon": "icon.png",
+  "main": {},
+  "manifestVersion": "0.6.0",
+  "name": "keychain_signer",
+  "type": "ui_qml",
+  "version": "0.1.0",
+  "view": "qml/Main.qml",
+  "uses": [
+    {
+      "intent": "basecamp.keychain.register"
+    },
+    {
+      "intent": "basecamp.keychain.update"
+    },
+    {
+      "intent": "basecamp.keychain.remove"
+    },
+    {
+      "intent": "basecamp.keychain.keys"
+    },
+    {
+      "intent": "basecamp.keychain.complete"
+    },
+    {
+      "intent": "basecamp.keychain.reject"
+    }
+  ],
+  "provides": [
+    {
+      "intent": "keychain.sign"
+    },
+    {
+      "intent": "keychain.ended"
+    }
+  ]
+}

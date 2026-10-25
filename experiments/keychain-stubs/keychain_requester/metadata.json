@@ -1,0 +1,22 @@
+{
+  "author": "Alisher (xAlisher)",
+  "category": "development",
+  "dependencies": [],
+  "description": "Keychain stub: asks Keychain to sign a message, a login or a transaction, and checks the signature it gets back.",
+  "display_name": "Stub Requester",
+  "icon": "icon.png",
+  "main": {},
+  "manifestVersion": "0.6.0",
+  "name": "keychain_requester",
+  "type": "ui_qml",
+  "version": "0.1.0",
+  "view": "qml/Main.qml",
+  "uses": [
+    {
+      "intent": "basecamp.keychain.sign"
+    },
+    {
+      "intent": "basecamp.keychain.cancel"
+    }
+  ]
+}
