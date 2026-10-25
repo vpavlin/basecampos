@@ -309,3 +309,67 @@ default search app `basecamp/apps/basecamp_search/`; shared cards `basecamp/src/
 | 390 grid | 390 feed, Messages | 1280 |
 |---|---|---|
 | ![](shell-objects/390-grid-1.png) | ![](shell-objects/390-reply-sent.png) | ![](shell-objects/1280-grid-1.png) |
+
+## 13. Flood and keyboard: results
+
+Issues #27 (flood part), #46, #47, #48. Measured on the Basecampium home with the five stubs
+open, each one's Flood button pressed at the same time (the store keeps 5 x 500 = 2500). "Before"
+is the build before the flood fixes (8507ef8), "after" is f3640bc. All runs are headless
+(llvmpipe, software rendering), so absolute times are high; compare the columns, not the numbers
+with a real GPU.
+
+| What | 390 | 1280 | How measured |
+|---|---|---|---|
+| Publishes land (5 floods) | 32 to 203 ms | 32 to 220 ms | A recorder on `objectStore.changed`, time when each app reached its cap |
+| Results refreshed after the flood | 303 ms (before: 708) | 322 ms (before: 597) | A recorder on home's `allResults.resultsChanged` |
+| One query, text set to results shown | 183 to 337 ms (before: 253 to 515) | 191 to 266 ms (before: 260 to 558) | Home's field text set (1280) or `backend.setHomeQuery` (390); time to home's `rawQueryChanged` handler, so it includes the 100 ms wait after the last keystroke |
+| Longest UI stall per query | 96 to 216 ms (before: 250 to 515) | 109 to 208 ms (before: 260 to 558) | A 16 ms timer in home's engine; the stall is how late it fired |
+| Searches for one burst of 5 keystrokes | 1 | 1 (before: 6 per keystroke) | Count of "answered by" lines in the log |
+| UI stalls in the 60 s (390) or 200 s (1280) after the flood | none over 50 ms (before: about 0.4 s every 2.1 s for about 3 min) | none over 50 ms (before: the same) | The same 16 ms timer |
+| Feed order while idle after the flood | stays | stays (before: the top changed every 2.2 s) | No results change while idle; screenshots |
+| Host memory after the flood | 534 MB (446 MB before it) | 504 MB | PSS from `/proc/<pid>/smaps_rollup`; stubs and role apps run in the host |
+| Host CPU, idle after the flood | 3.6 % | 4.5 % | utime + stime over 10 s |
+| Baseline, 60 objects, one query | 87 to 364 ms, most about 105 | 101 to 267 ms, most about 105 | The same method; mostly the 100 ms wait |
+
+**What holds.** Counts, eviction and the rate limit were right before and still are. The
+mark-seen loop is gone: home now marks only what it showed, and marking no longer ranks again.
+Typing asks for one search per pause, not one per letter and per module.
+
+**What does not.** Each search over 2500 objects still blocks the UI for 100 to 200 ms (one run
+at 390 showed up to 440 ms, while the test window had lost its size, so it is left out). The
+ranking runs on the UI thread. After a flood, about 2400 objects stay unseen until they are
+scrolled into view; that is by design (only what was shown is marked), but the "N new" counts
+stay high.
+
+**Highlight (#46), as built.** The start of each word that a query word matches shows in the
+accent orange: card titles and subtitles, message, post, news and notification text, and app
+names in the Apps block. It uses the ranking's rule (case-insensitive, start of a word), so "12"
+in "12.00" is marked. Publisher text is escaped first, so a title with `<b>`, `&amp;` or
+`<img src=...>` shows the characters, never markup (unit tests). Recent apps are not marked,
+because that row is hidden while there is a query.
+
+**Esc (#47), as built.** Basecampium at 600 px and wider: Esc in home's field empties it, the pill
+stays, and a second Esc does nothing. Below 600 px, Esc and Back go back to the last tab, as
+before. Desktop overlay and Activity sidebar: Esc with text clears it, Esc with an empty field
+closes the surface. Esc from the dock or the top bar closes at once (unit test only).
+
+**Keys (#48), as built.** Down from the field moves into the results: Recent apps (Left and Right
+along the row), then the Apps block's rows, then the cards. In the modules view the arrows follow
+the screen: Left and Right along a module's row or columns, Up and Down to the line above or
+below. Up from the first row below Recent apps goes back to the tile you left. Enter does what a
+click does: Open, bring a running app forward, Install, or a card's first action. Typing on a
+result goes back to the field and adds the letter. Esc on a result goes back to the field and
+keeps the text. The focused result has a 2 px accent ring. Not on the phone layout, where the
+search is the shell's bar.
+
+How the keys were driven: QtTest `keyClick` from a test object in the host's engine. It sends to
+the focused top-level window, so the shell's key filter and the focused widget see the key as
+they would a real one. It is still not a physical keyboard.
+
+**Open, small.** A focused Recent apps tile moves its label up about 4 px. Enter on an Install
+row and on a card whose first action is a text field were not run headless. Screen reader output
+needs a person with Orca.
+
+| 1280, "flood 12" after the flood | 390, "ada" | 1280, keys on an app row | 1280, keys in a module |
+|---|---|---|---|
+| ![](shell-objects/flood-1280-highlight.png) | ![](shell-objects/390-ada-highlight.png) | ![](shell-objects/1280-keys-app-row.png) | ![](shell-objects/1280-keys-module.png) |
