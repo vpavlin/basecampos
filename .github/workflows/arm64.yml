@@ -80,7 +80,9 @@ jobs:
             nix build -L .#packages.aarch64-linux.duet-test-rootfs -o duet-rootfs
             nix build -L .#packages.aarch64-linux.duet-test-kernel -o duet-kernel
             mkdir -p out-duet/kernel
-            cp duet-rootfs/* lse-report.txt out-duet/
+            # The rootfs (3.8 GB) stays in the store: publishing splits it from
+            # there. Three copies filled the runner's disk (74ca827..732804c).
+            cp duet-rootfs/README.txt lse-report.txt out-duet/
             cp duet-kernel/Image out-duet/kernel/
             cp duet-kernel/dtbs/mediatek/mt8183-kukui-krane-sku*.dtb out-duet/kernel/
             # modules are a separate output of the kernel; its version names their dir
@@ -97,12 +99,14 @@ jobs:
           exec > >(tee diag/publish.log) 2>&1
           set -x
           gh --version; gh auth status || true
+          # Only the results are GC roots now: drop the build-time closure.
+          df -h / /nix; nix-collect-garbage >/dev/null 2>&1 || true; df -h / /nix
           tag=duet-test-${GITHUB_SHA::7}
           mkdir rel
           cp out-duet/kernel/Image out-duet/kernel/*.dtb out-duet/kernel/modules-version.txt rel/
           cp out-duet/lse-report.txt out-duet/README.txt rel/
           # release assets are limited to 2 GB each
-          split -b 1900M -d out-duet/basecampos-duet-rootfs.tar.zst rel/basecampos-duet-rootfs.tar.zst.part
+          split -b 1900M -d duet-rootfs/basecampos-duet-rootfs.tar.zst rel/basecampos-duet-rootfs.tar.zst.part
           # Delta against the previous Duet test release (store paths it lacks +
           # the full registration + profile links), and this release's own path
           # list for the next delta. Applying: see the notes below.
@@ -128,7 +132,8 @@ jobs:
           gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
             --title "Duet test build ${GITHUB_SHA::7}" \
             --notes "Duet test build (watchdog, 20-minute test window unless /var/lib/basecampos-test/keep exists, reports in /var/log/basecampos-test). Rootfs parts: cat basecampos-duet-rootfs.tar.zst.part* > basecampos-duet-rootfs.tar.zst. Kernel modules: $(cat rel/modules-version.txt). Image sha256: $(sha256sum rel/Image | cut -c1-16)…. $deltaNote"
-          for f in rel/*; do
+          # SHA256SUMS last: once it is there, everything it names is too.
+          for f in $(ls rel/* | grep -v '/SHA256SUMS$') rel/SHA256SUMS; do
             ok=
             for i in 1 2 3 4; do
               gh release upload "$tag" "$f" --clobber && { ok=1; break; }
