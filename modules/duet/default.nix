@@ -214,6 +214,11 @@ in
       enable = true;
       package = pkgs.pulseaudioFull;
     };
+    # The MT8183's speakers/headset only switch on through ALSA UCM profiles
+    # (alsa-ucm-conf has mt8183_mt6358_ts3a227_max98357); without them PulseAudio
+    # sees no usable output (silent, volume reads 0%). Debian finds them in /usr/share.
+    environment.sessionVariables.ALSA_CONFIG_UCM2 = "${pkgs.alsa-ucm-conf}/share/alsa/ucm2";
+    systemd.user.services.pulseaudio.environment.ALSA_CONFIG_UCM2 = "${pkgs.alsa-ucm-conf}/share/alsa/ucm2";
     hardware.bluetooth = {
       enable = true;
       powerOnBoot = true;
@@ -235,7 +240,7 @@ in
     environment.systemPackages = with pkgs; [
       swaybg swayidle swaylock waybar foot fuzzel wvkbd mako libnotify
       brightnessctl networkmanagerapplet wlr-randr grim wtype wl-mirror wayvnc
-      pulseaudio pavucontrol bluez blueman iw libinput evtest ffmpeg htop
+      pulseaudio pavucontrol alsa-utils bluez blueman iw libinput evtest ffmpeg htop
       portfolio-filemanager loupe brave python
       pipewire wireplumber libcamera
       iio-sensor-proxy
