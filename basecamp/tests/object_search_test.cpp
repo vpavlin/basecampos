@@ -1004,6 +1004,21 @@ void TestObjectSearch::testKeptCopyNothingStaleAfterAFlood()
     };
     check("seeded");
 
+    // Current state (#63), older than everything the flood brings: by age
+    // alone it would be evicted first, but it is kept, and the copy and the
+    // index must agree that it is.
+    QVariantList state;
+    for (int i = 0; i < 9; ++i)
+        state << obj(QStringLiteral("acct:%1").arg(i), "account", QStringLiteral("Account %1 ada").arg(i),
+                     now - 10 * kHour - i, { { "state", true } });
+    QCOMPARE(store->publish(kWallet, batch(state)), QString());
+    QVariantList memberships;
+    for (int i = 0; i < 5; ++i)
+        memberships << obj(QStringLiteral("community:%1").arg(i), "community", QStringLiteral("Guild %1").arg(i),
+                           now - 11 * kHour, { { "state", true } });
+    QCOMPARE(store->publish(QStringLiteral("posts_ui"), batch(memberships)), QString());
+    check("current state published");
+
     // The flood: five apps, two batches of 300 each; the store keeps 500 per app.
     const QStringList apps{ kWallet, kChat, kNews, QStringLiteral("explorer_ui"), QStringLiteral("posts_ui") };
     const QStringList words{ "ada", "bob", "tx", "news", "flood" };
@@ -1027,6 +1042,10 @@ void TestObjectSearch::testKeptCopyNothingStaleAfterAFlood()
         check("after idle preparation");
     }
     QCOMPARE(store->total(), 5 * ObjectStore::kMaxObjectsPerApp);
+    QCOMPARE(store->list({ { "types", QStringList{ "account" } } }).size(), 9);
+    QCOMPARE(store->list({ { "types", QStringList{ "community" } } }).size(), 5);
+    QCOMPARE(store->list({ { "apps", QStringList{ kWallet } }, { "types", QStringList{ "transaction", "message" } } }).size(),
+             ObjectStore::kMaxObjectsPerApp - 9);
 
     // The user looks: marking seen moves the unseen boost.
     QStringList toMark;

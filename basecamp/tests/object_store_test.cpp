@@ -91,6 +91,14 @@ private slots:
     void testIconFullBleedIsStampedPerApp();
     void testChangesSinceFollowsEveryChange();
     void testChangesSinceResetsWhenItCannotTell();
+    // basecamp-experiments#63: current state survives an app over its cap.
+    void testStateFlagIsStoredOnlyWhenTrue();
+    void testStateKeptWhenEventsFloodPastTheCap();
+    void testStateHasItsOwnCapOldestFirst();
+    void testStateBatchOverItsCapFails();
+    void testStateRepublishReplacesAndRetractRemoves();
+    void testFlaglessPublisherUnchangedBesideState();
+    void testOverTheRateRefusedBeforeValidation();
 
 private:
     ObjectStore* makeStore()
@@ -734,6 +742,213 @@ void TestObjectStore::testChangesSinceResetsWhenItCannotTell()
     const ObjectStore::Changes d = store->changesSince(now);
     QVERIFY(!d.reset);
     QCOMPARE(d.removed.size(), 1);
+}
+
+namespace {
+// An account: the current state a wallet keeps true (#63).
+QVariantMap account(const QString& key, qint64 time, const QString& amount = QStringLiteral("1.00"))
+{
+    return {
+        { QStringLiteral("key"), key },
+        { QStringLiteral("type"), QStringLiteral("account") },
+        { QStringLiteral("title"), QStringLiteral("Account ") + key },
+        { QStringLiteral("time"), time },
+        { QStringLiteral("state"), true },
+        { QStringLiteral("fields"), QVariantMap{
+              { QStringLiteral("name"), key },
+              { QStringLiteral("balance"), QVariantMap{ { QStringLiteral("amount"), amount },
+                                                        { QStringLiteral("unit"), QStringLiteral("TST") } } } } },
+    };
+}
+int stateCount(ObjectStore* store, const QString& app)
+{
+    int n = 0;
+    for (const QVariant& v : store->list({ { QStringLiteral("apps"), QStringList{ app } } }))
+        if (v.toMap().value(QStringLiteral("state")).toBool()) ++n;
+    return n;
+}
+} // namespace
+
+void TestObjectStore::testStateFlagIsStoredOnlyWhenTrue()
+{
+    std::unique_ptr<ObjectStore> store(makeStore());
+    QVariantMap off = tx(QStringLiteral("off"));
+    off[QStringLiteral("state")] = false;
+    QVERIFY(store->publish(kWallet, batch({ account(QStringLiteral("a"), 10), off, tx(QStringLiteral("plain")) })).isEmpty());
+    QCOMPARE(store->get(ObjectStore::idFor(kWallet, QStringLiteral("a"))).value(QStringLiteral("state")), QVariant(true));
+    QVERIFY(!store->get(ObjectStore::idFor(kWallet, QStringLiteral("off"))).contains(QStringLiteral("state")));
+    QVERIFY(!store->get(ObjectStore::idFor(kWallet, QStringLiteral("plain"))).contains(QStringLiteral("state")));
+
+    // Not a bool: the developer's to fix, the whole batch refused.
+    for (const QVariant& bad : { QVariant(QStringLiteral("true")), QVariant(1), QVariant(QVariantMap()) }) {
+        QVariantMap o = tx(QStringLiteral("bad"));
+        o[QStringLiteral("state")] = bad;
+        int index = -2;
+        QCOMPARE(store->publish(kChat, batch({ tx(QStringLiteral("ok")), o }), &index), QStringLiteral("bad_request"));
+        QCOMPARE(index, 1);
+    }
+    QCOMPARE(store->count(kChat), 0);
+}
+
+void TestObjectStore::testStateKeptWhenEventsFloodPastTheCap()
+{
+    std::unique_ptr<ObjectStore> store(makeStore());
+    // Nine pieces of current state, all OLDER than every event to come: by
+    // age alone they would be the first to go.
+    QVariantList state;
+    for (int i = 0; i < 9; ++i)
+        state << account(QStringLiteral("acct:%1").arg(i), 1 + i);
+    QVERIFY(store->publish(kWallet, batch(state)).isEmpty());
+    const quint64 v = store->version();
+
+    // 2000 events, 100 a request, in rate windows: four times the cap.
+    int seq = 0;
+    for (int r = 0; r < 20; ++r) {
+        if (r && r % 10 == 0) m_now += ObjectStore::kRateWindowMs;
+        QVariantList objs;
+        for (int i = 0; i < 100; ++i, ++seq)
+            objs << tx(QStringLiteral("ev:%1").arg(seq), 1000 + seq);
+        QVERIFY(store->publish(kWallet, batch(objs)).isEmpty());
+        QCOMPARE(store->count(kWallet), std::min(9 + seq, int(ObjectStore::kMaxObjectsPerApp)));
+        QCOMPARE(stateCount(store.get(), kWallet), 9);
+    }
+    // Every account kept, with its balance; the newest events fill the rest.
+    for (int i = 0; i < 9; ++i) {
+        const QVariantMap a = store->get(ObjectStore::idFor(kWallet, QStringLiteral("acct:%1").arg(i)));
+        QVERIFY2(!a.isEmpty(), qPrintable(QStringLiteral("acct:%1").arg(i)));
+        QCOMPARE(a.value(QStringLiteral("fields")).toMap().value(QStringLiteral("balance")).toMap()
+                     .value(QStringLiteral("amount")).toString(), QStringLiteral("1.00"));
+    }
+    const int events = ObjectStore::kMaxObjectsPerApp - 9;
+    QCOMPARE(store->list({ { QStringLiteral("types"), QStringList{ QStringLiteral("transaction") } } }).size(), events);
+    QVERIFY(store->get(ObjectStore::idFor(kWallet, QStringLiteral("ev:%1").arg(2000 - events - 1))).isEmpty());
+    QVERIFY(!store->get(ObjectStore::idFor(kWallet, QStringLiteral("ev:%1").arg(2000 - events))).isEmpty());
+    QVERIFY(!store->get(ObjectStore::idFor(kWallet, QStringLiteral("ev:1999"))).isEmpty());
+
+    // A reader that kept a copy sees exactly the evicted events go, no state.
+    const ObjectStore::Changes c = store->changesSince(v);
+    QVERIFY(!c.reset);
+    QCOMPARE(c.removed.size(), 2000 - events);
+    for (int i = 0; i < 9; ++i)
+        QVERIFY(!c.removed.contains(ObjectStore::idFor(kWallet, QStringLiteral("acct:%1").arg(i))));
+    QCOMPARE(c.changed.size(), events);
+}
+
+void TestObjectStore::testStateHasItsOwnCapOldestFirst()
+{
+    std::unique_ptr<ObjectStore> store(makeStore());
+    QVariantList first;
+    for (int i = 0; i < ObjectStore::kMaxStatePerApp; ++i)
+        first << account(QStringLiteral("s%1").arg(i), 100 + i);
+    QVERIFY(store->publish(kWallet, batch(first)).isEmpty());
+    QVERIFY(store->publish(kWallet, batch({ tx(QStringLiteral("ev"), 5) })).isEmpty());
+    QCOMPARE(stateCount(store.get(), kWallet), ObjectStore::kMaxStatePerApp);
+
+    // Three more, one of them older than all: over the state cap, the
+    // oldest state goes (the old new one, then s0, s1), not the event.
+    QVERIFY(store->publish(kWallet, batch({ account(QStringLiteral("n1"), 900), account(QStringLiteral("n2"), 901),
+                                            account(QStringLiteral("old"), 50) })).isEmpty());
+    QCOMPARE(stateCount(store.get(), kWallet), ObjectStore::kMaxStatePerApp);
+    QCOMPARE(store->count(kWallet), ObjectStore::kMaxStatePerApp + 1);
+    for (const char* gone : { "old", "s0", "s1" })
+        QVERIFY2(store->get(ObjectStore::idFor(kWallet, QLatin1String(gone))).isEmpty(), gone);
+    for (const char* kept : { "s2", "n1", "n2", "ev" })
+        QVERIFY2(!store->get(ObjectStore::idFor(kWallet, QLatin1String(kept))).isEmpty(), kept);
+    // Per app: another app's state is its own.
+    QVERIFY(store->publish(kChat, batch({ account(QStringLiteral("s0"), 1) })).isEmpty());
+    QCOMPARE(stateCount(store.get(), kChat), 1);
+}
+
+void TestObjectStore::testStateBatchOverItsCapFails()
+{
+    std::unique_ptr<ObjectStore> store(makeStore());
+    QVariantList objs;
+    for (int i = 0; i < ObjectStore::kMaxStatePerApp + 1; ++i)
+        objs << account(QStringLiteral("s%1").arg(i), 100 + i);
+    QCOMPARE(store->publish(kWallet, batch(objs)), QStringLiteral("failed"));
+    QCOMPARE(store->count(), 0);
+    // The same count without the flag is an ordinary batch.
+    for (QVariant& o : objs) { QVariantMap m = o.toMap(); m.remove(QStringLiteral("state")); o = m; }
+    QVERIFY(store->publish(kWallet, batch(objs)).isEmpty());
+    QCOMPARE(store->count(kWallet), ObjectStore::kMaxStatePerApp + 1);
+}
+
+void TestObjectStore::testStateRepublishReplacesAndRetractRemoves()
+{
+    std::unique_ptr<ObjectStore> store(makeStore());
+    QVERIFY(store->publish(kWallet, batch({ account(QStringLiteral("acct"), 10, QStringLiteral("1.00")) })).isEmpty());
+    const QString id = ObjectStore::idFor(kWallet, QStringLiteral("acct"));
+    store->markSeen({ id });
+
+    // Same key: replaced in place, still state, still seen (an update is not news).
+    QVERIFY(store->publish(kWallet, batch({ account(QStringLiteral("acct"), 20, QStringLiteral("2.50")) })).isEmpty());
+    QCOMPARE(store->count(kWallet), 1);
+    QVariantMap a = store->get(id);
+    QCOMPARE(a.value(QStringLiteral("fields")).toMap().value(QStringLiteral("balance")).toMap()
+                 .value(QStringLiteral("amount")).toString(), QStringLiteral("2.50"));
+    QCOMPARE(a.value(QStringLiteral("state")), QVariant(true));
+    QCOMPARE(a.value(QStringLiteral("seen")).toBool(), true);
+
+    // Then a full cap of newer events: it stays.
+    for (int r = 0; r < 5; ++r) {
+        QVariantList objs;
+        for (int i = 0; i < 100; ++i) objs << tx(QStringLiteral("ev:%1").arg(r * 100 + i), 1000 + r * 100 + i);
+        QVERIFY(store->publish(kWallet, batch(objs)).isEmpty());
+    }
+    QVERIFY(!store->get(id).isEmpty());
+    QCOMPARE(store->count(kWallet), ObjectStore::kMaxObjectsPerApp);
+
+    // Retract removes it like anything else.
+    const quint64 v = store->version();
+    QVERIFY(store->retract(kWallet, { { QStringLiteral("keys"), QStringList{ QStringLiteral("acct") } } }).isEmpty());
+    QVERIFY(store->get(id).isEmpty());
+    QCOMPARE(store->changesSince(v).removed, QStringList{ id });
+
+    // The flag is per publish: republished without it, it is an event again,
+    // and the oldest one at that.
+    QVERIFY(store->publish(kWallet, batch({ account(QStringLiteral("acct"), 10) })).isEmpty());
+    QVariantMap plain = account(QStringLiteral("acct"), 10);
+    plain.remove(QStringLiteral("state"));
+    m_now += ObjectStore::kRateWindowMs;
+    QVERIFY(store->publish(kWallet, batch({ plain, tx(QStringLiteral("ev:new"), 99'999) })).isEmpty());
+    QVERIFY(store->get(id).isEmpty());
+    QCOMPARE(store->count(kWallet), ObjectStore::kMaxObjectsPerApp);
+}
+
+void TestObjectStore::testFlaglessPublisherUnchangedBesideState()
+{
+    // One app floods events with no flag: eviction is by age as before, even
+    // while another app in the same store keeps state.
+    std::unique_ptr<ObjectStore> store(makeStore());
+    QVERIFY(store->publish(kChat, batch({ account(QStringLiteral("acct"), 1) })).isEmpty());
+    for (int r = 0; r < 6; ++r) {
+        QVariantList objs;
+        for (int i = 0; i < 100; ++i) objs << tx(QStringLiteral("tx:%1").arg(r * 100 + i), 10'000 + r * 100 + i);
+        QVERIFY(store->publish(kWallet, batch(objs)).isEmpty());
+    }
+    QCOMPARE(store->count(kWallet), ObjectStore::kMaxObjectsPerApp);
+    QVERIFY(store->get(ObjectStore::idFor(kWallet, QStringLiteral("tx:99"))).isEmpty());
+    QVERIFY(!store->get(ObjectStore::idFor(kWallet, QStringLiteral("tx:100"))).isEmpty());
+    QCOMPARE(stateCount(store.get(), kWallet), 0);
+    QCOMPARE(store->count(kChat), 1);
+    for (const QVariant& v : store->list({ { QStringLiteral("apps"), QStringList{ kWallet } } }))
+        QVERIFY(!v.toMap().contains(QStringLiteral("state")));
+}
+
+// A flood sends many requests at once: over the rate they are refused before
+// any object is validated, and a bad batch still does not use up the rate.
+void TestObjectStore::testOverTheRateRefusedBeforeValidation()
+{
+    std::unique_ptr<ObjectStore> store(makeStore());
+    QVariantMap bad = tx(QStringLiteral("bad"));
+    bad.remove(QStringLiteral("title"));
+    for (int i = 0; i < 3; ++i)
+        QCOMPARE(store->publish(kWallet, batch({ bad })), QStringLiteral("bad_request"));
+    for (int i = 0; i < ObjectStore::kRateRequests; ++i)
+        QCOMPARE(store->publish(kWallet, batch({ tx(QStringLiteral("tx:%1").arg(i)) })), QString());
+    QCOMPARE(store->publish(kWallet, batch({ bad })), QStringLiteral("failed"));
+    QCOMPARE(store->publish(kWallet, batch({ tx(QStringLiteral("tx:over")) })), QStringLiteral("failed"));
+    QCOMPARE(store->count(kWallet), ObjectStore::kRateRequests);
 }
 
 QTEST_GUILESS_MAIN(TestObjectStore)

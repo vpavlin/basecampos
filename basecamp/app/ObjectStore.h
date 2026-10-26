@@ -36,6 +36,11 @@ class ObjectStore : public QObject {
 public:
     // Spec §3 and §8. Per app unless stated.
     static constexpr int kMaxObjectsPerApp = 500;
+    // Of those, how many may be current state (`state: true`, spec §8,
+    // basecamp-experiments#63): kept when the app is over its cap, so events
+    // never push them out, and capped on their own so the flag is not a way
+    // round the 500.
+    static constexpr int kMaxStatePerApp = 50;
     static constexpr int kRateRequests = 20;          // publish requests…
     static constexpr int kRateWindowMs = 10 * 1000;   // …per 10 s
     static constexpr int kMaxFieldsBytes = 2048;      // `fields`, serialized
@@ -61,7 +66,8 @@ public:
     // Validate and store a batch from `app`: `{ objects: [ envelope, … ] }`.
     // All or nothing. Returns "" on success, else an intent error code:
     //   bad_request  the batch, or object *badIndex (-1: the batch itself)
-    //   failed       over a limit (rate, fields size, a batch over 500)
+    //   failed       over a limit (rate, fields size, a batch over 500 or
+    //                with more than 50 current-state objects)
     // A switched-off app gets "" too, so it cannot learn the user's choice, but
     // nothing is kept. `ids` receives each object's id, in batch order.
     QString publish(const QString& app, const QVariantMap& params,
@@ -162,7 +168,9 @@ private:
     QString publishBatch(const QString& app, const QVariantMap& params,
                          int* badIndex, QStringList* ids, bool fromHost);
     qint64 now() const;
-    bool allow(const QString& app);
+    // Whether `app` may publish now (20 per 10 s); records the request
+    // unless `record` is false.
+    bool allow(const QString& app, bool record = true);
     // Validate one envelope. Returns the cleaned object (host fields not yet
     // set) or an empty map with *error set.
     QVariantMap validate(const QString& app, int index, const QVariantMap& in,

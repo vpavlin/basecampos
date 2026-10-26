@@ -177,7 +177,7 @@ const QStringList kEnvelopeFields = {
     QStringLiteral("title"), QStringLiteral("subtitle"), QStringLiteral("fields"),
     QStringLiteral("keywords"), QStringLiteral("subjects"), QStringLiteral("refs"),
     QStringLiteral("actions"), QStringLiteral("progress"), QStringLiteral("time"),
-    QStringLiteral("expires"),
+    QStringLiteral("expires"), QStringLiteral("state"),
 };
 const QStringList kHostFields = {
     QStringLiteral("id"), QStringLiteral("app"), QStringLiteral("updated"),
@@ -241,7 +241,7 @@ QString ObjectStore::idFor(const QString& app, const QString& key)
     return QStringLiteral("o") + QString::fromLatin1(digest.toHex().left(20));
 }
 
-bool ObjectStore::allow(const QString& app)
+bool ObjectStore::allow(const QString& app, bool record)
 {
     const qint64 t = now();
     auto& times = m_recent[app];
@@ -249,7 +249,8 @@ bool ObjectStore::allow(const QString& app)
         times.pop_front();
     if (int(times.size()) >= kRateRequests)
         return false;
-    times.push_back(t);
+    if (record)
+        times.push_back(t);
     return true;
 }
 
@@ -409,6 +410,16 @@ QVariantMap ObjectStore::validate(const QString& app, int index, const QVariantM
             return bad(QStringLiteral("`progress` must be 0..100"));
         out[QStringLiteral("progress")] = p.toDouble();
     }
+    // Current state (an account, a membership) rather than an event: kept
+    // when the app is over its cap (evict()). Only `true` is stored, so a
+    // flagless publisher's envelopes are exactly what they were.
+    if (in.contains(QStringLiteral("state"))) {
+        const QVariant st = in.value(QStringLiteral("state"));
+        if (!isBool(st))
+            return bad(QStringLiteral("`state` must be true or false"));
+        if (st.toBool())
+            out[QStringLiteral("state")] = true;
+    }
     for (const char* name : { "time", "expires" }) {
         const QString n = QLatin1String(name);
         if (!in.contains(n)) continue;
@@ -443,6 +454,15 @@ QString ObjectStore::publishBatch(const QString& app, const QVariantMap& params,
         qWarning().noquote() << "ObjectStore:" << app << "publish refused — `objects` must be a list";
         return QStringLiteral("bad_request");
     }
+    // Over the rate, refused before any object is looked at: an app that
+    // floods sends many requests at once, and validating each batch only to
+    // refuse it held the UI thread (basecamp-experiments#63). The request is
+    // counted below, once it is valid, so a bad batch still costs nothing.
+    if (!fromHost && !allow(app, /*record=*/false)) {
+        qWarning().noquote() << "ObjectStore:" << app << "publish refused — over"
+                             << kRateRequests << "requests per" << kRateWindowMs / 1000 << "s";
+        return QStringLiteral("failed");
+    }
     const QVariantList objects = objectsV.toList();
     if (objects.size() > kMaxObjectsPerApp) {
         qWarning().noquote() << "ObjectStore:" << app << "publish refused —" << objects.size()
@@ -476,6 +496,15 @@ QString ObjectStore::publishBatch(const QString& app, const QVariantMap& params,
         }
         batchKeys.insert(o.value(QStringLiteral("key")).toString());
         clean << o;
+    }
+    const auto stateInBatch = std::count_if(clean.cbegin(), clean.cend(), [](const QVariantMap& o) {
+        return o.value(QStringLiteral("state")).toBool();
+    });
+    if (stateInBatch > kMaxStatePerApp) {
+        qWarning().noquote() << "ObjectStore:" << app << "publish refused —" << stateInBatch
+                             << "current-state objects in one batch, more than the" << kMaxStatePerApp
+                             << "an app may keep";
+        return QStringLiteral("failed");
     }
 
     if (!fromHost && !allow(app)) {
@@ -570,22 +599,40 @@ void ObjectStore::removeIds(const QString& app, const QStringList& ids)
 void ObjectStore::evict(const QString& app)
 {
     auto mine = m_byApp.find(app);
-    if (mine == m_byApp.end() || mine->size() <= kMaxObjectsPerApp)
+    if (mine == m_byApp.end() || mine->size() <= kMaxStatePerApp)
         return;
     // Oldest `time` first (spec §8); ties broken by id so the result does not
-    // depend on hash order.
-    QList<QPair<qint64, QString>> byTime;
-    for (const QString& id : std::as_const(*mine))
-        byTime << qMakePair(m_objects.value(id).value(QStringLiteral("time")).toLongLong(), id);
-    std::sort(byTime.begin(), byTime.end());
-    const int excess = mine->size() - kMaxObjectsPerApp;
-    for (int i = 0; i < excess; ++i) {
-        mine->remove(byTime.at(i).second);
-        m_objects.remove(byTime.at(i).second);
-        dropped(byTime.at(i).second);
+    // depend on hash order. Current state and events are two queues: state
+    // over its own cap loses its oldest, then the app over its cap loses its
+    // oldest EVENTS. State is at most kMaxStatePerApp of kMaxObjectsPerApp,
+    // so there are always enough events to evict and state never goes to
+    // make room for them (basecamp-experiments#63).
+    QList<QPair<qint64, QString>> states, events;
+    for (const QString& id : std::as_const(*mine)) {
+        const QVariantMap o = m_objects.value(id);
+        (o.value(QStringLiteral("state")).toBool() ? states : events)
+            << qMakePair(o.value(QStringLiteral("time")).toLongLong(), id);
     }
-    qWarning().noquote() << "ObjectStore:" << app << "over" << kMaxObjectsPerApp
-                         << "objects — evicted the" << excess << "oldest";
+    const int stateExcess = int(states.size()) - kMaxStatePerApp;
+    const int eventExcess = int(mine->size()) - std::max(0, stateExcess) - kMaxObjectsPerApp;
+    auto drop = [&](QList<QPair<qint64, QString>>& queue, int n) {
+        std::sort(queue.begin(), queue.end());
+        for (int i = 0; i < n; ++i) {
+            mine->remove(queue.at(i).second);
+            m_objects.remove(queue.at(i).second);
+            dropped(queue.at(i).second);
+        }
+    };
+    if (stateExcess > 0) {
+        drop(states, stateExcess);
+        qWarning().noquote() << "ObjectStore:" << app << "over" << kMaxStatePerApp
+                             << "current-state objects — evicted the" << stateExcess << "oldest";
+    }
+    if (eventExcess > 0) {
+        drop(events, eventExcess);
+        qWarning().noquote() << "ObjectStore:" << app << "over" << kMaxObjectsPerApp
+                             << "objects — evicted the" << eventExcess << "oldest events";
+    }
 }
 
 void ObjectStore::removeApp(const QString& app)
