@@ -303,7 +303,7 @@ public:
     // set by the home app; "" = the shell's own ("Search apps…").
     Q_INVOKABLE void setHomePlaceholder(const QString& text);
     Q_INVOKABLE QString homePlaceholder() const { return m_homePlaceholder; }
-    // What a home app keeps of its own (its modules and their layout,
+    // What a home app keeps of its own (its widgets and their layout,
     // basecamp-experiments#51), stored by the shell for it (HomeSettingsStore).
     QVariantMap homeSettings(const QString& app) const;
     bool setHomeSettings(const QString& app, const QVariantMap& settings);

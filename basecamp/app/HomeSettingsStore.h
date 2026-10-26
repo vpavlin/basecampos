@@ -4,7 +4,7 @@
 #include <QVariantMap>
 
 // What the app filling the `home` role keeps of its own across restarts: its
-// modules and their layout on the grid (basecamp-experiments#51). The shell
+// widgets and their layout on the grid (basecamp-experiments#51). The shell
 // stores it for the app (ShellApi::saveHomeSettings), since a sandboxed role
 // app has no storage of its own. Opaque to the host: one JSON object per
 // app, so another app given the role later starts from nothing and never
@@ -16,7 +16,7 @@
 // last save.
 class HomeSettingsStore {
 public:
-    // Larger settings are refused (a few modules and four layouts are ~5 KB).
+    // Larger settings are refused (a few widgets and four layouts are ~5 KB).
     static constexpr int kMaxBytes = 64 * 1024;
 
     explicit HomeSettingsStore(QString filePath);

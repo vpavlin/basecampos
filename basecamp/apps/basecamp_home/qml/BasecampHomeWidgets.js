@@ -1,6 +1,6 @@
 .pragma library
 
-// Home's pills, modules and feed (SHELL-OBJECTS-SPEC §7) as pure functions
+// Home's pills, widgets and feed (SHELL-OBJECTS-SPEC §7) as pure functions
 // over envelopes, so they are unit-tested outside QML
 // (tests/object_cards_test.cpp). NewTabPage.qml holds the state; nothing
 // here talks to the shell.
@@ -8,19 +8,19 @@
 // (A file name no other bundled app uses: two ui_qml apps shipping a file of
 // the same name collide, spec §11.)
 
-// The sizes modules had before the grid: only the first layout reads them
-// (migrateLayout); a module's block is its size now (#53).
+// The sizes widgets had before the grid: only the first layout reads them
+// (migrateLayout); a widget's block is its size now (#53).
 var kSizes = ["small", "medium", "large", "row"]
 
 // The host keeps 8 live results per view (ObjectSearch::kMaxLivePerView):
-// one for the pills and the feed, one per module.
-var kMaxModules = 7
+// one for the pills and the feed, one per widget.
+var kMaxWidgets = 7
 
 var kMaxNameLength = 40
 var kMaxQueryLength = 80
 
-// Basecamp's starting modules: saved filters, not data.
-function defaultModules() {
+// Basecamp's starting widgets: saved filters, not data.
+function defaultWidgets() {
     return [
         { id: "transactions", name: "Transactions", query: "", filter: { types: ["transaction"] },
           size: "large", pinned: false, notify: true, custom: false },
@@ -37,7 +37,7 @@ function defaultModules() {
 
 function str(v) { return typeof v === "string" ? v : "" }
 
-// A list as a JS array. One that came through C++ (a module as a model's
+// A list as a JS array. One that came through C++ (a widget as a model's
 // modelData, an envelope from ObjectResults.get()) is a sequence object that
 // Array.isArray() says no to; anything that is not a list is [].
 function arr(v) {
@@ -55,9 +55,9 @@ function strings(v) {
     return out
 }
 
-// A module as home stores it: { id, name, query, filter { types?, apps? },
+// A widget as home stores it: { id, name, query, filter { types?, apps? },
 // size, pinned, notify, custom }. Anything else is dropped.
-function sanitizeModule(m) {
+function sanitizeWidget(m) {
     m = m || {}
     var filter = {}
     var f = m.filter || {}
@@ -77,42 +77,42 @@ function sanitizeModule(m) {
     }
 }
 
-// Pinned modules first; otherwise the saved order.
-function ordered(modules) {
+// Pinned widgets first; otherwise the saved order.
+function ordered(widgets) {
     var pinned = [], rest = []
-    for (var i = 0; i < modules.length; ++i)
-        (modules[i].pinned ? pinned : rest).push(modules[i])
+    for (var i = 0; i < widgets.length; ++i)
+        (widgets[i].pinned ? pinned : rest).push(widgets[i])
     return pinned.concat(rest)
 }
 
-// "Add custom module": the current query and pill as a new module, or null
-// when home already has kMaxModules or the same module exists.
-function addModule(modules, name, query, pill) {
-    if (modules.length >= kMaxModules) return null
-    var m = sanitizeModule({ name: name, query: query, filter: pillFilter(pill),
+// "Add custom widget": the current query and pill as a new widget, or null
+// when home already has kMaxWidgets or the same widget exists.
+function addWidget(widgets, name, query, pill) {
+    if (widgets.length >= kMaxWidgets) return null
+    var m = sanitizeWidget({ name: name, query: query, filter: pillFilter(pill),
                              size: "medium", notify: true, custom: true })
     if (m.name.length === 0) return null
-    for (var i = 0; i < modules.length; ++i) {
-        var o = modules[i]
+    for (var i = 0; i < widgets.length; ++i) {
+        var o = widgets[i]
         if (o.name === m.name || (o.query === m.query
                                   && JSON.stringify(o.filter) === JSON.stringify(m.filter)))
             return null
     }
     var n = 1
-    var ids = modules.map(function (o) { return o.id })
+    var ids = widgets.map(function (o) { return o.id })
     while (ids.indexOf("custom-" + n) >= 0) ++n
     m.id = "custom-" + n
-    return modules.concat([m])
+    return widgets.concat([m])
 }
 
-function updateModule(modules, id, change) {
-    return modules.map(function (m) {
-        return m.id === id ? sanitizeModule(Object.assign({}, m, change)) : m
+function updateWidget(widgets, id, change) {
+    return widgets.map(function (m) {
+        return m.id === id ? sanitizeWidget(Object.assign({}, m, change)) : m
     })
 }
 
-function removeModule(modules, id) {
-    return modules.filter(function (m) { return m.id !== id })
+function removeWidget(widgets, id) {
+    return widgets.filter(function (m) { return m.id !== id })
 }
 
 // ── pills ───────────────────────────────────────────────────────────────
@@ -125,14 +125,14 @@ function pillFilter(pill) {
     return f
 }
 
-// A module's filter narrowed by the pill, or null when the two exclude each
-// other (a Messages module under the Transactions pill shows nothing).
-function effectiveFilter(moduleFilter, pill) {
-    moduleFilter = moduleFilter || {}
+// A widget's filter narrowed by the pill, or null when the two exclude each
+// other (a Messages widget under the Transactions pill shows nothing).
+function effectiveFilter(widgetFilter, pill) {
+    widgetFilter = widgetFilter || {}
     var out = {}
     var keys = [["types", "type"], ["apps", "app"]]
     for (var i = 0; i < keys.length; ++i) {
-        var m = strings(moduleFilter[keys[i][0]])
+        var m = strings(widgetFilter[keys[i][0]])
         var p = pill ? str(pill[keys[i][1]]) : ""
         if (p.length > 0) {
             if (m.length > 0 && m.indexOf(p) < 0) return null
@@ -141,10 +141,10 @@ function effectiveFilter(moduleFilter, pill) {
             out[keys[i][0]] = m
         }
     }
-    var kinds = strings(moduleFilter.kinds), subjects = strings(moduleFilter.subjects)
+    var kinds = strings(widgetFilter.kinds), subjects = strings(widgetFilter.subjects)
     if (kinds.length > 0) out.kinds = kinds
     if (subjects.length > 0) out.subjects = subjects
-    if (moduleFilter.unseenOnly === true) out.unseenOnly = true
+    if (widgetFilter.unseenOnly === true) out.unseenOnly = true
     return out
 }
 
@@ -222,7 +222,7 @@ function addUnseen(newIds, envelopes) {
     return { map: map, added: added }
 }
 
-// A name for "Add module": "Transactions: btc", "btc" or "Transactions".
+// A name for "Add widget": "Transactions: btc", "btc" or "Transactions".
 function customName(query, pillLabel) {
     query = str(query).trim()
     pillLabel = str(pillLabel).trim()
@@ -240,7 +240,7 @@ function newCount(rows, newIds) {
 }
 
 // Keeps the order a visit started with. Marking objects seen re-ranks them
-// (the unseen boost goes), and a module's rows must not jump under the user's
+// (the unseen boost goes), and a widget's rows must not jump under the user's
 // finger: ids already shown keep their places, new ids go first in rank
 // order. `prev` is the map this returned last time (id -> place), or null to
 // start over. Returns { ids, map }.
@@ -259,29 +259,31 @@ function stableOrder(prev, ids) {
 
 // ── cell grid (basecamp-experiments#49) ─────────────────────────────────
 
-// Home's modules on a grid of cells that scrolls down: as many columns as the
-// width takes (columnsFor), rows of one fixed height. A layout is
+// Home's widgets on a grid of cells that scrolls down: as many columns as the
+// window's width takes (columnsFor), rows of one fixed height. A layout is
 // { columns, blocks: [{ id, x, y, w, h }] }, in cells: `w` columns wide
 // (1..columns), `h` rows tall (kMinRows or more). Home keeps one per column
 // count it was arranged at; one it has none for is derived (layoutFor).
 
 var kRowHeight = 120
 var kMinRows = 2
-var kMaxColumns = 4
-// A module added since the layout was saved.
+var kMaxColumns = 8
+// A widget added since the layout was saved.
 var kNewBlock = { w: 1, h: 3 }
 
-// Columns for a grid `width` px wide: under 600 one, then one more every
-// 400 px, at most four.
+// Columns for a page (the window) `width` px wide, not the grid inside its
+// side margins: under 600 one, then one more every 400 px (2 from 600, 3
+// from 1000, 4 from 1400, 5 from 1800 ... 8 from 3000), at most kMaxColumns.
 function columnsFor(width) {
-    return width >= 1400 ? 4 : width >= 1000 ? 3 : width >= 600 ? 2 : 1
+    if (!(width >= 600)) return 1
+    return Math.min(kMaxColumns, 2 + Math.floor((width - 600) / 400))
 }
 
 function cell(v, fallback) {
     return typeof v === "number" && isFinite(v) ? Math.round(v) : fallback
 }
 
-// Lower than any grid home makes (kMaxModules cards of kMaxRows): a row
+// Lower than any grid home makes (kMaxWidgets cards of kMaxRows): a row
 // further down is from a broken save, and compact lifts it anyway.
 var kMaxY = 256
 
@@ -454,13 +456,13 @@ function fitTo(layout, columns) {
     return compact({ columns: columns, blocks: flow(readingOrder(layout.blocks), columns) })
 }
 
-// The first layout, from the size and pin modules had before the grid:
+// The first layout, from the size and pin widgets had before the grid:
 // pinned first, then the saved order; small, medium and large are 2, 3 and 4
 // rows, large two columns wide; a row (one sideways strip of cards) is the
 // whole width and 2 rows.
-function migrateLayout(modules, columns) {
+function migrateLayout(widgets, columns) {
     var kHeights = { small: 2, medium: 3, large: 4, row: 2 }
-    var blocks = ordered(modules).map(function (m) {
+    var blocks = ordered(widgets).map(function (m) {
         return {
             id: m.id,
             x: 0, y: 0,
@@ -471,7 +473,7 @@ function migrateLayout(modules, columns) {
     return compact({ columns: columns, blocks: flow(blocks, columns) })
 }
 
-// A saved layout made safe: blocks clamped, ones for modules home no longer
+// A saved layout made safe: blocks clamped, ones for widgets home no longer
 // has (or twice) dropped, overlaps settled. Null when there is none.
 function cleanLayout(layout, columns, ids) {
     if (!layout || typeof layout !== "object") return null
@@ -486,10 +488,10 @@ function cleanLayout(layout, columns, ids) {
 
 // The layout home shows at `columns`: the one saved for it, else one derived
 // from the widest saved (fitTo), else the migrated first one. `saved` maps a
-// column count to a layout. Modules added since get a kNewBlock at the end;
+// column count to a layout. Widgets added since get a kNewBlock at the end;
 // removed ones drop out.
-function layoutFor(saved, columns, modules) {
-    var ids = modules.map(function (m) { return m.id })
+function layoutFor(saved, columns, widgets) {
+    var ids = widgets.map(function (m) { return m.id })
     saved = saved || {}
     var base = cleanLayout(saved[columns], columns, ids)
     if (!base) {
@@ -498,11 +500,11 @@ function layoutFor(saved, columns, modules) {
             if (saved.hasOwnProperty(k) && Number(k) > widest && saved[k] && Number(k) <= kMaxColumns)
                 widest = Number(k)
         var from = widest > 0 ? cleanLayout(saved[widest], widest, ids) : null
-        if (!from) return migrateLayout(modules, columns)
+        if (!from) return migrateLayout(widgets, columns)
         base = fitTo(from, columns)
     }
     var has = base.blocks.map(function (b) { return b.id })
-    var added = ordered(modules).filter(function (m) { return has.indexOf(m.id) < 0 })
+    var added = ordered(widgets).filter(function (m) { return has.indexOf(m.id) < 0 })
         .map(function (m) { return { id: m.id, x: 0, y: 0, w: kNewBlock.w, h: kNewBlock.h } })
     if (added.length === 0) return base
     return compact({ columns: columns, blocks: base.blocks.concat(flow(added, columns, base.blocks)) })
@@ -518,15 +520,17 @@ function withoutHidden(layout, hiddenIds) {
     return fitTo({ columns: layout.columns, blocks: shown }, layout.columns)
 }
 
-// Saved layouts (column count -> layout) without blocks for modules that are
-// gone, so a module added later with a removed one's id starts fresh.
-function pruneLayouts(layouts, modules) {
-    var ids = (modules || []).map(function (m) { return m.id })
+// Saved layouts (column count -> layout) without blocks for widgets that are
+// gone, so a widget added later with a removed one's id starts fresh.
+function pruneLayouts(layouts, widgets) {
+    var ids = (widgets || []).map(function (m) { return m.id })
     var out = {}
     for (var k in (layouts || {})) {
         var l = layouts[k]
-        if (!l || !Array.isArray(l.blocks)) continue
-        out[k] = { columns: l.columns, blocks: l.blocks.filter(function (b) {
+        // A layout read back from the saved settings has its blocks as a
+        // list from C++, which Array.isArray() says no to (arr takes it).
+        if (!l || typeof l !== "object" || !l.blocks || typeof l.blocks !== "object") continue
+        out[k] = { columns: l.columns, blocks: arr(l.blocks).filter(function (b) {
             return b && ids.indexOf(b.id) >= 0 }) }
     }
     return out
@@ -605,17 +609,17 @@ function snapSize(w, h, pitchX, pitchY, gap, limits) {
 }
 
 // ── cards fit their block (basecamp-experiments#53) ────────────────────
-// A module's block decides what it draws: its height how many items show
+// A widget's block decides what it draws: its height how many items show
 // (whole ones only), its width how many columns of them. Two rows tall it
 // draws one-line rows instead of item cards.
 
-// An item card is at least this wide (px); a module has 1 to 3 columns.
+// An item card is at least this wide (px); a widget has 1 to 3 columns.
 var kMinItemWidth = 300
 var kMaxItemColumns = 3
 // The shortest an item is: a one-line row is one touch target tall.
 var kMinItemHeight = 44
 
-// Columns of items in a module whose content is `width` px wide, with
+// Columns of items in a widget whose content is `width` px wide, with
 // `spacing` between them.
 function itemColumns(width, spacing) {
     var n = Math.floor((width + spacing) / (kMinItemWidth + spacing))
@@ -628,7 +632,7 @@ function compactRows(h) {
 }
 
 // The most items that could fit in `available` px on `columns`: what a
-// module builds before it measures them (each is kMinItemHeight or more).
+// widget builds before it measures them (each is kMinItemHeight or more).
 function candidateCount(available, columns, spacing) {
     if (!(available >= kMinItemHeight)) return 0
     return Math.max(1, columns) * Math.floor((available + spacing) / (kMinItemHeight + spacing))
@@ -694,24 +698,32 @@ function keyResize(layout, id, dw, dh, limits) {
     return resize(layout, id, w, h)
 }
 
-// What home saves through the shell (shell.saveHomeSettings): its modules
-// and their layouts, one per column count.
-function settingsOf(modules, layouts) {
-    return { version: 1, modules: modules, layouts: layouts }
+// What home saves through the shell (shell.saveHomeSettings): its widgets
+// and their layouts, one per column count. Only `widgets`: the shell keeps
+// what home saves as a whole, so the next save drops a kOldWidgetsKey list.
+function settingsOf(widgets, layouts) {
+    return { version: 1, widgets: widgets, layouts: layouts }
 }
 
-// The modules and layouts in what was saved, made safe; the defaults and no
-// layouts when nothing usable was. A module list may be empty (all removed).
+// The key home's widgets were saved under while they were called modules.
+// Read when `widgets` is absent (fromSettings), never written.
+var kOldWidgetsKey = "modules"
+
+// The widgets and layouts in what was saved, made safe; the defaults and no
+// layouts when nothing usable was. A widget list may be empty (all removed).
+// Settings from before the rename keep their list under kOldWidgetsKey.
 function fromSettings(settings) {
-    var out = { modules: defaultModules().map(sanitizeModule), layouts: {} }
+    var out = { widgets: defaultWidgets().map(sanitizeWidget), layouts: {} }
     if (!settings || typeof settings !== "object" || settings.version !== 1) return out
-    if (settings.modules !== undefined && settings.modules !== null && typeof settings.modules === "object") {
+    var saved = settings.widgets
+    if (saved === undefined) saved = settings[kOldWidgetsKey]
+    if (saved !== undefined && saved !== null && typeof saved === "object") {
         var ids = []
-        out.modules = arr(settings.modules).map(sanitizeModule).filter(function (m) {
+        out.widgets = arr(saved).map(sanitizeWidget).filter(function (m) {
             if (m.id.length === 0 || m.name.length === 0 || ids.indexOf(m.id) >= 0) return false
             ids.push(m.id)
             return true
-        }).slice(0, kMaxModules)
+        }).slice(0, kMaxWidgets)
     }
     var layouts = settings.layouts
     if (layouts && typeof layouts === "object")
@@ -728,8 +740,8 @@ function fromSettings(settings) {
 // block's rows, then the cards). `from` is { where: "search" | "tile" |
 // "row", index }, `key` "up", "down", "left" or "right", `lastTile` the tile
 // the row was left from. `lines` (optional, one per row) says which visual
-// line each row is on: cards side by side (a module's sideways strip, a
-// large module's two columns) share one, and Left and Right move along it
+// line each row is on: cards side by side (a widget's sideways strip, a
+// large widget's two columns) share one, and Left and Right move along it
 // while Up and Down go to the line above or below, to the card in the same
 // place or the nearest. Without it every row is a line of its own. Returns
 // the place to focus (the same one when the key stops at an edge), or null

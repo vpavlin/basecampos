@@ -79,7 +79,7 @@ class ShellApi : public QObject {
     // installedApps' row shape plus recentKind ("closed" | "installed").
     // Empty on a fresh profile; home then shows the role apps.
     Q_PROPERTY(QVariantList recentApps READ recentApps NOTIFY recentAppsChanged)
-    // What home saved of its own with saveHomeSettings (its modules and their
+    // What home saved of its own with saveHomeSettings (its widgets and their
     // layout, basecamp-experiments#51); {} when nothing. This app's only:
     // another home app starts from nothing.
     Q_PROPERTY(QVariantMap homeSettings READ homeSettings NOTIFY homeSettingsChanged)

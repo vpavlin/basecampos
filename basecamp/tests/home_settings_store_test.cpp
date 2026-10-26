@@ -1,7 +1,7 @@
 // srcdeps: HomeSettingsStore.cpp
 //
 // Home's own settings, kept by the shell (app/HomeSettingsStore.{h,cpp},
-// basecamp-experiments#51): its modules and their layout survive a restart.
+// basecamp-experiments#51): its widgets and their layout survive a restart.
 // Each check reads back through a SECOND store over the same file, as a
 // restart would. The rules that matter: one app never reads another's,
 // what is too large is refused and the old settings stay, and saving the
@@ -26,7 +26,7 @@ class HomeSettingsStoreTest : public QObject {
         const QVariantMap block{{"id", "news"}, {"x", x}, {"y", 0}, {"w", 2}, {"h", 3}};
         const QVariantMap layout{{"columns", 4}, {"blocks", QVariantList{block}}};
         return {{"version", 1}, {"layouts", QVariantMap{{"4", layout}}},
-                {"modules", QVariantList{QVariantMap{{"id", "news"}, {"name", "News"}}}}};
+                {"widgets", QVariantList{QVariantMap{{"id", "news"}, {"name", "News"}}}}};
     }
 
 private slots:
@@ -48,7 +48,7 @@ private slots:
                                       .value("blocks").toList().value(0).toMap();
         QCOMPARE(block.value("id").toString(), QStringLiteral("news"));
         QCOMPARE(block.value("x").toInt(), 2);
-        QCOMPARE(back.value("modules").toList().size(), 1);
+        QCOMPARE(back.value("widgets").toList().size(), 1);
         // A new save replaces the old one.
         QCOMPARE(store.save(QStringLiteral("basecamp_home"), layoutSettings(0)),
                  HomeSettingsStore::Result::Saved);
@@ -93,6 +93,33 @@ private slots:
         QCOMPARE(HomeSettingsStore(path()).load(QStringLiteral("basecamp_home"))
                      .value("layouts").toMap().value("4").toMap()
                      .value("blocks").toList().value(0).toMap().value("x").toInt(), 3);
+    }
+
+    // A file from before home's widgets were renamed (its list under
+    // `modules`): it loads as saved, and home's next save (`widgets` only,
+    // BasecampHomeWidgets.js settingsOf) replaces its object whole, so the
+    // old key is gone from the file.
+    void oldModulesKeyDroppedOnSave()
+    {
+        QDir().mkpath(QFileInfo(path()).absolutePath());
+        QFile f(path());
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"basecamp_home":{"version":1,"modules":[{"id":"news","name":"News"}],)"
+                R"("layouts":{"4":{"columns":4,"blocks":[{"id":"news","x":2,"y":0,"w":2,"h":3}]}}}})");
+        f.close();
+        HomeSettingsStore store(path());
+        const QVariantMap old = store.load(QStringLiteral("basecamp_home"));
+        QCOMPARE(old.value("modules").toList().size(), 1);
+        QCOMPARE(store.save(QStringLiteral("basecamp_home"), layoutSettings(2)),
+                 HomeSettingsStore::Result::Saved);
+        const QVariantMap back = HomeSettingsStore(path()).load(QStringLiteral("basecamp_home"));
+        QVERIFY(back.contains("widgets"));
+        QVERIFY(!back.contains("modules"));
+        QCOMPARE(back.value("layouts").toMap().value("4").toMap()
+                     .value("blocks").toList().value(0).toMap().value("x").toInt(), 2);
+        QFile raw(path());
+        QVERIFY(raw.open(QIODevice::ReadOnly));
+        QVERIFY(!raw.readAll().contains("\"modules\""));
     }
 
     void brokenFileReadsAsNothing()

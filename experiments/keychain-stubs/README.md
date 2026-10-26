@@ -138,7 +138,7 @@ apps shipping a file of the same name collide in the host (see `../objects-stubs
 ./sync.sh --install <profile>     sync, then copy all three apps into <profile>/plugins/
 ```
 
-Never install into `/extra/tmp/mmorpg/roles-profile`: copy it first. Open an app headless with
+Never install into your base test profile: copy it first. Open an app headless with
 `backend.loadUiModule("keychain_requester")`.
 
 ## Icons

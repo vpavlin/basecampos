@@ -58,7 +58,7 @@ public:
     static constexpr int kRefreshDebounceMs = 200;
     // Live results models per view app. A view should keep one per list and
     // call update(), and destroy() the ones it drops; past this the oldest
-    // stops following the store. Twice what home uses (7 modules, the pills
+    // stops following the store. Twice what home uses (7 widgets, the pills
     // and the feed), so models a view dropped but the GC has not collected yet
     // do not push out ones it still shows.
     static constexpr int kMaxLivePerView = 16;
