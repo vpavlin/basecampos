@@ -231,6 +231,22 @@ in
       config.common.default = "*";
     };
 
+    # Camera through the portal (browsers' PipeWire camera): the portal asks
+    # with a dialog, which opens as its own window behind full-screen Basecamp,
+    # so nobody answers. It times out, and a "no" is stored for every app. Then
+    # the camera hangs at "Configuring devices…" (duet/duet). Allow it at each
+    # session start (also undoing a stored no). Native apps open /dev/video* anyway.
+    systemd.user.services.basecampos-camera-permission = {
+      description = "Allow the camera through the portal (its dialog cannot be seen under Basecamp)";
+      wantedBy = [ "default.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${pkgs.systemd}/bin/busctl --user call org.freedesktop.impl.portal.PermissionStore "
+          + "/org/freedesktop/impl/portal/PermissionStore org.freedesktop.impl.portal.PermissionStore "
+          + "SetPermission sbssas devices true camera \"\" 1 yes";
+      };
+    };
+
     environment.systemPackages = [
       cfg.package
       pkgs.grim     # screenshots of the Wayland session (agents use these)
