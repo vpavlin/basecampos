@@ -14,11 +14,11 @@
       },
       "locked": {
         "dir": "design-system",
-        "lastModified": 1793013232,
-        "narHash": "sha256-xHHhpkEYejPhlHl4mRbPlCg7G5dbUWUVr+fzVFBkhV0=",
+        "lastModified": 1793015536,
+        "narHash": "sha256-0xKYtMtxpJLbR2Z8sf6LArt/1VH4pNz5n500gl35oFM=",
         "owner": "vpavlin",
         "repo": "basecampos",
-        "rev": "2dcdb882bb075a661f7de7b2e708ab8f9bfdba9c",
+        "rev": "86043798f4ca5f521f61af2931f9971d2a6bfec9",
         "type": "github"
       },
       "original": {
@@ -64,11 +64,11 @@
       },
       "locked": {
         "dir": "basecamp",
-        "lastModified": 1793013232,
-        "narHash": "sha256-xHHhpkEYejPhlHl4mRbPlCg7G5dbUWUVr+fzVFBkhV0=",
+        "lastModified": 1793015536,
+        "narHash": "sha256-0xKYtMtxpJLbR2Z8sf6LArt/1VH4pNz5n500gl35oFM=",
         "owner": "vpavlin",
         "repo": "basecampos",
-        "rev": "2dcdb882bb075a661f7de7b2e708ab8f9bfdba9c",
+        "rev": "86043798f4ca5f521f61af2931f9971d2a6bfec9",
         "type": "github"
       },
       "original": {
