@@ -6,7 +6,7 @@ itself is the `keychain` role app in Basecamp (`apps/basecamp_keychain`, branch 
 
 | App | Display name | Uses | Provides |
 |---|---|---|---|
-| `keychain_signer` | Stub Signer | `basecamp.keychain.register`, `.update`, `.remove`, `.keys`, `.complete`, `.reject` | `keychain.sign`, `keychain.ended` |
+| `keychain_signer` | Stub Signer | `basecamp.appdata.read`, `.write`, `basecamp.keychain.register`, `.update`, `.remove`, `.keys`, `.complete`, `.reject` | `keychain.sign`, `keychain.ended` |
 | `keychain_requester` | Stub Requester | `basecamp.keychain.sign`, `.cancel` | none |
 
 Every answer from the shell has `ok: true`; the real outcome is in `data` (`data.ok`,
@@ -15,17 +15,19 @@ Every answer from the shell has `ok: true`; the real outcome is in `data` (`data
 ## Stub Signer
 
 - **First start** makes two Ed25519 key pairs, "Daily key" (`message`, `login`) and "Cold key"
-  (`transaction`), and keeps them in its own QML LocalStorage. The shell points every app's
-  LocalStorage at its own folder, here `<profile>/app_data/keychain_signer/Databases/`. That
-  keeps the files apart, but it is **not a wall** between apps: every `ui_qml` view runs in the
-  host process, and Qt hands an already open database connection to any engine that asks for the
-  same database name (Basecamp `tests/sandbox/tst_qml_sandbox.cpp`,
-  `localStorageInTheAppsFolder`). A real signer keeps its keys in its own process. On every start
-  it registers both public keys; a `duplicate` answer is followed by an `update` (name,
-  purposes).
-- **Sign screen.** The shell sends `keychain.sign` `{ requestId, keyId, payload, kind,
-  requesterName, description }`. The app answers `ok` as soon as the request is on screen, then
-  shows who asks, their description in quotes as their words, the kind, the key, and the payload
+  (`transaction`), and keeps them in the data the host holds for this app alone:
+  `basecamp.appdata.read` / `.write` (Basecamp `app/AppDataStore.h`), one JSON object per app in
+  `<profile>/app_data/keychain_signer/appdata.json`, owner-only file mode, keyed by the caller
+  the host attested, so no other app can ask for it. Not QML LocalStorage: every `ui_qml` view
+  runs in the host process, and Qt hands an already open database connection to any engine that
+  asks for the same database name (Basecamp `tests/sandbox/tst_qml_sandbox.cpp`,
+  `localStorageInTheAppsFolder`), so any app could have read the seeds by opening the signer's
+  database name. Uninstalling the app removes its data. Keys are registered only once they are
+  kept. On every start it registers both public keys; a `duplicate` answer is followed by an
+  `update` (name, purposes).
+- **Sign screen.** The shell sends `keychain.sign` `{ requestId, keyId, payload, kind, purpose,
+  requesterApp, requesterName, description }`. The app answers `ok` as soon as the request is on
+  screen, then shows who asks (name and the attested app id), their description in quotes as their words, the kind, the key, and the payload
   in hex (first 64 bytes). **Approve** signs and calls `complete { requestId, signature }`;
   **Reject** calls `reject { requestId, reason }`. A request for a key the app no longer has is
   rejected at once. `keychain.ended { requestId, status }` takes the request off the screen and
@@ -48,7 +50,9 @@ objectNames: `keychain_signer.root`, `.request`, `.request.title`, `.request.des
   Ada", "Sign in to Weekend hike", "Send 5 TST to Ada").
 - The answer to `basecamp.keychain.sign` arrives when the request ends: `data` is `{ requestId,
   status, signature?, publicKey?, keyId?, keyName?, signerApp?, error? }`, or at once `{ error:
-  busy | bad_request | unavailable }` (shown as "refused").
+  busy | bad_request | unavailable | not_in_front }` (shown as "refused"). Only the app in front
+  may ask, and an app is held off (`busy`) for 10 seconds after a request it or the user
+  cancelled or that timed out, and after 5 requests in a minute.
 - **Last result**: status (and error), key name and id, signer app, a short signature, and
   whether the signature verifies here against the public key in the answer.
 - **Send two at once** asks for a login and a message together; the second answer is `busy`

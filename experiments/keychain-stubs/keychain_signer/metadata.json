@@ -13,6 +13,12 @@
   "view": "qml/Main.qml",
   "uses": [
     {
+      "intent": "basecamp.appdata.read"
+    },
+    {
+      "intent": "basecamp.appdata.write"
+    },
+    {
       "intent": "basecamp.keychain.register"
     },
     {

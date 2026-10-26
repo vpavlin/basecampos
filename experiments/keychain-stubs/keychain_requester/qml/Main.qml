@@ -14,8 +14,9 @@ import "RequesterCrypto.js" as Crypto
 // the user picks a key, the signer app approves or rejects, and the answer to
 // basecamp.keychain.sign arrives here as `data`:
 //   { requestId, status, signature?, publicKey?, keyId?, keyName?, signerApp?, error? }
-// or at once { error: busy | bad_request | unavailable }. The app shows the
-// last result and checks the signature itself against the public key it got.
+// or at once { error: busy | bad_request | unavailable | not_in_front }. The
+// app shows the last result and checks the signature itself against the
+// public key it got.
 // "Send two at once" asks twice; the second answer should be `busy`.
 //
 // The payloads start with STUB-PAYLOAD so a test can grep the run log for

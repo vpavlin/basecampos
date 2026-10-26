@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.LocalStorage
 
 import Logos.Controls
 import Logos.Theme
@@ -11,15 +10,16 @@ import "SignerCrypto.js" as Crypto
 // Stub Signer (basecamp-experiments#59): a signer app for testing Keychain.
 //
 // On first start it makes two Ed25519 key pairs, "Daily key" (messages and
-// logins) and "Cold key" (transactions), keeps them in its own LocalStorage
-// (the shell gives every app its own folder, app_data/keychain_signer/) and
+// logins) and "Cold key" (transactions), keeps them in the data the host
+// holds for this app alone (basecamp.appdata.read / write; not QML
+// LocalStorage, which any other app in the process could open by name) and
 // registers their public halves with Keychain. Keychain never sees the
 // private keys; it sends the request here, this app shows it in its own words,
 // and the user approves or rejects. "Fail next" makes the next approval send
 // a wrong signature, so the shell's check can be seen to stop it.
 //
-// What it calls: basecamp.keychain.register / update / remove / keys /
-// complete / reject. What it answers: keychain.sign (ok as soon as the request
+// What it calls: basecamp.appdata.read / write, basecamp.keychain.register /
+// update / remove / keys / complete / reject. What it answers: keychain.sign (ok as soon as the request
 // is on screen) and keychain.ended, from the shell only.
 //
 // TEST CODE: the keys are made from Math.random (see SignerCrypto.js) and
@@ -37,7 +37,7 @@ Item {
     // keyId -> true when Keychain lists it with our public key.
     property var registered: ({})
     // Open requests, oldest first: { requestId, keyId, payload, kind,
-    // requesterName, description }. The first one is on screen.
+    // requesterApp, requesterName, description }. The first one is on screen.
     property var queue: []
     readonly property var req: queue.length > 0 ? queue[0] : null
     property bool failNext: false
@@ -53,36 +53,44 @@ Item {
     function log(msg) { console.log("[" + appName + "] " + msg) }
 
     // ---- storage ------------------------------------------------------------
+    // The host keeps one object per app and gives it to that app only (the
+    // caller it attested): { keys: [{ keyId, name, purposes, seed, added }] }.
 
-    function db() {
-        return LocalStorage.openDatabaseSync("keychain_signer_keys", "1.0", "Stub Signer keys", 8192)
+    function useKeys(stored) {
+        keys = stored.map(r => ({ keyId: r.keyId, name: r.name, seed: r.seed, added: r.added,
+                                  purposes: r.purposes || [], publicKey: Crypto.publicKey(r.seed) }))
+        log("holding " + keys.length + " keys")
     }
 
-    function loadKeys() {
-        const out = []
-        db().transaction(function (tx) {
-            tx.executeSql("CREATE TABLE IF NOT EXISTS keys(keyId TEXT PRIMARY KEY, name TEXT,"
-                          + " purposes TEXT, seed TEXT, added INTEGER)")
-            let rs = tx.executeSql("SELECT * FROM keys ORDER BY added")
-            if (rs.rows.length === 0) {
-                const now = Date.now()
-                for (let i = 0; i < defaultKeys.length; ++i) {
-                    const k = defaultKeys[i]
-                    tx.executeSql("INSERT INTO keys VALUES(?, ?, ?, ?, ?)",
-                                  [k.keyId, k.name, k.purposes.join(","), Crypto.newSeed(), now + i])
+    // Then `done`, only once the keys are kept: a key registered and then
+    // lost would sit in Keychain with nothing able to sign for it.
+    function loadKeys(done) {
+        logos.request("basecamp.appdata.read", {}, function (res) {
+            const d = res.data || {}
+            if (!res.ok || !d.ok) {
+                status = "Could not read this app's data: " + (res.ok ? d.error : res.error)
+                return
+            }
+            const stored = (d.data && d.data.keys) || []
+            if (stored.length > 0) {
+                useKeys(stored)
+                done()
+                return
+            }
+            const now = Date.now()
+            const made = defaultKeys.map((k, i) => ({ keyId: k.keyId, name: k.name, purposes: k.purposes,
+                                                      seed: Crypto.newSeed(), added: now + i }))
+            logos.request("basecamp.appdata.write", { data: { keys: made } }, function (res2) {
+                const d2 = res2.data || {}
+                if (!res2.ok || !d2.ok) {
+                    status = "Could not keep new keys: " + (res2.ok ? d2.error : res2.error)
+                    return
                 }
-                log("made " + defaultKeys.length + " new key pairs")
-                rs = tx.executeSql("SELECT * FROM keys ORDER BY added")
-            }
-            for (let i = 0; i < rs.rows.length; ++i) {
-                const r = rs.rows.item(i)
-                out.push({ keyId: r.keyId, name: r.name, seed: r.seed, added: r.added,
-                           purposes: r.purposes ? r.purposes.split(",") : [],
-                           publicKey: Crypto.publicKey(r.seed) })
-            }
+                log("made " + made.length + " new key pairs")
+                useKeys(made)
+                done()
+            })
         })
-        keys = out
-        log("holding " + out.length + " keys")
     }
 
     function keyById(keyId) {
@@ -178,10 +186,7 @@ Item {
         queue = queue.filter(r => r.requestId !== requestId)
     }
 
-    Component.onCompleted: {
-        loadKeys()
-        registerAll()
-    }
+    Component.onCompleted: loadKeys(registerAll)
 
     Connections {
         target: logos
@@ -202,6 +207,7 @@ Item {
             // keychain.sign: on screen first, then the answer.
             const r = { requestId: String(params.requestId), keyId: String(params.keyId),
                         payload: String(params.payload), kind: String(params.kind),
+                        requesterApp: String(params.requesterApp || ""),
                         requesterName: String(params.requesterName),
                         description: String(params.description) }
             app.ended = ""
@@ -223,6 +229,10 @@ Item {
     function payloadBytes(r) {
         const b = r ? Crypto.fromBase64(r.payload) : null
         return b ? b : new Uint8Array(0)
+    }
+    function who(r) {
+        return r.requesterApp && r.requesterApp !== r.requesterName
+            ? r.requesterName + " (" + r.requesterApp + ")" : r.requesterName
     }
     function abbrev(b64) { return b64.length > 16 ? b64.slice(0, 8) + "…" + b64.slice(-6) : b64 }
 
@@ -282,7 +292,9 @@ Item {
                     LogosText {
                         objectName: "keychain_signer.request.title"
                         Layout.fillWidth: true
-                        text: app.req ? app.req.requesterName + " asks you to sign a " + app.req.kind : ""
+                        // The name is the app's own claim; the id is the one
+                        // the host attested.
+                        text: app.req ? app.who(app.req) + " asks you to sign a " + app.req.kind : ""
                         textFormat: Text.PlainText
                         font.weight: Font.DemiBold
                         wrapMode: Text.Wrap
@@ -290,7 +302,7 @@ Item {
                     LogosText {
                         objectName: "keychain_signer.request.description"
                         Layout.fillWidth: true
-                        text: app.req ? app.req.requesterName + " says: “" + app.req.description + "”" : ""
+                        text: app.req ? app.who(app.req) + " says: “" + app.req.description + "”" : ""
                         textFormat: Text.PlainText
                         wrapMode: Text.Wrap
                     }
