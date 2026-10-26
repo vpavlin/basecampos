@@ -134,6 +134,11 @@ The `shell` object (ADR-069) gains, for the `search` holder only:
 - `searchRequested(requestId, query, filter)`: a view wants results. `filter` is
   `{ types?, apps?, kinds?, subjects?, unseenOnly? }`.
 - `objects(filter)`: the objects the filter allows, as a list of envelopes.
+- `objectsSince(version, filter)`: what changed since `version` (0 for everything):
+  `{ version, reset, objects, removed, ids? }`, so the holder can keep its own copy instead of
+  copying the whole store on every query. `reset` says to drop the copy and take `objects` as all
+  of it. `ids` (only when the filter narrows) lists the ids the filter allows. Same objects as
+  `objects()`, nothing more (§14, ADR-082).
 - `answer(requestId, ids)`: ranked ids, at most 200. Unknown ids are dropped.
 - `objectsChanged(app)`: something was published or retracted; a search may re-rank.
 
@@ -337,7 +342,7 @@ Typing asks for one search per pause, not one per letter and per module.
 
 **What does not.** Each search over 2500 objects still blocks the UI for 100 to 200 ms (one run
 at 390 showed up to 440 ms, while the test window had lost its size, so it is left out). The
-ranking runs on the UI thread. After a flood, about 2400 objects stay unseen until they are
+ranking runs on the UI thread. (Addressed in §14: 50 to 70 ms median now.) After a flood, about 2400 objects stay unseen until they are
 scrolled into view; that is by design (only what was shown is marked), but the "N new" counts
 stay high.
 
@@ -373,3 +378,78 @@ needs a person with Orca.
 | 1280, "flood 12" after the flood | 390, "ada" | 1280, keys on an app row | 1280, keys in a module |
 |---|---|---|---|
 | ![](shell-objects/flood-1280-highlight.png) | ![](shell-objects/390-ada-highlight.png) | ![](shell-objects/1280-keys-app-row.png) | ![](shell-objects/1280-keys-module.png) |
+
+## 14. Broad-query latency: results
+
+Issue #27, the last open item of §13: a broad query ("a") over a full store blocked the UI for
+longer than a 100 ms budget. Decision: [ADR-082](adr/0082-search-role-keeps-a-copy.md). Basecamp
+source: branch `keychain`, commits 146732b to 37fe093.
+
+**Method.** As §13: the five stubs open, each one's Flood pressed at once (the store keeps
+5 x 500 = 2500), home on screen in a New tab, headless (llvmpipe). A 16 ms timer in home's engine
+gives the longest stall (how late it fired); "results" is the time from setting the text (home's
+field at 1280, the shell's bar at 390) to the first idle turn after home's results changed for
+that text, so it includes the 100 ms wait after the last keystroke. Five runs per query, the field
+emptied between queries; the burst is five keystrokes 40 ms apart. Before (ce1b1f4) and after
+(37fe093) ran side by side in the same session; this machine was busier than in §13, so compare
+the columns, not the numbers with §13's.
+
+| Query (matches) | Longest stall, 1280 | Longest stall, 390 | Results, 1280 | Results, 390 |
+|---|---|---|---|---|
+| "a" (356, 200 shown) | 266 / 335 → **61 / 93** | 291 / 294 → **62 / 70** | 350 / 436 → 176 / 203 | 364 / 368 → 173 / 181 |
+| "ada" (86) | 234 / 312 → **57 / 69** | 279 / 294 → **51 / 55** | 336 / 394 → 169 / 178 | 343 / 369 → 163 / 165 |
+| "12" (83) | 298 / 304 → **59 / 80** | 293 / 338 → **60 / 64** | 366 / 416 → 172 / 189 | 368 / 403 → 175 / 180 |
+| "tx" (0) | 140 / 162 → **36 / 53** | 154 / 175 → **42 / 48** | 242 / 249 → 139 / 142 | 235 / 240 → 140 / 142 |
+| Burst "f" to "flood" (2440) | 203 / 260 → **65 / 69** | 210 / 223 → **52 / 71** | 311 / 365 → 173 / 175 | 324 / 330 → 172 / 182 |
+| Emptying the field (2500) | 193 / 239 → **68 / 101** | 189 / 256 → **59 / 75** | 200 / 238 → 69 / 98 | 195 / 262 → 67 / 79 |
+
+Median / max in ms, before → after. Searches per query or burst: 1, before and after.
+
+| Also measured | Before | After |
+|---|---|---|
+| One query in home's engine, "a": search / pill counts / feed | 67-71 / 12-15 / 72-82 ms, and the counts and the feed twice | 4-10 / 1-4 / 16-25 ms, once |
+| Stalls while the five floods land (one run from a fresh start) | 10 over 40 ms, up to 202 ms, one per refresh for 12 s | 5 over 40 ms, up to 86 ms |
+| The same, flood again after Retract all (2 runs each) | 115 to 156 ms | 49 to 90 ms |
+| Host memory after the flood (PSS) | 518 MB | 547 MB (the kept copies; this run also had the Keychain open) |
+
+**What changed.**
+- *The search role keeps a copy.* The store numbers every change (publish, replace, retract,
+  evict, expire, switch off, mark seen). `basecamp_search` asks `objectsSince(the version it
+  holds)` and gets only what changed; a query no longer copies 2500 envelopes into its engine.
+- *Words are split once.* Each object's title, keywords, subtitle and field text become one string
+  of lowercased words, so "a word starts with the token" is one substring search. The split happens
+  a few hundred objects at a time while idle, or before a query that needs it; an empty bar needs
+  none. The host keeps the same index for `counts()` (the pills) and its fallback ranker.
+- *Home asks once.* Each query rebuilt home's results twice (once from the answer, once more
+  straight after asking): the pill counts and all 30 feed cards, twice. Now once. The widgets had
+  the same double rebuild.
+- *The feed keeps its cards.* A card whose object stays keeps its item, a card that moved is moved,
+  and only new ones are made, at most 6 per pass, a frame apart.
+
+**Unchanged.** Results and their order: unit tests compare the prepared ranking with the
+envelope ranking (C++ and JS), and the kept copy with ranking the store's current objects through
+a flood, eviction, retraction, replacement, marking seen, expiry and the switch. In the running
+build, the search app's answers equalled the host ranker's for 8 queries x 4 filters, and for
+five queries the result sets equalled the old build's on the same flooded store. The search role stays replaceable: a holder may still use
+`objects()`, and `basecamp_search` falls back to it on a shell without `objectsSince`. Nothing new
+is visible to the holder: `objectsSince` gives the objects `objects()` gives.
+
+**Checked after the change.** Highlight while typing (#46) on "flood 12" and "ada"; Esc (#47):
+the first empties the field and keeps the pill, the second does nothing; Down from the field into
+the cards, the focus ring, Enter running a card's first action, Esc back to the field with the
+text kept (#48, QtTest keys from the host's engine); pill counts equal the old build's; after a
+query the feed holds all 30 cards in feed order, "Show more" gives 60; the feed's order unchanged
+over 15 s idle after a flood; the widgets grid draws; Keychain opens and its tests pass. Unit
+tests 49/49.
+
+**What remains.**
+- *The first query after start* stalls longer (93 ms in the 1280 run against a 61 ms median),
+  mostly the Apps block's first app search, 62 to 77 ms on its first call in both builds; later
+  queries do not pay it.
+- *The widgets view* still stalls on a broad query: 221 ms median for "a" at 1280, three runs
+  (before: 377), with five widgets each searching and rebuilding its items. The feed's
+  keep-the-cards approach would apply to the widgets' items too.
+- *About 50 to 60 ms per query is left*, mostly making the first 6 new cards and drawing the frame
+  in software; a GPU should cut the drawing part. The 100 ms wait after the last keystroke stays.
+- The kept copy and index cost memory in proportion to the store (bounded by the 500-per-app cap).
+
