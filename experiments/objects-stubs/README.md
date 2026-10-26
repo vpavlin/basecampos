@@ -6,9 +6,9 @@ the data is invented and progress is a timer.
 
 | App | Display name | Publishes | Actions it answers |
 |---|---|---|---|
-| `objects_wallet` | Stub Wallet | 2 `account`, 5 `asset`, 6 `transaction` (2 `pending`, +10 % every 3 s until `done`), 2 `transaction` summaries | `view` (recorded) |
-| `objects_chat` | Stub Chat | 6 `contact`, 3 `x.objects_chat.conversation`, 12 `message` (3 outgoing) | `reply` with text (publishes an outgoing message and updates the conversation), `message` (recorded) |
-| `objects_communities` | Stub Communities | 5 `community`, 8 `post` | `join` / `leave` (flip `joined`, ±1 member), `vote` (score +1), `like` (likes +1), all republished in place |
+| `objects_wallet` | Stub Wallet | 2 `account`, 5 `asset`, 6 `transaction` (2 `pending`, +10 % every 3 s until `done`), 2 `transaction` summaries; accounts, assets and summaries as current state | `view` (recorded) |
+| `objects_chat` | Stub Chat | 6 `contact`, 3 `x.objects_chat.conversation` (both as current state), 12 `message` (3 outgoing) | `reply` with text (publishes an outgoing message and updates the conversation), `message` (recorded) |
+| `objects_communities` | Stub Communities | 5 `community` (memberships, as current state), 8 `post` | `join` / `leave` (flip `joined`, ±1 member), `vote` (score +1), `like` (likes +1), all republished in place |
 | `objects_news` | Stub News | 6 `news` (`url` as text only) | `open` only |
 | `objects_explorer` | Stub Explorer | 5 `transaction` on `lez` | `view` (recorded) |
 
@@ -25,20 +25,38 @@ can count one person's objects across apps (§4, §6).
   `provides` `objects.action` with `params` `key`, `action` (required) and `text` (optional).
 - On start publishes its data; if any of it is refused, retries once after 2 s. Every answer is
   logged as `qml: [objects_<x>] …`.
-- UI: objects in the store per type, the last answer, the last action, and three buttons.
+- UI: objects in the store per type (and how many are current state), the last answer, the
+  last action, and four buttons.
   objectNames, with `<app>` the app name (e.g. `objects_wallet`):
   - `<app>.root`, `<app>.total`, `<app>.count.<type>`, `<app>.lastAnswer`
   - `<app>.lastAction` (label), `<app>.floodReport` (label)
-  - `<app>.flood` (Flood 1000), `<app>.publish` (Publish again), `<app>.retractAll` (Retract all)
+  - `<app>.flood` (Flood 1000), `<app>.floodPastCap` (Flood past the cap),
+    `<app>.publish` (Publish again), `<app>.retractAll` (Retract all)
 - **Flood 1000** tops the store up to the 500-object cap instead of pushing past it (past the cap
   the store evicts the oldest objects, which would delete the base data). It reports
   `published, held back (cap 500), refused by the store`. Flood objects are timed older than
   the base data, so any later overflow evicts them first.
+- **Flood past the cap** is the test the cap exists for: 2000 events, timed newer than anything
+  else the app published, sent at once in about 40 requests **without waiting for the rate
+  limit**. The store still applies its own limits: it answers `failed` to the requests over 20
+  in 10 s (about half), and evicts the app's oldest events past 500. Current state stays. It
+  reports `taken, refused by the store, in N requests; it keeps 500 of 500, K of them current
+  state`. On Stub Wallet the Wallet widget still shows every account and asset afterwards, and
+  Transactions shows the newest flood events. Retract all, then Publish again, restores the base
+  data.
+
+**Current state.** An object published with `state: true` (spec §8) is something that stays true
+(a balance, a membership, a contact) rather than an event. When the app is over 500, its oldest
+events go and its current state stays; current state has its own cap of 50 per app, past which its
+oldest goes. Stub Wallet (accounts, assets, summaries), Stub Communities (communities) and Stub
+Chat (contacts, conversations) publish their current state this way; messages, posts,
+transactions and news are events.
 
 Client-side limits (`common/ObjectPublisher.qml`): at most 20 requests in any 10.5 s (publish and
 retract both counted), at most 50 objects and 900 payload nodes per request (the intent bridge
 refuses over 1000 nodes). The UI's counts mirror the store from its answers, including its
-eviction rule.
+eviction rule (state over 50 first, then the oldest events past 500). Flood past the cap skips the
+client-side rate limit; its requests still count, so anything queued after it waits.
 
 ## Shared code
 
@@ -69,5 +87,5 @@ it (basecamp-experiments#40). Change a letter or colour in the script and rerun 
 ```
 
 copies each app folder to `<profile>/plugins/<app>/` (the same as `cp -a objects_wallet
-<profile>/plugins/objects_wallet` for each). Never into `/extra/tmp/mmorpg/roles-profile`: copy
-that first. Open an app headless with `backend.loadUiModule("objects_wallet")`.
+<profile>/plugins/objects_wallet` for each). Install into a copy of a test profile, not a shared
+one. Open an app headless with `backend.loadUiModule("objects_wallet")`.

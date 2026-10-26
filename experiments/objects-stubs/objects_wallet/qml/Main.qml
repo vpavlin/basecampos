@@ -4,6 +4,10 @@ import QtQuick
 // transactions whose progress moves, and summaries. No real backend: the data
 // below is invented, and "progress" is a timer.
 //
+// Accounts, assets and summaries say what is true now, so they are published
+// as current state (`state: true`, §8): a flood of transactions past the cap
+// evicts old transactions, never a balance.
+//
 // Two counterparties are the same subjects Stub Chat publishes for its
 // contacts (Ada Morrow, Juno Vale), so a view can count one person's objects
 // across apps (§4 "Counts across types") with Explorer and Chat installed.
@@ -12,7 +16,7 @@ WalletStubApp {
     objectName: "objects_wallet.root"
     appName: "objects_wallet"
     displayName: "Stub Wallet"
-    blurb: "Publishes 2 accounts, 5 assets, 6 transactions (2 pending, moving every 3 s) and 2 summaries."
+    blurb: "Publishes 2 accounts, 5 assets, 6 transactions (2 pending, moving every 3 s) and 2 summaries. Accounts, assets and summaries are current state: a flood never evicts them."
 
     readonly property string pkAda: "logos:pk:38dc3d45be876f9687cbae30b8e046000b31e358ebc6c5b995f23ede0f5381bb"
     readonly property string pkJuno: "logos:pk:0016c5021b7c70f3957d01960d342e0d6a12861bd30f232c4cbaa42084847233"
@@ -34,12 +38,12 @@ WalletStubApp {
               subtitle: "1,204.50 TST on lez", time: startedAt - 5 * minute,
               fields: { name: "Everyday", network: "lez",
                         balance: { amount: "1204.50", unit: "TST", fiat: "$602.25" } },
-              keywords: ["checking", "main"] },
+              keywords: ["checking", "main"], state: true },
             { key: "acct:savings", type: "account", title: "Savings",
               subtitle: "0.4821 BTC", time: startedAt - 2 * day,
               fields: { name: "Savings", network: "btc",
                         balance: { amount: "0.4821", unit: "BTC", fiat: "$31,340.00" } },
-              keywords: ["cold", "vault"] }
+              keywords: ["cold", "vault"], state: true }
         ]
     }
 
@@ -50,7 +54,7 @@ WalletStubApp {
                      time: startedAt - age,
                      fields: { name: name, symbol: sym, account: { type: "account", key: acct },
                                amount: amount, fiat: fiat, change: change },
-                     refs: [{ type: "account", key: acct }] }
+                     refs: [{ type: "account", key: acct }], state: true }
         }
         return [
             asset("TST", "Testnet Token", "acct:everyday", "1204.50", "$602.25", 1.8, 10 * minute),
@@ -119,11 +123,11 @@ WalletStubApp {
             { key: "summary:scheduled", type: "transaction", kind: "summary",
               title: "2 scheduled, next in 6 days", subtitle: "Rent and a savings transfer",
               time: startedAt - 4 * minute,
-              fields: { status: "scheduled", network: "lez" } },
+              fields: { status: "scheduled", network: "lez" }, state: true },
             { key: "summary:today", type: "transaction", kind: "summary",
               title: "41 more transactions today", subtitle: "Most of them small payments",
               time: startedAt - 3 * minute,
-              fields: { network: "lez" } }
+              fields: { network: "lez" }, state: true }
         ]
     }
 

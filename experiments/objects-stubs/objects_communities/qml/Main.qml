@@ -9,7 +9,7 @@ CommunitiesStubApp {
     objectName: "objects_communities.root"
     appName: "objects_communities"
     displayName: "Stub Communities"
-    blurb: "Publishes 5 communities and 8 posts. Join flips a community to joined; Vote and Like raise a post's score and likes."
+    blurb: "Publishes 5 communities and 8 posts. Join flips a community to joined; Vote and Like raise a post's score and likes. Communities are current state: a flood never evicts them."
 
     readonly property int minute: 60 * 1000
     property real baseTime: Date.now()
@@ -50,7 +50,10 @@ CommunitiesStubApp {
                  subtitle: c.members + " members" + (c.joined ? " · joined" : ""),
                  time: baseTime - c.age * minute,
                  fields: { name: c.name, members: c.members, joined: c.joined },
-                 actions: [c.joined ? { id: "leave", label: "Leave" } : { id: "join", label: "Join" }] }
+                 actions: [c.joined ? { id: "leave", label: "Leave" } : { id: "join", label: "Join" }],
+                 // A membership is current state (§8): posts flooding past the
+                 // cap never push it out.
+                 state: true }
     }
 
     function postObject(p) {

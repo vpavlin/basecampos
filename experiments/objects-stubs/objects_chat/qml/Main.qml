@@ -18,7 +18,7 @@ ChatStubApp {
     objectName: "objects_chat.root"
     appName: "objects_chat"
     displayName: "Stub Chat"
-    blurb: "Publishes 6 contacts, 3 conversations and 12 messages. Reply on a message or conversation publishes your answer as a new outgoing message."
+    blurb: "Publishes 6 contacts, 3 conversations and 12 messages. Reply on a message or conversation publishes your answer as a new outgoing message. Contacts and conversations are current state: a flood never evicts them."
 
     readonly property string convType: "x.objects_chat.conversation"
     readonly property int minute: 60 * 1000
@@ -71,7 +71,8 @@ ChatStubApp {
                  time: baseTime - (60 + i) * 24 * 60 * minute,
                  fields: { name: c.name, groups: c.groups, subject: c.pk },
                  subjects: [c.pk],
-                 actions: [{ id: "message", label: "Message" }] }
+                 actions: [{ id: "message", label: "Message" }],
+                 state: true }
     }
 
     function messageObject(m) {
@@ -106,7 +107,10 @@ ChatStubApp {
                  fields: {},
                  subjects: conv.members.map(id => contact(id).pk),
                  keywords: conv.members.length > 1 ? ["group"] : ["direct"],
-                 actions: [{ id: "reply", label: "Reply", input: "text" }] }
+                 actions: [{ id: "reply", label: "Reply", input: "text" }],
+                 // Contacts and conversations are current state (§8):
+                 // messages flooding past the cap never push them out.
+                 state: true }
     }
 
     baseObjects: function () {

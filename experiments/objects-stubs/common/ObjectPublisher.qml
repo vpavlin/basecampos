@@ -21,23 +21,30 @@ import QtQuick
 // What it deliberately does NOT enforce is the 500-object cap: the flood
 // button asks for its room up front (room()), but an app that publishes past
 // the cap is the case the store's eviction exists for, and the mirror below
-// evicts the same way (oldest `time` first) so the counts stay honest.
+// evicts the same way so the counts stay honest: current state (`state:
+// true`) over its own cap of 50 loses its oldest, then the app over 500 loses
+// its oldest events, never its state (spec §8).
+//
+// publish(…, { noWait: true }) skips our rate limit (the Flood past the cap
+// button): every request goes at once and the store's own limit answers.
 QtObject {
     id: pub
 
     property string tag: "objects_stub"          // log prefix, the app's name
 
     readonly property int cap: 500
+    readonly property int stateCap: 50
     readonly property int rateLimit: 20
     readonly property int rateWindowMs: 10500
     readonly property int nodeBudget: 900
     readonly property int maxBatch: 50
 
-    // key -> { type, time }: what the store holds for us, as far as its
+    // key -> { type, time, state }: what the store holds for us, as far as its
     // answers say. Reassigned (never mutated in place) so bindings refresh.
     property var live: ({})
     property int liveCount: 0
     property var typeCounts: ({})                // type -> count, for the UI
+    property int stateCount: 0                   // of liveCount, current state
 
     property string lastAnswer: "nothing sent yet"
     property int requestsSent: 0
@@ -67,7 +74,9 @@ QtObject {
     // called once, after the last batch answers, with
     //   { requests, okObjects, refusedObjects, errors: [code, …] }.
     // Batches are all-or-nothing in the store, so a batch is counted whole.
-    function publish(objects, done, label) {
+    // `options.noWait`: send every request now, past our rate limit.
+    function publish(objects, done, label, options) {
+        const noWait = !!(options && options.noWait)
         const batches = _split(objects)
         const what = label || "publish"
         const summary = { requests: batches.length, okObjects: 0, refusedObjects: 0, errors: [] }
@@ -78,7 +87,7 @@ QtObject {
         let remaining = batches.length
         for (const batch of batches) {
             pendingObjects += batch.length
-            _enqueue("basecamp.objects.publish", { objects: batch }, function (res) {
+            const onAnswer = function (res) {
                 pendingObjects -= batch.length
                 if (res.ok) {
                     summary.okObjects += batch.length
@@ -91,7 +100,11 @@ QtObject {
                     + (res.ok ? "ok" : res.error))
                 lastAnswer = what + ": " + batch.length + " -> " + (res.ok ? "ok" : res.error)
                 if (--remaining === 0 && done) done(summary)
-            })
+            }
+            if (noWait)
+                _send({ intent: "basecamp.objects.publish", payload: { objects: batch }, onAnswer: onAnswer })
+            else
+                _enqueue("basecamp.objects.publish", { objects: batch }, onAnswer)
         }
     }
 
@@ -164,35 +177,54 @@ QtObject {
         _sentAt = sent
         _queue = queue
         queued = queue.length
-        for (const job of jobs) {
-            requestsSent++
-            inFlight++
-            logos.request(job.intent, job.payload, function (res) {
-                inFlight--
-                job.onAnswer(res)
-            })
-        }
+        for (const job of jobs) _request(job)
+    }
+
+    // Past the queue: counted in the window, so what is queued after it
+    // still waits its turn.
+    function _send(job) {
+        _sentAt = _sentAt.concat([Date.now()])
+        _request(job)
+    }
+
+    function _request(job) {
+        requestsSent++
+        inFlight++
+        logos.request(job.intent, job.payload, function (res) {
+            inFlight--
+            job.onAnswer(res)
+        })
     }
 
     function _remember(batch) {
         const next = Object.assign({}, live)
         const now = Date.now()
         for (const o of batch)
-            next[o.key] = { type: o.type, time: o.time !== undefined ? o.time : now }
-        // Mirror the store's eviction: oldest `time` first, down to the cap.
+            next[o.key] = { type: o.type, time: o.time !== undefined ? o.time : now, state: o.state === true }
+        // Mirror the store's eviction: oldest `time` first, current state over
+        // its own cap, then events down to the cap (ties by key here, by id
+        // in the store: a tie is the only place the two can differ).
+        const oldestFirst = (a, b) => next[a].time - next[b].time || (a < b ? -1 : a > b ? 1 : 0)
+        const states = Object.keys(next).filter(k => next[k].state).sort(oldestFirst)
+        for (let i = 0; i < states.length - stateCap; ++i) delete next[states[i]]
         const keys = Object.keys(next)
         if (keys.length > cap) {
-            keys.sort((a, b) => next[a].time - next[b].time)
-            for (let i = 0; i < keys.length - cap; ++i) delete next[keys[i]]
+            const events = keys.filter(k => !next[k].state).sort(oldestFirst)
+            for (let i = 0; i < keys.length - cap; ++i) delete next[events[i]]
         }
         _setLive(next)
     }
 
     function _setLive(next) {
         const counts = {}
-        for (const k in next) counts[next[k].type] = (counts[next[k].type] || 0) + 1
+        let states = 0
+        for (const k in next) {
+            counts[next[k].type] = (counts[next[k].type] || 0) + 1
+            if (next[k].state) ++states
+        }
         live = next
         liveCount = Object.keys(next).length
+        stateCount = states
         typeCounts = counts
     }
 }

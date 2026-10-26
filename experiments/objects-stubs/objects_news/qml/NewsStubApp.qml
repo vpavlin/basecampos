@@ -7,8 +7,8 @@ import Logos.Theme
 
 // The frame every objects stub shares (docs/SHELL-OBJECTS-SPEC.md §10 step 2):
 // publishes the app's stub data on start, answers `objects.action`, and shows
-// what is in the store, the last action and the Flood / Retract all / Publish
-// again buttons. Each app's Main.qml supplies only its data and its reactions.
+// what is in the store, the last action and the Flood / Flood past the cap /
+// Publish again / Retract all buttons. Each app's Main.qml supplies only its data and its reactions.
 //
 // Every stub carries a copy renamed per app (WalletStubApp, …); the master is
 // experiments/objects-stubs/common/ and sync.sh copies it (and says why).
@@ -16,7 +16,8 @@ import Logos.Theme
 // The app plugs in through function-valued properties rather than overridden
 // functions, so Main.qml stays one declaration with no derived type:
 //   baseObjects()          -> [envelope, …]   what the app publishes on start
-//   floodObject(seq, now)  -> envelope         one of the Flood button's objects
+//   floodObject(seq, now)  -> envelope         one of the Flood buttons' objects
+//                                              (an event, never current state)
 //   handleAction(params)   -> { ok, error? }   reacts to { key, action, text? }
 Item {
     id: app
@@ -42,6 +43,7 @@ Item {
     property int floodSeq: 0
 
     readonly property int floodSize: 1000
+    readonly property int floodPastCapSize: 2000
     readonly property bool compact: Theme.windowClass(width) === "compact"
 
     function log(msg) { console.log("[" + appName + "] " + msg) }
@@ -98,6 +100,31 @@ Item {
                 + errorList(r.errors)
             log(floodReport + " in " + r.requests + " requests")
         }, "flood")
+    }
+
+    // The test the cap exists for (basecamp-experiments#63): 2000 events, the
+    // newest of anything we publish, sent at once in about 40 requests with no
+    // wait for the rate limit. The store refuses what is over its 20 requests
+    // per 10 s and evicts what is over its 500: our oldest events go, our
+    // current state (`state: true`) stays. What an app that floods looks like.
+    function floodPastCap() {
+        const now = Date.now()
+        const objs = []
+        for (let i = 0; i < floodPastCapSize; ++i) {
+            const o = floodObject(floodSeq++, now)
+            o.time = now - i            // newest first, all newer than the base data
+            delete o.state
+            objs.push(o)
+        }
+        floodReport = "Flood past the cap: sending " + floodPastCapSize + "…"
+        log("flood past the cap: sending " + floodPastCapSize + " with no wait")
+        pub.publish(objs, function (r) {
+            floodReport = "Flood past the cap: " + r.okObjects + " taken, " + r.refusedObjects
+                + " refused by the store" + errorList(r.errors) + " in " + r.requests
+                + " requests; it keeps " + pub.liveCount + " of " + pub.cap + ", "
+                + pub.stateCount + " of them current state"
+            log(floodReport)
+        }, "flood past the cap", { noWait: true })
     }
 
     function retractAll() {
@@ -209,6 +236,7 @@ Item {
                         objectName: app.appName + ".total"
                         Layout.fillWidth: true
                         text: pub.liveCount + " of " + pub.cap + " objects in the store"
+                              + (pub.stateCount > 0 ? ", " + pub.stateCount + " current state" : "")
                         font.weight: Font.DemiBold
                         wrapMode: Text.Wrap
                     }
@@ -269,7 +297,7 @@ Item {
             GridLayout {
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.spacing.small
-                columns: app.compact ? 1 : 3
+                columns: app.compact ? 1 : 2
                 columnSpacing: Theme.spacing.small
                 rowSpacing: Theme.spacing.small
 
@@ -279,6 +307,13 @@ Item {
                     text: "Flood " + app.floodSize
                     enabled: !pub.busy
                     onClicked: app.flood()
+                }
+                LogosButton {
+                    objectName: app.appName + ".floodPastCap"
+                    Layout.fillWidth: true
+                    text: "Flood past the cap"
+                    enabled: !pub.busy
+                    onClicked: app.floodPastCap()
                 }
                 LogosButton {
                     objectName: app.appName + ".publish"

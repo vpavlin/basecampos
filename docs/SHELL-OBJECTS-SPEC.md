@@ -1,6 +1,6 @@
 # Shell objects: apps publish, search ranks, views draw
 
-Status: draft, 2026-10-24. Steps 1 to 4 built (§11, §12); step 5 (experiments) not yet. Decision: [ADR-072](adr/0072-apps-publish-typed-objects.md).
+Status: draft, 2026-10-24. Steps 1 to 4 built (§11, §12); step 5 (experiments) not yet. Current state kept over the cap: §15, 2026-10-26. Decision: [ADR-072](adr/0072-apps-publish-typed-objects.md).
 Grows out of [SHELL-ROLES-SPEC.md](SHELL-ROLES-SPEC.md) Part B and generalises
 [NOTIFICATIONS-SPEC.md](NOTIFICATIONS-SPEC.md).
 
@@ -65,6 +65,7 @@ One envelope for every type. Fields marked *host* are set by the host and can't 
 | `updated` | ms | *host.* |
 | `seen` | bool | *host.* False until a view shows it; "N new since …" counts unseen. |
 | `expires` | ms | Optional. The host drops the object after it. |
+| `state` | bool | Optional, default false. `true`: **current state** (a balance, a membership, a contact), something that stays true, as against an event (a transaction, a message, a post). Kept when the app is over its cap (§8). Stored only when `true`. |
 | `icon` | url | *host*: the publisher's local icon (ADR-071). Per-object pictures (avatars, coin logos) are not in v0 (§9). |
 
 Plain text only, as for notifications: no markup, links or images from apps.
@@ -116,6 +117,12 @@ logos.request("basecamp.objects.retract", { keys: ["tx:0x91…"] }, res => {})  
 - Answers as for notifications: `ok`, `not_declared`, `bad_request` (with the first bad object's
   index), `failed` (limit). **A switched-off app still gets `ok`.**
 - Batches are all-or-nothing.
+- **Current state or event.** Mark what stays true with `state: true` (an account and its
+  balance, a community you belong to); leave events unmarked. When the app is over its cap the
+  oldest events go and current state stays (§8). The flag is per publish: republishing the same
+  `key` replaces the object, flag included, and `retract` removes it either way. Publish an
+  account as current state every time, or a later publish without the flag turns it into an
+  event.
 - **Actions come back** as `objects.action` to the publisher: `{ key, action, text? }` (`text`
   only for `input: "text"` actions, at most 1000 characters). The app declares it in `"provides"`.
   It can't be `basecamp.objects.action`: the registry refuses apps that provide a `basecamp.*`
@@ -194,8 +201,13 @@ while a transfer has an address; something has to say "this address belongs to t
   as for notifications. **Off removes everything that app published at once**; while off, new
   publishes are dropped (still answering `ok`). Uninstalling an app removes its objects.
 - Limits per app:
-  - 500 objects: past that the oldest by `time` are evicted and the publish still answers `ok`;
-    a single batch of more than 500 answers `failed`;
+  - 500 objects: past that the oldest **events** by `time` are evicted and the publish still
+    answers `ok`; a single batch of more than 500 answers `failed`;
+  - of those, at most 50 current state (`state: true`): never evicted to make room for events;
+    past 50 the oldest current-state object goes; a single batch with more than 50 answers
+    `failed`. So the flag cannot get round the 500, and an app that floods events (a busy
+    wallet, a chat) keeps its balances and memberships
+    ([ADR-083](adr/0083-current-state-kept-over-the-cap.md));
   - 20 publish requests per 10 s (the 21st answers `failed`; retract is not limited);
   - `fields` at most 2 KB per object (`failed`);
   - `time`, `expires` and `progress` must be finite numbers, times at most 8.64e15 ms
@@ -247,10 +259,12 @@ while a transfer has an address; something has to say "this address belongs to t
    stays (not done yet).
    Unit-tested; verified with a test app.
 2. **Stub publishers** (`experiments/objects-stubs/`), backends stubbed, each with a "flood" button
-   (1000 objects):
-   - Wallet: accounts, assets, transactions with moving progress, summaries;
-   - Chat: messages, contacts, reply;
-   - Communities: communities, posts, Join, votes;
+   (1000 objects, topping up to the cap) and a "Flood past the cap" button (2000 events at once,
+   no wait for the rate limit, so the store's own limits and eviction answer):
+   - Wallet: accounts, assets, transactions with moving progress, summaries (accounts, assets and
+     summaries as current state);
+   - Chat: messages, contacts, reply (contacts and conversations as current state);
+   - Communities: communities, posts, Join, votes (communities as current state);
    - News: news items;
    - Explorer: a second source of `transaction`, sharing subjects with Chat's contacts.
 3. **`basecamp_search`**, the default `search` role app: ranks by match, recency and unseen.
@@ -452,4 +466,67 @@ tests 49/49.
 - *About 50 to 60 ms per query is left*, mostly making the first 6 new cards and drawing the frame
   in software; a GPU should cut the drawing part. The 100 ms wait after the last keystroke stays.
 - The kept copy and index cost memory in proportion to the store (bounded by the 500-per-app cap).
+
+## 15. Current state over the cap: results
+
+Issue #63. Decision: [ADR-083](adr/0083-current-state-kept-over-the-cap.md). Basecamp source:
+branch `keychain`, commits 491f357 and a99c10e.
+
+**What changed.** The `state` flag (§3, §5) and the store rule in §8: over 500 an app loses its
+oldest events, never its current state; current state is capped at 50 per app, oldest first. A
+publish over the rate is now refused before its objects are validated (it is still counted only
+once valid). The stubs have **Flood past the cap** (2000 events at once, no client-side wait);
+Stub Wallet publishes accounts, assets and summaries as current state, Stub Communities its
+communities, Stub Chat its contacts and conversations.
+
+**Unit tests:** 49 of 49 suites. New in `object_store_test`: the flag is stored only when true and
+must be a bool; 2000 events past the cap keep all 9 current-state objects and the newest 491
+events, with exactly the evicted events in `changesSince`; the state cap evicts the oldest state,
+not events; a batch with 51 state objects fails; republish replaces and keeps the flag, retract
+removes it, a republish without the flag makes it an event again; a flagless app evicts by age as
+before; over the rate a request is refused before validation and a bad batch does not use the rate.
+`object_search_test`'s flood parity test now publishes current state before the flood: the kept
+copy, the host index and ranking the store agree through it.
+
+**Headless** (as §14: the five stubs, home in a New tab, llvmpipe; each stub's Flood past the cap
+pressed at once, so 200 requests and 10,000 objects arrive together).
+
+| Check | 390 | 1280 |
+|---|---|---|
+| Stub Wallet after the flood | 850 taken, 1150 refused (rate), 500 kept, 9 current state | same |
+| Wallet widget data (accounts and assets) | 7 of 7, every balance | 7 of 7, every balance |
+| Transactions | the flood's newest events; Stub Wallet's 6 base transactions evicted | same |
+| Pills | type pills sum to 2500, app pills sum to 2500, each app 500 | same |
+| Search app vs. host ranker (8 queries x 4 filters) | 32 of 32 identical | 32 of 32 identical |
+
+| Longest stall, median / max (ms) | 390 | 1280 |
+|---|---|---|
+| "a" (340) | 59 / 87 | 68 / 94 |
+| "ada" (84) | 48 / 62 | 60 / 99 |
+| "12" | 58 / 68 | 57 / 70 |
+| "tx" (0) | 47 / 51 | 47 / 56 |
+| "flood" (2477) | 63 / 69 | 62 / 93 |
+| Burst "f" to "flood" | 56 / 63 | 59 / 65 |
+| Emptying the field (2500) | 56 / 89 | 66 / 95 |
+| One app (Stub Wallet) floods past the cap, while it lands | 73, 84 | 57, 59 |
+| All five flood past the cap at the same moment | 216 | 240 to 322 (5 runs) |
+
+Five runs per query, method and caveats as §14; within the #27 budget (100 ms median) at both
+widths, and close to §14's numbers.
+
+**What remains.**
+- *Five apps flooding at the same instant* stall once for 216 to 322 ms. Each stub builds and
+  sends its 40 requests in 26 to 32 ms on the same thread, and the host then takes 200 requests
+  in one turn; checking the rate before validating did not change it measurably. One app flooding
+  stays under 100 ms.
+- *The Communities widget* (`community` and `post`, newest first, 200 results) shows none of the
+  5 kept communities after posts flood past the cap: they are in the store, but older than the
+  495 posts. Whether views should put current state first is a view decision, not a store one.
+- *Views do not use the flag* yet; the envelope carries it.
+- *One start in six crashed* in the headless runs (`malloc(): unaligned tcache chunk detected`)
+  while home and the search app loaded, before any stub published; not reproduced on retry.
+
+| 390: Transactions, Wallet widget, Stub Wallet | 1280: Wallet widget after the flood |
+|---|---|
+| ![](shell-objects/63-390.png) | ![](shell-objects/63-1280-wallet.png) |
 
