@@ -4,6 +4,10 @@
 
 #include <QApplication>
 #include <QTimer>
+#include <QTime>
+#include <QFileInfo>
+#include <QFile>
+#include <QDir>
 #include <QLabel>
 #include <QDebug>
 #include <QLineEdit>
@@ -422,6 +426,26 @@ QSize TabStrip::minimumTabSizeHint(int index) const
 void TabStrip::mousePressEvent(QMouseEvent* event)
 {
     m_dragging = event->button() == Qt::LeftButton && tabAt(event->position().toPoint()) >= 0;
+    if (m_dragging) {
+        // Held still for a moment (a finger): the tab menu, as right-click.
+        m_pressPos = event->position().toPoint();
+        if (!m_longPress) {
+            m_longPress = new QTimer(this);
+            m_longPress->setSingleShot(true);
+            m_longPress->setInterval(550);
+            connect(m_longPress, &QTimer::timeout, this, [this]() {
+                if (!m_dragging)
+                    return;
+                m_dragging = false;
+                // End QTabBar's own press/move-drag first.
+                QMouseEvent release(QEvent::MouseButtonRelease, QPointF(m_pressPos), mapToGlobal(QPointF(m_pressPos)),
+                                    Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                QTabBar::mouseReleaseEvent(&release);
+                emit customContextMenuRequested(m_pressPos);
+            });
+        }
+        m_longPress->start();
+    }
     QTabBar::mousePressEvent(event);
 }
 
@@ -429,6 +453,8 @@ void TabStrip::mouseMoveEvent(QMouseEvent* event)
 {
     // Well outside the strip (above or below, or past the ends): tear the tab off.
     const QPoint p = event->position().toPoint();
+    if (m_longPress && m_longPress->isActive() && (p - m_pressPos).manhattanLength() > 12)
+        m_longPress->stop();
     if (m_dragging && (event->buttons() & Qt::LeftButton)
         && !rect().adjusted(-60, -50, 60, 50).contains(p)) {
         m_dragging = false;
@@ -446,6 +472,8 @@ void TabStrip::mouseMoveEvent(QMouseEvent* event)
 void TabStrip::mouseReleaseEvent(QMouseEvent* event)
 {
     m_dragging = false;
+    if (m_longPress)
+        m_longPress->stop();
     // Middle-click closes, as in a browser.
     if (event->button() == Qt::MiddleButton) {
         const int i = tabAt(event->position().toPoint());
@@ -716,6 +744,183 @@ private:
     bool m_dot;
 };
 
+
+// ── System status (BasecampOS) ──────────────────────────────────────────────
+
+// Time, battery, network and the Shrooms mesh at the right of the bar: on a
+// device where Basecamp is the whole screen, nothing else shows them. Read
+// from sysfs every 10 s (no network library in the shell, no animation).
+// A click opens the system app (statusClicked).
+class StatusCluster : public QWidget
+{
+public:
+    explicit StatusCluster(QWidget* parent) : QWidget(parent)
+    {
+        setObjectName(QStringLiteral("basecampos.status"));
+        setCursor(Qt::PointingHandCursor);
+        setFixedHeight(32);
+        auto* t = new QTimer(this);
+        t->setInterval(10000);
+        connect(t, &QTimer::timeout, this, [this]() { refresh(); });
+        t->start();
+        refresh();
+    }
+    std::function<void()> onClicked;
+
+protected:
+    void mouseReleaseEvent(QMouseEvent* e) override
+    {
+        if (e->button() == Qt::LeftButton && rect().contains(e->position().toPoint()) && onClicked)
+            onClicked();
+    }
+
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        const QColor ink = tok("textSecondary", "#A3A3A3");
+        const QColor on = tok("text", "#FFFFFF");
+        const QColor good = tok("success", "#3DD68C");
+        const QColor bad = tok("error", "#E5484D");
+        QFont f = font();
+        f.setPixelSize(12);
+        p.setFont(f);
+        const int cy = height() / 2;
+        int x = 0;
+
+        // Shrooms mesh: a dot and "mesh".
+        p.setPen(Qt::NoPen);
+        p.setBrush(m_mesh ? good : ink);
+        p.drawEllipse(QPointF(x + 4, cy), 3.5, 3.5);
+        p.setPen(m_mesh ? on : ink);
+        p.drawText(QRect(x + 12, 0, 40, height()), Qt::AlignVCenter | Qt::AlignLeft, QStringLiteral("mesh"));
+        x += 52;
+
+        // Network: Wi-Fi bars (signal), a plug for wired, a cross for none.
+        if (m_net == QLatin1String("wifi")) {
+            const int bars = m_wifi < 0 ? 3 : (m_wifi >= 75 ? 4 : m_wifi >= 50 ? 3 : m_wifi >= 25 ? 2 : 1);
+            for (int i = 0; i < 4; ++i) {
+                const int h = 4 + i * 3;
+                p.setPen(Qt::NoPen);
+                p.setBrush(i < bars ? on : QColor(ink.red(), ink.green(), ink.blue(), 90));
+                p.drawRoundedRect(QRectF(x + i * 5, cy + 7 - h, 3.5, h), 1, 1);
+            }
+        } else if (m_net == QLatin1String("wired")) {
+            p.setPen(QPen(on, 1.6));
+            p.drawRect(QRectF(x + 2, cy - 4, 14, 9));
+            p.drawLine(QPointF(x + 6, cy + 5), QPointF(x + 6, cy + 8));
+            p.drawLine(QPointF(x + 12, cy + 5), QPointF(x + 12, cy + 8));
+        } else {
+            p.setPen(QPen(bad, 1.8));
+            p.drawLine(QPointF(x + 3, cy - 5), QPointF(x + 13, cy + 5));
+            p.drawLine(QPointF(x + 13, cy - 5), QPointF(x + 3, cy + 5));
+        }
+        x += 30;
+
+        // Battery: outline, fill by level, a bolt while charging, and %.
+        if (m_battery >= 0) {
+            const QColor fill = m_battery <= 15 && !m_charging ? bad : on;
+            p.setPen(QPen(ink, 1.2));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(QRectF(x, cy - 6, 22, 12), 2.5, 2.5);
+            p.setPen(Qt::NoPen);
+            p.setBrush(ink);
+            p.drawRect(QRectF(x + 22.5, cy - 2.5, 2, 5));
+            p.setBrush(fill);
+            p.drawRoundedRect(QRectF(x + 2, cy - 4, 18 * qBound(0, m_battery, 100) / 100.0, 8), 1.5, 1.5);
+            QString label = QString::number(m_battery) + QLatin1Char('%');
+            if (m_charging)
+                label.prepend(QChar(0x26A1));
+            p.setPen(on);
+            p.drawText(QRect(x + 29, 0, 52, height()), Qt::AlignVCenter | Qt::AlignLeft, label);
+            x += 80;
+        }
+
+        // Time.
+        QFont tf = f;
+        tf.setPixelSize(13);
+        tf.setWeight(QFont::DemiBold);
+        p.setFont(tf);
+        p.setPen(on);
+        p.drawText(QRect(x, 0, width() - x, height()), Qt::AlignVCenter | Qt::AlignLeft,
+                   QTime::currentTime().toString(QStringLiteral("HH:mm")));
+    }
+
+private:
+    static QString readFile(const QString& path)
+    {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()).trimmed() : QString();
+    }
+
+    void refresh()
+    {
+        m_battery = -1;
+        m_charging = false;
+        const QDir ps(QStringLiteral("/sys/class/power_supply"));
+        for (const QString& e : ps.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            const QString base = ps.filePath(e);
+            if (readFile(base + "/type") != QLatin1String("Battery"))
+                continue;
+            bool ok = false;
+            const int cap = readFile(base + "/capacity").toInt(&ok);
+            if (!ok)
+                continue;
+            m_battery = cap;
+            const QString st = readFile(base + "/status");
+            m_charging = st == QLatin1String("Charging") || st == QLatin1String("Full");
+            break;
+        }
+
+        m_net.clear();
+        m_wifi = -1;
+        m_mesh = false;
+        const QDir net(QStringLiteral("/sys/class/net"));
+        const QString wireless = readFile(QStringLiteral("/proc/net/wireless"));
+        for (const QString& iface : net.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::System)) {
+            if (iface == QLatin1String("lo"))
+                continue;
+            const QString base = net.filePath(iface);
+            const QString oper = readFile(base + "/operstate");
+            const bool up = oper == QLatin1String("up")
+                || (oper == QLatin1String("unknown") && readFile(base + "/carrier") == QLatin1String("1"));
+            if (iface.startsWith(QLatin1String("shrooms"))) {
+                m_mesh = m_mesh || up || oper == QLatin1String("unknown");
+            } else if (QFileInfo::exists(base + "/wireless")) {
+                if (up) {
+                    m_net = QStringLiteral("wifi");
+                    // /proc/net/wireless: "wlan0: 0000   60.  -50.  ..." (link quality of 70)
+                    for (const QString& line : wireless.split(QLatin1Char('\n'))) {
+                        if (!line.trimmed().startsWith(iface + QLatin1Char(':')))
+                            continue;
+                        const QStringList cols = line.simplified().split(QLatin1Char(' '));
+                        if (cols.size() > 2)
+                            m_wifi = qBound(0, int(cols.at(2).toDouble() * 100 / 70), 100);
+                    }
+                }
+            } else if (up && readFile(base + "/type") == QLatin1String("1") && m_net.isEmpty()) {
+                m_net = QStringLiteral("wired");
+            }
+        }
+        QStringList tip;
+        tip << (m_mesh ? tr("Shrooms mesh: connected") : tr("Shrooms mesh: not connected"));
+        tip << (m_net == QLatin1String("wifi") ? tr("Wi-Fi: connected (%1%)").arg(m_wifi)
+                : m_net == QLatin1String("wired") ? tr("Wired network: connected") : tr("No network"));
+        if (m_battery >= 0)
+            tip << tr("Battery: %1%%2").arg(m_battery).arg(m_charging ? tr(", charging") : QString());
+        tip << tr("Click for System");
+        setToolTip(tip.join(QLatin1Char('\n')));
+        setFixedWidth(52 + 30 + (m_battery >= 0 ? 80 : 0) + 44);
+        update();
+    }
+
+    int m_battery = -1;
+    bool m_charging = false;
+    QString m_net;
+    int m_wifi = -1;
+    bool m_mesh = false;
+};
+
 // ── TabArea ─────────────────────────────────────────────────────────────────
 
 static QIcon trashIcon(const QColor& tint);
@@ -744,9 +949,11 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
 
     m_plus = new QToolButton(m_bar);
     m_plus->setObjectName(QStringLiteral("basecampium.newTab"));
-    m_plus->setText(QStringLiteral("+"));
-    m_plus->setToolTip(tr("Open Basecamp (Ctrl+T)"));
-    m_plus->setFixedSize(36, 32);
+    // A word with the "+": it is how another app opens, and a bare "+" read
+    // as decoration (BasecampOS, on the Duet).
+    m_plus->setText(tr("+  Apps"));
+    m_plus->setToolTip(tr("Open another app (Ctrl+T)"));
+    m_plus->setFixedSize(84, 32);
     m_plus->setFocusPolicy(Qt::NoFocus);
     connect(m_plus, &QToolButton::clicked, this, [this]() { addNewTab(); });
 
@@ -760,6 +967,11 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
     m_drag = new DragArea(m_bar);
     m_drag->setObjectName(QStringLiteral("basecampium.dragArea"));
     row->addWidget(m_drag, 1);
+
+    auto* status = new StatusCluster(m_bar);
+    status->onClicked = [this]() { emit statusClicked(); };
+    row->addWidget(status, 0, Qt::AlignVCenter);
+    row->addSpacing(8);
 
 #ifndef Q_OS_MAC
     m_buttons = new QWidget(m_bar);

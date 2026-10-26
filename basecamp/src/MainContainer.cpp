@@ -465,6 +465,12 @@ void MainContainer::setupUi()
         m_homeStack->addWidget(new QWidget(m_newTabWidget));                          // loading
         m_homeStack->addWidget(makeRoleFallback(QStringLiteral("home"), m_newTabWidget)); // none
         m_tabArea = new TabArea(m_newTabWidget, this);
+        // The status in the bar opens the system app (BasecampOS's "System").
+        connect(m_tabArea, &TabArea::statusClicked, this, [this]() {
+            const QString app = qEnvironmentVariable("BASECAMP_STATUS_APP", QStringLiteral("basecampos_system_ui"));
+            QMetaObject::invokeMethod(m_host->backendObject(), "onAppLauncherClicked",
+                                      Qt::QueuedConnection, Q_ARG(QString, app));
+        });
         m_mainLayout->addWidget(m_tabArea, 1);
     } else {
         m_mainLayout->addWidget(m_sidebarWidget);

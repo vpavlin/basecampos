@@ -7,6 +7,7 @@
 
 class QStackedWidget;
 class QSplitter;
+class QTimer;
 class QLabel;
 class QLineEdit;
 class QToolButton;
@@ -37,6 +38,9 @@ protected:
 private:
     int m_available = 1000;
     bool m_dragging = false;
+    // Touch has no right-click: a press held still opens the tab menu.
+    QTimer* m_longPress = nullptr;
+    QPoint m_pressPos;
 };
 
 class TabArea : public QWidget
@@ -102,6 +106,8 @@ signals:
     // One bar: the bar's search on the New tab, and its Enter.
     void homeQueryChanged(const QString& text);
     void homeQueryAccepted();
+    // The system status in the bar was clicked (BasecampOS: opens System).
+    void statusClicked();
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
