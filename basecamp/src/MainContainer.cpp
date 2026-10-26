@@ -33,6 +33,7 @@
 #include <QApplication>
 #include <QUrl>
 #include <QCursor>
+#include <QDateTime>
 #include <QSettings>
 #include <QWindow>
 #include <QMouseEvent>
@@ -477,6 +478,14 @@ bool MainContainer::eventFilter(QObject* watched, QEvent* event)
     }
     if (watched == m_dockWidget && event->type() == QEvent::Resize)
         QTimer::singleShot(0, this, [this]() { positionDock(); });
+    // The hidden dock comes back when the pointer reaches the bottom edge, or a
+    // finger taps it (a tablet has no hover).
+    if (watched == m_dockReveal && (event->type() == QEvent::Enter || event->type() == QEvent::MouseButtonPress
+                                    || event->type() == QEvent::TouchBegin)) {
+        m_dockRevealedAt = QDateTime::currentMSecsSinceEpoch();
+        setDockHidden(false);
+        return event->type() != QEvent::Enter;
+    }
     if (watched == m_sidebarWidget && event->type() == QEvent::Leave) {
         if (m_overlayWidget) {
             QObject* overlayRoot = m_overlayWidget->rootObject();
@@ -757,8 +766,24 @@ void MainContainer::setupDesktopUi()
         });
     m_dockWidget->installEventFilter(this);
     m_dockWidget->show();
-    // Panel 72 + 12 from the edge + a little air: maximised windows stop above it.
-    m_desktop->setBottomReserve(92);
+    // Auto-hide (on unless BASECAMP_DOCK_AUTOHIDE=0): maximised windows take the
+    // whole height; the dock comes back over them from the bottom edge.
+    m_dockAutoHide = qEnvironmentVariable("BASECAMP_DOCK_AUTOHIDE", QStringLiteral("1")) != QLatin1String("0");
+    if (m_dockAutoHide) {
+        m_desktop->setBottomReserve(6);
+        m_dockReveal = new QWidget(this);
+        m_dockReveal->setAttribute(Qt::WA_NoSystemBackground);
+        m_dockReveal->setMouseTracking(true);
+        m_dockReveal->installEventFilter(this);
+        m_dockReveal->hide();
+        m_dockTimer = new QTimer(this);
+        m_dockTimer->setInterval(500);
+        connect(m_dockTimer, &QTimer::timeout, this, &MainContainer::updateDockAutoHide);
+        m_dockTimer->start();
+    } else {
+        // Panel 72 + 12 from the edge + a little air: maximised windows stop above it.
+        m_desktop->setBottomReserve(92);
+    }
 
     // Spotlight: the workspace's search page (search, Recently Closed,
     // results) in spotlight mode, over the whole desktop. Ctrl+K toggles it.
@@ -830,8 +855,13 @@ void MainContainer::positionDock()
     if (!m_dockWidget)
         return;
     m_dockWidget->move((width() - m_dockWidget->width()) / 2,
-                       height() - m_dockWidget->height() - 12);
+                       m_dockHidden ? height() + 2 : height() - m_dockWidget->height() - 12);
     m_dockWidget->raise();
+    if (m_dockReveal) {
+        m_dockReveal->setGeometry(0, height() - 6, width(), 6);
+        m_dockReveal->setVisible(m_dockHidden);
+        m_dockReveal->raise();
+    }
     if (m_overlayWidget && m_overlayWidget->isVisible())
         m_overlayWidget->raise();
 }
@@ -1342,4 +1372,35 @@ bool MainContainer::tabsKey(QKeyEvent* e)
     if (ctrl && key == Qt::Key_Comma) { openSystemApp(QStringLiteral("sys:settings")); return true; }
     if (ctrlShift && key == Qt::Key_T) { reopenClosedTab(); return true; }
     return false;
+}
+
+void MainContainer::setDockHidden(bool hidden)
+{
+    if (!m_dockWidget || hidden == m_dockHidden)
+        return;
+    m_dockHidden = hidden;
+    positionDock();
+}
+
+void MainContainer::updateDockAutoHide()
+{
+    if (!m_dockAutoHide || !m_dockWidget || !m_desktop || !m_desktopLayout)
+        return;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    // Where the dock sits when shown, in this widget's coordinates.
+    const QRect dockRect((width() - m_dockWidget->width()) / 2, height() - m_dockWidget->height() - 12,
+                         m_dockWidget->width(), m_dockWidget->height());
+    bool covered = false;
+    for (AppWindow* w : m_desktop->appWindows()) {
+        if (!w->isVisible())
+            continue;
+        const QRect r(w->mapTo(this, QPoint(0, 0)), w->size());
+        if (r.intersects(dockRect)) {
+            covered = true;
+            break;
+        }
+    }
+    const bool pointerOnDock = !m_dockHidden && m_dockWidget->geometry().contains(mapFromGlobal(QCursor::pos()));
+    const bool justRevealed = now - m_dockRevealedAt < 3000;
+    setDockHidden(covered && !pointerOnDock && !justRevealed);
 }
