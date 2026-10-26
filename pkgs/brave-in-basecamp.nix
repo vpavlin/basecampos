@@ -18,21 +18,18 @@ writeShellScript "brave-in-basecamp" ''
   profile="$HOME/.config/BraveSoftware/Brave-Basecamp"
   log="$HOME/.cache/basecampos/brave-in-basecamp.log"
   mkdir -p "$(dirname "$log")"
-  run_log=$(mktemp)
-  trap 'rm -f "$run_log"' EXIT
+  # Straight into the log (a long session's output would fill a tmpfs copy);
+  # the crash check reads what this run added.
   run() {
-    : >"$run_log"
     ${brave}/bin/brave --ozone-platform=wayland --disable-gpu --enable-logging=stderr --user-data-dir="$profile" \
-      ${lib.escapeShellArgs extraFlags} "$@" >"$run_log" 2>&1
-    rc=$?
-    cat "$run_log" >>"$log"
-    return $rc
+      ${lib.escapeShellArgs extraFlags} "$@" >>"$log" 2>&1
   }
+  from=$(( $(stat -c %s "$log" 2>/dev/null || echo 0) + 1 ))
   start=$(date +%s)
   run "$@"
   rc=$?
   crashed=no
-  if [ "$rc" -ge 128 ] || grep -qE 'core dumped|Trace/breakpoint trap|Segmentation fault|Aborted' "$run_log"; then
+  if [ "$rc" -ge 128 ] || tail -c +"$from" "$log" | grep -qE 'core dumped|Trace/breakpoint trap|Segmentation fault|Aborted'; then
     crashed=yes
   fi
   if [ "$crashed" = yes ] && [ $(( $(date +%s) - start )) -lt 15 ]; then
