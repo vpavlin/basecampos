@@ -145,9 +145,15 @@ Rectangle {
             card.total = 0
             return
         }
-        if (card.results) card.results.update(card.query, card.filter)
-        else card.results = shell.search(card.query, card.filter)
-        card.rebuild()
+        // update() is answered with resultsChanged, which rebuilds; only a
+        // new results model, filled before anything listens, is rebuilt here
+        // (rebuilding both times doubled the work per query, #27).
+        if (card.results) {
+            card.results.update(card.query, card.filter)
+        } else {
+            card.results = shell.search(card.query, card.filter)
+            card.rebuild()
+        }
     }
 
     function rebuild() {

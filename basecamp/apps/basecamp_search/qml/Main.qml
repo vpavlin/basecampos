@@ -21,6 +21,33 @@ Rectangle {
     readonly property bool granted: typeof shell !== "undefined" && shell !== null
                                     && shell.roles.search === "basecamp_search"
 
+    // This app's copy of the store, brought up to date on each request from
+    // what changed since (basecamp-experiments#27): a query no longer copies
+    // every object. A shell without objectsSince gets the old path.
+    property var index: Ranker.newIndex()
+    function rank(query, filter) {
+        const changes = typeof shell.objectsSince === "function"
+                        ? shell.objectsSince(root.index.version, filter) : null
+        if (Ranker.applyChanges(root.index, changes)) {
+            const ids = Ranker.rankIndex(root.index, changes.ids || null, query, Date.now())
+            if (root.index.waiting.length > 0) Qt.callLater(root.prepareStep)
+            return ids
+        }
+        return Ranker.rank(shell.objects(filter), query, Date.now())
+    }
+    // New objects' words are split a few hundred at a time while idle, so
+    // the refresh after a flood (often an empty bar, which needs no words)
+    // does not split 2500 objects' words at once. A query that needs them
+    // splits whatever is still waiting first. Qt.callLater, one turn of the
+    // event loop per step: this app runs without a window, and a QML Timer
+    // here did not fire in the headless test (the words were never ready).
+    function prepareStep() {
+        if (Ranker.prepareSome(root.index, 250) > 0)
+            Qt.callLater(root.prepareStep)
+    }
+    // Losing the role (or getting it back) starts over.
+    onGrantedChanged: root.index = Ranker.newIndex()
+
     property int answered: 0
     property string lastQuery: ""
     property int lastCount: 0
@@ -28,7 +55,11 @@ Rectangle {
     Connections {
         target: root.granted ? shell : null
         function onSearchRequested(requestId, query, filter) {
-            const ids = Ranker.rank(shell.objects(filter), query, Date.now())
+            const started = Date.now()
+            const ids = root.rank(query, filter)
+            const took = Date.now() - started
+            if (took > 30)
+                console.info("basecamp_search: ranking took", took, "ms for", root.index.size, "objects")
             if (shell.answer(requestId, ids)) {
                 root.answered += 1
                 root.lastQuery = query

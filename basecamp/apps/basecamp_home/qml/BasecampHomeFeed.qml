@@ -47,18 +47,68 @@ Column {
         color: Theme.palette.textSecondary
     }
 
+    // The cards are kept, not rebuilt (basecamp-experiments#27, broad
+    // queries): `cards` follows rows.slice(0, shown) by id, so a card whose
+    // object stays keeps its item (and only redraws when its envelope
+    // changed), one that moved is moved, and only new ones are made. Making
+    // an ObjectCard is the expensive part (a few ms each in software
+    // rendering), so at most cardsPerPass are made at once and the rest in
+    // the next passes, a frame apart: a query that changes all 30 cards no
+    // longer blocks the window while 30 are made.
+    readonly property int cardsPerPass: 6
+    ListModel { id: cards }
+    onRowsChanged: feed.sync()
+    onShownChanged: feed.sync()
+    Component.onCompleted: feed.sync()
+    Timer {
+        id: nextPass
+        interval: 16
+        onTriggered: feed.sync()
+    }
+    // Whether the cards drawn are all of rows.slice(0, shown) yet.
+    property bool settled: true
+    function sync() {
+        const want = feed.rows.slice(0, feed.shown)
+        const wanted = {}
+        for (let w = 0; w < want.length; ++w) wanted[want[w].id] = true
+        let made = 0
+        let i = 0
+        for (; i < want.length; ++i) {
+            const o = want[i]
+            const json = JSON.stringify(o)
+            let j = i
+            while (j < cards.count && cards.get(j).rid !== o.id) ++j
+            if (j < cards.count) {
+                if (j !== i) cards.move(j, i, 1)
+                if (cards.get(i).json !== json) cards.setProperty(i, "json", json)
+                continue
+            }
+            if (made >= feed.cardsPerPass) break
+            cards.insert(i, { rid: o.id, json: json })
+            ++made
+        }
+        // Cards no longer wanted go now; ones still wanted further down wait
+        // for the next pass, which moves them into place.
+        for (let k = cards.count - 1; k >= i; --k)
+            if (i >= want.length || wanted[cards.get(k).rid] !== true) cards.remove(k, 1)
+        feed.settled = i >= want.length
+        if (feed.settled) nextPass.stop()
+        else nextPass.restart()
+    }
+
     Repeater {
         id: cardRepeater
-        model: feed.rows.slice(0, feed.shown)
+        model: cards
         delegate: ObjectCard {
-            required property var modelData
+            required property string rid
+            required property string json
             width: feed.width
-            object: modelData
+            object: JSON.parse(json)
             now: feed.now
-            isNew: feed.newIds[modelData.id] === true
+            isNew: feed.newIds[rid] === true
             query: feed.query
-            namePrefix: "home.card." + modelData.key
-            onActionRequested: (action, text) => feed.raiseRequested(modelData.id, action, text)
+            namePrefix: "home.card." + object.key
+            onActionRequested: (action, text) => feed.raiseRequested(rid, action, text)
         }
     }
 

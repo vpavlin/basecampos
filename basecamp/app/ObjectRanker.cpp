@@ -92,25 +92,13 @@ double score(const QVariantMap& o, const QStringList& queryTokens, qint64 nowMs)
     return kMatchWeight * match + recency + unseen;
 }
 
-QStringList rank(const QVariantList& objects, const QString& query, qint64 nowMs)
+namespace {
+
+struct Hit { double score; qint64 time; bool unseen; QString id; };
+
+QStringList ordered(QList<Hit>& hits, bool emptyQuery)
 {
-    const QStringList queryTokens = tokens(query);
-    struct Hit { double score; qint64 time; bool unseen; QString id; };
-    QList<Hit> hits;
-    hits.reserve(objects.size());
-    for (const QVariant& v : objects) {
-        const QVariantMap o = v.toMap();
-        const QString id = o.value(QStringLiteral("id")).toString();
-        if (id.isEmpty()) continue;
-        if (queryTokens.isEmpty()) {
-            hits.append({ 0, timeOf(o), !o.value(QStringLiteral("seen")).toBool(), id });
-            continue;
-        }
-        const double s = score(o, queryTokens, nowMs);
-        if (s >= 0)
-            hits.append({ s, 0, false, id });
-    }
-    if (queryTokens.isEmpty()) {
+    if (emptyQuery) {
         std::sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) {
             if (a.unseen != b.unseen) return a.unseen;
             if (a.time != b.time) return a.time > b.time;
@@ -126,6 +114,132 @@ QStringList rank(const QVariantList& objects, const QString& query, qint64 nowMs
     for (int i = 0; i < hits.size() && i < kMaxResults; ++i)
         out << hits.at(i).id;
     return out;
+}
+
+// " w1 w2 …" for `text`'s words, appended to `out`.
+void appendWords(QString& out, const QString& text)
+{
+    if (text.isEmpty()) return;
+    for (const QString& w : tokens(text)) {
+        out += QLatin1Char(' ');
+        out += w;
+    }
+}
+
+bool startsAWord(const QString& words, const QString& spacedToken)
+{
+    return !words.isEmpty() && words.contains(spacedToken);
+}
+
+int strengthSpaced(const Prepared& o, const QString& spaced)
+{
+    if (startsAWord(o.title, spaced)) return kTitleStrength;
+    if (startsAWord(o.keywords, spaced)) return kKeywordStrength;
+    if (startsAWord(o.subtitle, spaced)) return kSubtitleStrength;
+    if (kMatchContentFields && startsAWord(o.fields, spaced)) return kFieldStrength;
+    return 0;
+}
+
+double scoreSpaced(const Prepared& o, const QStringList& spacedTokens, qint64 nowMs)
+{
+    int match = 0;
+    for (const QString& t : spacedTokens) {
+        const int s = strengthSpaced(o, t);
+        if (s == 0) return -1;
+        match += s;
+    }
+    const double age = double(std::max<qint64>(0, nowMs - o.time));
+    const double recency = kRecencyWeight * std::pow(2.0, -age / kRecencyHalfLifeMs);
+    return kMatchWeight * match + recency + (o.seen ? 0.0 : kUnseenBoost);
+}
+
+QStringList spaced(const QStringList& queryTokens)
+{
+    QStringList out;
+    for (const QString& t : queryTokens) out << QLatin1Char(' ') + t;
+    return out;
+}
+
+} // namespace
+
+QStringList rank(const QVariantList& objects, const QString& query, qint64 nowMs)
+{
+    const QStringList queryTokens = tokens(query);
+    QList<Hit> hits;
+    hits.reserve(objects.size());
+    for (const QVariant& v : objects) {
+        const QVariantMap o = v.toMap();
+        const QString id = o.value(QStringLiteral("id")).toString();
+        if (id.isEmpty()) continue;
+        if (queryTokens.isEmpty()) {
+            hits.append({ 0, timeOf(o), !o.value(QStringLiteral("seen")).toBool(), id });
+            continue;
+        }
+        const double s = score(o, queryTokens, nowMs);
+        if (s >= 0)
+            hits.append({ s, 0, false, id });
+    }
+    return ordered(hits, queryTokens.isEmpty());
+}
+
+Prepared prepare(const QVariantMap& o)
+{
+    Prepared p = prepareOrder(o);
+    prepareWords(p, o);
+    return p;
+}
+
+Prepared prepareOrder(const QVariantMap& o)
+{
+    Prepared p;
+    p.id = o.value(QStringLiteral("id")).toString();
+    p.time = timeOf(o);
+    p.seen = o.value(QStringLiteral("seen")).toBool();
+    return p;
+}
+
+void prepareWords(Prepared& p, const QVariantMap& o)
+{
+    p.title.clear(); p.keywords.clear(); p.subtitle.clear(); p.fields.clear();
+    appendWords(p.title, o.value(QStringLiteral("title")).toString());
+    for (const QVariant& k : o.value(QStringLiteral("keywords")).toList())
+        appendWords(p.keywords, k.toString());
+    appendWords(p.subtitle, o.value(QStringLiteral("subtitle")).toString());
+    if (kMatchContentFields) {
+        QStringList strings;
+        collectStrings(o.value(QStringLiteral("fields")), strings);
+        for (const QString& str : std::as_const(strings))
+            appendWords(p.fields, str);
+    }
+}
+
+int strength(const Prepared& o, const QString& token)
+{
+    return strengthSpaced(o, QLatin1Char(' ') + token);
+}
+
+double score(const Prepared& o, const QStringList& queryTokens, qint64 nowMs)
+{
+    return scoreSpaced(o, spaced(queryTokens), nowMs);
+}
+
+QStringList rank(const QList<const Prepared*>& objects, const QString& query, qint64 nowMs)
+{
+    const QStringList queryTokens = tokens(query);
+    const QStringList spacedTokens = spaced(queryTokens);
+    QList<Hit> hits;
+    hits.reserve(objects.size());
+    for (const Prepared* o : objects) {
+        if (!o || o->id.isEmpty()) continue;
+        if (queryTokens.isEmpty()) {
+            hits.append({ 0, o->time, !o->seen, o->id });
+            continue;
+        }
+        const double s = scoreSpaced(*o, spacedTokens, nowMs);
+        if (s >= 0)
+            hits.append({ s, 0, false, o->id });
+    }
+    return ordered(hits, queryTokens.isEmpty());
 }
 
 } // namespace ObjectRanker

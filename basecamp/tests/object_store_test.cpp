@@ -89,6 +89,8 @@ private slots:
     void testSignalsCarryTheApp();
     void testEnvelopesAreCanonicalPayloads();
     void testIconFullBleedIsStampedPerApp();
+    void testChangesSinceFollowsEveryChange();
+    void testChangesSinceResetsWhenItCannotTell();
 
 private:
     ObjectStore* makeStore()
@@ -587,6 +589,151 @@ void TestObjectStore::testEnvelopesAreCanonicalPayloads()
     const QVariantList all = store->list();
     QCOMPARE(all.size(), 1);
     QVERIFY(logos::intent::isCanonicalValue(QVariant(all)));
+}
+
+namespace {
+QStringList idsOf(const QList<QVariantMap>& objects)
+{
+    QStringList out;
+    for (const QVariantMap& o : objects) out << o.value(QStringLiteral("id")).toString();
+    out.sort();
+    return out;
+}
+QStringList sortedList(QStringList l)
+{
+    l.sort();
+    return l;
+}
+} // namespace
+
+// basecamp-experiments#27: the search role keeps a copy and asks only for
+// what changed. Every kind of change must show up, or its copy goes stale.
+void TestObjectStore::testChangesSinceFollowsEveryChange()
+{
+    std::unique_ptr<ObjectStore> store(makeStore());
+    QCOMPARE(store->version(), quint64(0));
+    QVERIFY(store->publish(kWallet, batch({ tx(QStringLiteral("a"), 10), tx(QStringLiteral("b"), 20) })).isEmpty());
+    const QString a = ObjectStore::idFor(kWallet, QStringLiteral("a"));
+    const QString b = ObjectStore::idFor(kWallet, QStringLiteral("b"));
+
+    // From nothing: everything, as a reset.
+    ObjectStore::Changes c = store->changesSince(0);
+    QVERIFY(c.reset);
+    QCOMPARE(idsOf(c.changed), sortedList({ a, b }));
+    QVERIFY(c.removed.isEmpty());
+    quint64 v = c.version;
+    QCOMPARE(v, store->version());
+
+    // Nothing since: nothing.
+    c = store->changesSince(v);
+    QVERIFY(!c.reset);
+    QVERIFY(c.changed.isEmpty());
+    QVERIFY(c.removed.isEmpty());
+    QCOMPARE(c.version, v);
+
+    // A replace (same key) is a change, with the new envelope.
+    QVariantMap a2 = tx(QStringLiteral("a"), 10);
+    a2[QStringLiteral("title")] = QStringLiteral("Sent to Ada");
+    QVERIFY(store->publish(kWallet, batch({ a2 })).isEmpty());
+    c = store->changesSince(v);
+    QVERIFY(!c.reset);
+    QCOMPARE(idsOf(c.changed), QStringList{ a });
+    QCOMPARE(c.changed.first().value(QStringLiteral("title")).toString(), QStringLiteral("Sent to Ada"));
+    v = c.version;
+
+    // Marking seen is a change (it moves the ranking).
+    store->markSeen({ b });
+    c = store->changesSince(v);
+    QCOMPARE(idsOf(c.changed), QStringList{ b });
+    QVERIFY(c.changed.first().value(QStringLiteral("seen")).toBool());
+    v = c.version;
+    // Already seen: no change.
+    store->markSeen({ b });
+    QCOMPARE(store->changesSince(v).changed.size(), 0);
+
+    // Retract: removed.
+    QVERIFY(store->retract(kWallet, { { QStringLiteral("keys"), QStringList{ QStringLiteral("a") } } }).isEmpty());
+    c = store->changesSince(v);
+    QVERIFY(c.changed.isEmpty());
+    QCOMPARE(c.removed, QStringList{ a });
+    v = c.version;
+
+    // Removed, then published again: a change, not a removal.
+    QVERIFY(store->publish(kWallet, batch({ tx(QStringLiteral("a"), 30) })).isEmpty());
+    c = store->changesSince(v);
+    QCOMPARE(idsOf(c.changed), QStringList{ a });
+    QVERIFY(c.removed.isEmpty());
+    v = c.version;
+
+    // Expiry: removed.
+    QVariantMap e = tx(QStringLiteral("e"), 40);
+    e[QStringLiteral("expires")] = m_now + 1000;
+    QVERIFY(store->publish(kChat, batch({ e })).isEmpty());
+    const QString eid = ObjectStore::idFor(kChat, QStringLiteral("e"));
+    c = store->changesSince(v);
+    QCOMPARE(idsOf(c.changed), QStringList{ eid });
+    v = c.version;
+    m_now += 2000;
+    c = store->changesSince(v);
+    QCOMPARE(c.removed, QStringList{ eid });
+    v = c.version;
+
+    // The user's switch: everything that app published is removed.
+    store->setEnabled(kWallet, false);
+    c = store->changesSince(v);
+    QCOMPARE(sortedList(c.removed), sortedList({ a, b }));
+    v = c.version;
+    store->setEnabled(kWallet, true);
+
+    // Eviction past 500: the evicted are removed, the new ones changed.
+    // (Batches of 100 so the rate limit is not what stops them.)
+    for (int n = 0; n < 6; ++n) {
+        QVariantList objs;
+        for (int i = 0; i < 100; ++i)
+            objs << tx(QStringLiteral("f%1").arg(n * 100 + i), 100 + n * 100 + i);
+        QVERIFY(store->publish(kWallet, batch(objs)).isEmpty());
+    }
+    c = store->changesSince(v);
+    QCOMPARE(c.changed.size(), 500);
+    // The 100 oldest were published since `v` and then evicted: removed.
+    QCOMPARE(c.removed.size(), 100);
+    QVERIFY(c.removed.contains(ObjectStore::idFor(kWallet, QStringLiteral("f0"))));
+
+    // A copy kept from these changes equals the store.
+    QHash<QString, QVariantMap> copy;
+    for (const QVariantMap& o : store->changesSince(0).changed) copy.insert(o.value(QStringLiteral("id")).toString(), o);
+    QCOMPARE(copy.size(), store->total());
+}
+
+void TestObjectStore::testChangesSinceResetsWhenItCannotTell()
+{
+    std::unique_ptr<ObjectStore> store(makeStore());
+    QVERIFY(store->publish(kWallet, batch({ tx(QStringLiteral("a"), 10) })).isEmpty());
+    const quint64 v = store->version();
+    // A version this store never gave out.
+    QVERIFY(store->changesSince(v + 5).reset);
+    QCOMPARE(store->changesSince(v + 5).changed.size(), 1);
+
+    // More removals than it remembers: a reader from before them starts over.
+    m_now += 60 * 1000;
+    int published = 0;
+    while (store->version() < v + 2 * ObjectStore::kMaxTombstones + 10) {
+        QVariantList objs;
+        for (int i = 0; i < 400; ++i, ++published)
+            objs << tx(QStringLiteral("x%1").arg(published), 1000 + published);
+        m_now += 10 * 1000;   // past the rate window
+        QVERIFY(store->publish(kChat, batch(objs)).isEmpty());
+        QVERIFY(store->retract(kChat, { { QStringLiteral("all"), true } }).isEmpty());
+    }
+    const ObjectStore::Changes c = store->changesSince(v);
+    QVERIFY(c.reset);
+    QCOMPARE(idsOf(c.changed), QStringList{ ObjectStore::idFor(kWallet, QStringLiteral("a")) });
+    // A recent reader is still told precisely.
+    const quint64 now = store->version();
+    QVERIFY(store->retract(kWallet, { { QStringLiteral("all"), true } }).isEmpty());
+    const ObjectStore::Changes d = store->changesSince(now);
+    QVERIFY(!d.reset);
+    QCOMPARE(d.removed.size(), 1);
 }
 
 QTEST_GUILESS_MAIN(TestObjectStore)

@@ -76,6 +76,50 @@ QVariantList idList(const QStringList& ids)
     return out;
 }
 
+// basecamp_search's ranker, loaded as the app loads it (without the pragma).
+bool loadJsRanker(QJSEngine& js)
+{
+    QFile f(QFINDTESTDATA("../apps/basecamp_search/qml/BasecampSearchRanker.js"));
+    if (!f.open(QIODevice::ReadOnly)) return false;
+    QString code = QString::fromUtf8(f.readAll());
+    code.replace(QStringLiteral(".pragma library"), QString());
+    return !js.evaluate(code, f.fileName()).isError();
+}
+
+// Objects that exercise every rule: title, keywords, subtitle, nested fields,
+// `updated` without `time`, seen and unseen, ties.
+QVariantList rankerFixture()
+{
+    QVariantList objects{
+        env("t1", "Ada Lovelace", kNow - 3 * kHour, false),
+        env("t2", "Ada", kNow - 3 * kHour, false),
+        env("t3", "Payment to Ada", kNow - 30 * kHour, true,
+            { { "subtitle", "Weekly rent" }, { "keywords", QStringList{ "rent", "bills" } } }),
+        env("t4", "Lunch", kNow - kHour, false,
+            { { "fields", QVariantMap{ { "text", "with ada tomorrow?" }, { "count", 3 } } } }),
+        env("t5", "Main account", kNow - 100 * kHour, true,
+            { { "fields", QVariantMap{ { "balance", QVariantMap{ { "amount", "1.2" }, { "unit", "ETH" } } },
+                                       { "tags", QVariantList{ "savings", "cold" } } } } }),
+        env("t6", "Canada trip", kNow - 2 * kHour, false, { { "subtitle", "ada's idea" } }),
+        env("t7", "Logos testnet relaunch", kNow - 5 * kHour, true,
+            { { "keywords", QStringList{ "network", "Re-Launch" } } }),
+        env("t8", "tx:0x91 sent", kNow - 7 * kHour, false),
+        env("t10", "", kNow - 8 * kHour, false, { { "subtitle", "  " } }),
+    };
+    QVariantMap updatedOnly{ { "id", "t9" }, { "title", "Ada updated" },
+                             { "updated", kNow - 4 * kHour }, { "seen", true } };
+    objects << updatedOnly << env("t0", "Relaunch notes", kNow - 5 * kHour, true);
+    return objects;
+}
+
+const QStringList kFixtureQueries{ QString(), QStringLiteral("  "), QStringLiteral("ada"),
+                                   QStringLiteral("ADA love"), QStringLiteral("re"),
+                                   QStringLiteral("eth"), QStringLiteral("cold savings"),
+                                   QStringLiteral("tx:0x91"), QStringLiteral("ada's"),
+                                   QStringLiteral("nothing-matches"), QStringLiteral("l"),
+                                   QStringLiteral("a"), QStringLiteral("launch"),
+                                   QStringLiteral("1.2"), QStringLiteral("t") };
+
 } // namespace
 
 class TestObjectSearch : public QObject {
@@ -110,6 +154,8 @@ private slots:
     void testNestedFieldStrings();
     void testCap();
     void testJsRankerMatches();
+    void testPreparedMatchesRanker();
+    void testJsIndexMatchesRanker();
 
     // The protocol
     void testNoHolderAnswersAtOnce();
@@ -128,6 +174,7 @@ private slots:
     void testDroppedResultsFreeTheirPlace();
     void testHostRefreshSaysNothingWhenUnchanged();
     void testCountsAreUncapped();
+    void testKeptCopyNothingStaleAfterAFlood();
 
 private:
     std::unique_ptr<ObjectStore> makeStore()
@@ -339,6 +386,91 @@ void TestObjectSearch::testJsRankerMatches()
     QCOMPARE(r.toVariant().toStringList(), ObjectRanker::rank(many, QStringLiteral("ada"), kNow));
     QCOMPARE(js.globalObject().property(QStringLiteral("kMatchContentFields")).toBool(),
              ObjectRanker::kMatchContentFields);
+}
+
+// basecamp-experiments#27: the prepared form (words split once) gives the same
+// strengths, scores and order as the envelope itself.
+void TestObjectSearch::testPreparedMatchesRanker()
+{
+    const QVariantList objects = rankerFixture();
+    std::vector<ObjectRanker::Prepared> prepared;
+    for (const QVariant& v : objects) prepared.push_back(ObjectRanker::prepare(v.toMap()));
+    QList<const ObjectRanker::Prepared*> ptrs;
+    for (const ObjectRanker::Prepared& p : prepared) ptrs << &p;
+
+    for (const QString& q : kFixtureQueries) {
+        QCOMPARE(ObjectRanker::rank(ptrs, q, kNow), ObjectRanker::rank(objects, q, kNow));
+        const QStringList tokens = ObjectRanker::tokens(q);
+        for (int i = 0; i < objects.size(); ++i) {
+            const QVariantMap o = objects.at(i).toMap();
+            for (const QString& t : tokens)
+                QCOMPARE(ObjectRanker::strength(prepared.at(i), t), ObjectRanker::strength(o, t));
+            QCOMPARE(ObjectRanker::score(prepared.at(i), tokens, kNow), ObjectRanker::score(o, tokens, kNow));
+        }
+    }
+    // A subset ranks like the same subset of envelopes.
+    QCOMPARE(ObjectRanker::rank(ptrs.mid(2, 5), QStringLiteral("a"), kNow),
+             ObjectRanker::rank(objects.mid(2, 5), QStringLiteral("a"), kNow));
+}
+
+// basecamp_search's kept copy: applying changes and ranking the index gives
+// the ids rank() gives over the same objects, all of them or a filter's.
+void TestObjectSearch::testJsIndexMatchesRanker()
+{
+    QJSEngine js;
+    QVERIFY(loadJsRanker(js));
+    const QJSValue g = js.globalObject();
+    QVariantList objects = rankerFixture();
+    QJSValue index = g.property("newIndex").call();
+    QVariantMap changes{ { "version", 1.0 }, { "reset", true }, { "objects", objects }, { "removed", QVariantList() } };
+    QVERIFY(g.property("applyChanges").call({ index, js.toScriptValue(changes) }).toBool());
+    QCOMPARE(index.property("size").toInt(), objects.size());
+    auto ranked = [&](const QJSValue& ids, const QString& q) {
+        const QJSValue r = g.property("rankIndex").call({ index, ids, QJSValue(q), QJSValue(double(kNow)) });
+        return r.toVariant().toStringList();
+    };
+    // Words split a few at a time (idle) or all before a query that needs
+    // them: the same answers either way, and an empty query needs none.
+    QCOMPARE(index.property("waiting").property("length").toInt(), objects.size());
+    QCOMPARE(ranked(QJSValue(QJSValue::NullValue), QString()), ObjectRanker::rank(objects, QString(), kNow));
+    QCOMPARE(index.property("waiting").property("length").toInt(), objects.size());
+    QCOMPARE(g.property("prepareSome").call({ index, QJSValue(4) }).toInt(), objects.size() - 4);
+    for (const QString& q : kFixtureQueries) {
+        QCOMPARE(ranked(QJSValue(QJSValue::NullValue), q), ObjectRanker::rank(objects, q, kNow));
+        // And the JS ranker over the envelopes agrees too.
+        const QJSValue r = g.property("rank").call({ js.toScriptValue(objects), QJSValue(q), QJSValue(double(kNow)) });
+        QCOMPARE(r.toVariant().toStringList(), ObjectRanker::rank(objects, q, kNow));
+    }
+    QCOMPARE(index.property("waiting").property("length").toInt(), 0);
+    const QVariantList subset = objects.mid(1, 6);
+    QVariantList subsetIds;
+    for (const QVariant& v : subset) subsetIds << v.toMap().value("id");
+    QCOMPARE(ranked(js.toScriptValue(subsetIds), QStringLiteral("a")), ObjectRanker::rank(subset, QStringLiteral("a"), kNow));
+
+    // Changes: t2 gone, t1 seen and renamed, a new one.
+    QVariantMap t1 = objects.at(0).toMap();
+    t1["seen"] = true;
+    t1["title"] = "Ada Byron";
+    const QVariantMap fresh = env("t11", "Ada fresh", kNow - kHour, false);
+    QVariantMap next{ { "version", 2.0 }, { "reset", false }, { "objects", QVariantList{ t1, fresh } },
+                      { "removed", QVariantList{ "t2", "unknown" } } };
+    QVERIFY(g.property("applyChanges").call({ index, js.toScriptValue(next) }).toBool());
+    objects.removeAt(1);
+    objects[0] = t1;
+    objects << fresh;
+    QCOMPARE(index.property("size").toInt(), objects.size());
+    QCOMPARE(index.property("version").toNumber(), 2.0);
+    for (const QString& q : kFixtureQueries)
+        QCOMPARE(ranked(QJSValue(QJSValue::NullValue), q), ObjectRanker::rank(objects, q, kNow));
+
+    // Not a change set (an older shell, not the holder): refused, index kept.
+    QVERIFY(!g.property("applyChanges").call({ index, js.toScriptValue(QVariantMap()) }).toBool());
+    QCOMPARE(index.property("size").toInt(), objects.size());
+    // A reset replaces everything.
+    QVariantMap reset{ { "version", 7.0 }, { "reset", true }, { "objects", QVariantList{ fresh } },
+                       { "removed", QVariantList() } };
+    QVERIFY(g.property("applyChanges").call({ index, js.toScriptValue(reset) }).toBool());
+    QCOMPARE(ranked(QJSValue(QJSValue::NullValue), QString()), QStringList{ "t11" });
 }
 
 // ── The protocol ─────────────────────────────────────────────────────────────
@@ -819,6 +951,106 @@ void TestObjectSearch::testCountsAreUncapped()
     // Views only.
     QVERIFY(search->counts(kOther, QString()).isEmpty());
     QVERIFY(search->counts(kRanker, QString()).isEmpty());
+}
+
+// basecamp-experiments#27: the holder keeps a copy (objectsSince) and the
+// host keeps a prepared index (counts, the fallback ranker). Through a flood,
+// eviction, retraction, marking seen, expiry and the user's switch, both must
+// rank exactly what ranking the store's current objects gives: nothing stale.
+void TestObjectSearch::testKeptCopyNothingStaleAfterAFlood()
+{
+    qint64 now = kNow;
+    auto store = std::make_unique<ObjectStore>();
+    store->setClock([&now]() { return now; });
+    auto search = makeSearch(store.get());
+    search->setClock([&now]() { return now; });
+    seed(store.get());
+
+    QJSEngine js;
+    QVERIFY(loadJsRanker(js));
+    const QJSValue g = js.globalObject();
+    QJSValue index = g.property("newIndex").call();
+
+    // Only the holder is told anything.
+    QVERIFY(search->objectsSince(kHome, 0, {}).isEmpty());
+    QVERIFY(search->objectsSince(kOther, 0, {}).isEmpty());
+
+    const QStringList queries{ QString(), "a", "ada", "12", "tx", "flood ada", "b", "zzz" };
+    const QList<QVariantMap> filters{
+        {}, { { "types", QStringList{ "transaction" } } }, { { "apps", QStringList{ kChat } } },
+        { { "unseenOnly", true } }, { { "subjects", QStringList{ "logos:pk:ada" } } } };
+    auto check = [&](const char* when) {
+        for (const QVariantMap& filter : filters) {
+            const QVariantMap changes = search->objectsSince(kRanker, index.property("version").toNumber(), filter);
+            QVERIFY2(!changes.isEmpty(), when);
+            QVERIFY2(g.property("applyChanges").call({ index, js.toScriptValue(changes) }).toBool(), when);
+            QCOMPARE(index.property("size").toInt(), store->total());
+            const QJSValue ids = changes.contains("ids") ? js.toScriptValue(changes.value("ids")) : QJSValue(QJSValue::NullValue);
+            const QVariantList current = store->list(ObjectSearch::sanitizeFilter(filter));
+            for (const QString& q : queries) {
+                const QStringList expected = ObjectRanker::rank(current, q, now);
+                const QJSValue r = g.property("rankIndex").call({ index, ids, QJSValue(q), QJSValue(double(now)) });
+                QVERIFY2(r.toVariant().toStringList() == expected, qPrintable(QStringLiteral("%1: JS \"%2\"").arg(when, q)));
+                QVERIFY2(search->rankWithFallback(q, filter) == expected, qPrintable(QStringLiteral("%1: host \"%2\"").arg(when, q)));
+            }
+        }
+        for (const QString& q : queries) {
+            int total = 0;
+            const QStringList tokens = ObjectRanker::tokens(q);
+            for (const QVariant& v : store->list({}))
+                if (tokens.isEmpty() || ObjectRanker::score(v.toMap(), tokens, 0) >= 0) ++total;
+            QVERIFY2(search->counts(kHome, q).value("total").toInt() == total, when);
+        }
+    };
+    check("seeded");
+
+    // The flood: five apps, two batches of 300 each; the store keeps 500 per app.
+    const QStringList apps{ kWallet, kChat, kNews, QStringLiteral("explorer_ui"), QStringLiteral("posts_ui") };
+    const QStringList words{ "ada", "bob", "tx", "news", "flood" };
+    int seq = 0;
+    for (int round = 0; round < 2; ++round) {
+        for (const QString& app : apps) {
+            QVariantList objs;
+            for (int i = 0; i < 300; ++i, ++seq) {
+                QVariantMap extra;
+                if (seq % 3 == 0) extra.insert("subtitle", QStringLiteral("%1 12.%2").arg(words.at((seq / 3) % 5)).arg(seq % 100));
+                if (seq % 4 == 0) extra.insert("fields", QVariantMap{ { "text", QStringLiteral("about %1").arg(words.at(seq % 5)) } });
+                if (seq % 7 == 0) extra.insert("subjects", QStringList{ "logos:pk:ada" });
+                objs << obj(QStringLiteral("f%1").arg(seq), seq % 2 ? "transaction" : "message",
+                            QStringLiteral("Flood %1 %2").arg(words.at(seq % 5)).arg(seq), now - seq * 1000, extra);
+            }
+            QCOMPARE(store->publish(app, batch(objs)), QString());
+        }
+        check(round == 0 ? "first flood round" : "after eviction");
+        // The host splits waiting words while idle; nothing changes for it.
+        QTest::qWait(30);
+        check("after idle preparation");
+    }
+    QCOMPARE(store->total(), 5 * ObjectStore::kMaxObjectsPerApp);
+
+    // The user looks: marking seen moves the unseen boost.
+    QStringList toMark;
+    for (const QVariant& v : store->list({ { "apps", QStringList{ kChat } } }))
+        if (toMark.size() < 120) toMark << v.toMap().value("id").toString();
+    store->markSeen(toMark);
+    check("marked seen");
+
+    // Retract some, replace some (same key, new title).
+    QVERIFY(store->retract(kNews, { { "all", true } }).isEmpty());
+    QVariantList again;
+    for (int i = 0; i < 20; ++i)
+        again << obj(QStringLiteral("f%1").arg(1499 - i), "message", QStringLiteral("Renamed ada %1").arg(i), now);
+    QCOMPARE(store->publish(QStringLiteral("posts_ui"), batch(again)), QString());
+    check("retracted and replaced");
+
+    // Expiry and the user's switch.
+    QVariantMap expiring = obj("soon", "news", "Ada expires", now, { { "expires", now + 1000 } });
+    QCOMPARE(store->publish(kWallet, batch({ expiring })), QString());
+    check("before expiry");
+    now += 5000;
+    check("after expiry");
+    store->setEnabled(kChat, false);
+    check("switched off");
 }
 
 QTEST_GUILESS_MAIN(TestObjectSearch)

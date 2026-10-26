@@ -712,6 +712,12 @@ QVariantList ShellApi::objects(const QVariantMap& filter) const
     return search && holds("search") ? search->objects(m_app, filter) : QVariantList();
 }
 
+QVariantMap ShellApi::objectsSince(double version, const QVariantMap& filter) const
+{
+    ObjectSearch* search = m_backend ? m_backend->objectSearch() : nullptr;
+    return search && holds("search") ? search->objectsSince(m_app, version, filter) : QVariantMap();
+}
+
 bool ShellApi::answer(const QString& requestId, const QVariantList& ids)
 {
     ObjectSearch* search = m_backend ? m_backend->objectSearch() : nullptr;

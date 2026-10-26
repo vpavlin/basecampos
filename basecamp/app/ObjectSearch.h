@@ -11,6 +11,8 @@
 
 #include <functional>
 
+#include "ObjectRanker.h"
+
 class ObjectResults;
 class ObjectStore;
 class QTimer;
@@ -100,6 +102,13 @@ public:
     // ── The search role ─────────────────────────────────────────────────
     // The envelopes `filter` allows, newest first; empty unless `app` holds `search`.
     QVariantList objects(const QString& app, const QVariantMap& filter) const;
+    // What changed in the store since `version` (basecamp-experiments#27), so
+    // a holder keeps its own copy instead of asking objects() for all of it on
+    // every query: { version, reset, objects: [changed envelopes], removed:
+    // [ids] } (ObjectStore::changesSince), plus `ids`, the ids `filter`
+    // allows, when the filter narrows anything. The same objects objects()
+    // would give the holder, nothing more. {} unless `app` holds `search`.
+    QVariantMap objectsSince(const QString& app, double version, const QVariantMap& filter) const;
     // false (and nothing changed) for a non-holder, or an unknown, superseded
     // or already answered request.
     bool answer(const QString& app, const QString& requestId, const QVariantList& ids);
@@ -145,6 +154,23 @@ private:
     void fallback(ObjectResults* results);
     void setLastRanker(const QString& ranker);
     qint64 now() const;
+    // The host's own prepared copy of the store, for counts() and the
+    // fallback ranker: brought up to date from the store's changes before
+    // each use, so a query never splits every object's words again.
+    // An object's words are split when the host is idle (a few hundred per
+    // turn of the event loop) or, at the latest, before a query that needs
+    // them: a flood's refresh with an empty bar does not split 2500 objects'
+    // words in one go.
+    struct Indexed {
+        ObjectRanker::Prepared prepared;
+        QString type, app;
+        QVariantMap envelope;   // until its words are split
+        bool ready = false;
+    };
+    static constexpr int kPrepareChunk = 250;
+    void syncIndex() const;
+    // Split the words of up to `max` objects still waiting (all: -1).
+    void prepareWords(int max) const;
 
     ObjectStore* m_store;
     HolderFn m_holderOf;
@@ -157,4 +183,8 @@ private:
     QSet<QString> m_changedApps;   // since the debounce started
     QSet<QString> m_seenIds;       // marked seen since the debounce started
     QString m_lastRanker;
+    mutable QHash<QString, Indexed> m_index;
+    mutable quint64 m_indexVersion = 0;
+    mutable QStringList m_unprepared;   // ids waiting for their words
+    QTimer* m_prepareTimer = nullptr;
 };

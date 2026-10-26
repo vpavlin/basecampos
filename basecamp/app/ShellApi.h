@@ -201,6 +201,9 @@ public:
     // The envelopes `filter` allows ({ types?, apps?, kinds?, subjects?,
     // unseenOnly? }), newest first.
     Q_INVOKABLE QVariantList objects(const QVariantMap& filter = QVariantMap()) const;
+    // What changed since `version` (0: everything), for a holder that keeps
+    // its own copy: { version, reset, objects, removed, ids? } (ObjectSearch.h).
+    Q_INVOKABLE QVariantMap objectsSince(double version, const QVariantMap& filter = QVariantMap()) const;
     // Ranked ids for a searchRequested: at most 200; unknown ids, ids outside
     // the request's filter and repeats are dropped. false for a stale request.
     Q_INVOKABLE bool answer(const QString& requestId, const QVariantList& ids);

@@ -99,6 +99,28 @@ public:
     QList<QVariantMap> getMany(const QStringList& ids) const;
     // Whether envelope `o` passes `filter` (as list() filters).
     static bool matches(const QVariantMap& o, const QVariantMap& filter);
+    // ── Changes since a version (basecamp-experiments#27) ───────────────
+    // Every change to the objects (publish, replace, retract, evict, expire,
+    // switch off, mark seen) moves version() on. A reader that keeps its own
+    // copy asks changesSince(the version it holds) and gets only what changed:
+    // the envelopes added or replaced, and the ids gone. `reset` is true when
+    // it cannot be told (version 0, a version this store never gave out, or
+    // one older than the removals it still remembers): `changed` is then
+    // every object and the reader drops what it held. Search no longer copies
+    // the whole store on every query.
+    struct Changes {
+        quint64 version = 0;
+        bool reset = false;
+        QList<QVariantMap> changed;
+        QStringList removed;
+    };
+    quint64 version() const { return m_version; }
+    Changes changesSince(quint64 since) const;
+    // Removals remembered for changesSince(); past this the oldest are
+    // forgotten and a reader that far behind gets a reset. Twice the store's
+    // whole capacity for the five stub apps of the flood test.
+    static constexpr int kMaxTombstones = 10 * kMaxObjectsPerApp;
+
     // Says seenChanged, not objectsChanged: marking seen is the user looking,
     // not an app publishing, and does not re-rank (ObjectSearch.h).
     Q_INVOKABLE void markSeen(const QStringList& ids);
@@ -148,6 +170,14 @@ private:
     void evict(const QString& app);
     void scheduleExpiry();
     void removeIds(const QString& app, const QStringList& ids);
+    // Record that `id` changed (stored, replaced, seen) or is gone.
+    void touched(const QString& id);
+    void dropped(const QString& id);
+
+    quint64 m_version = 0;
+    QHash<QString, quint64> m_versionOf;           // id -> version of its last change
+    QHash<QString, quint64> m_gone;                // id -> version it was removed at
+    quint64 m_goneFloor = 0;                       // removals before this are forgotten
 
     QHash<QString, QVariantMap> m_objects;         // id -> envelope
     QHash<QString, QSet<QString>> m_byApp;         // app -> ids

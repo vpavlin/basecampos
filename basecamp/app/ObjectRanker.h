@@ -61,4 +61,30 @@ double score(const QVariantMap& object, const QStringList& queryTokens, qint64 n
 // `objects` (envelopes) ranked for `query`, best first: their ids.
 QStringList rank(const QVariantList& objects, const QString& query, qint64 nowMs);
 
+// ── Prepared objects (basecamp-experiments#27) ──────────────────────────
+// The same rules over an object whose words were split once, when it was
+// stored, instead of on every query: each place a token can match (title,
+// keywords, subtitle, fields) becomes one string of its lowercased words, each
+// after a space, so "a word starts with the token" is one search for
+// " " + token. A token has no spaces, so that search can only start at a
+// word's first letter and cannot run into the next word: the same answer as
+// strength(), unit-tested against it.
+struct Prepared {
+    QString id;
+    QString title, keywords, subtitle, fields;   // " word word …", or ""
+    qint64 time = 0;
+    bool seen = false;
+};
+Prepared prepare(const QVariantMap& object);
+// prepare() in two steps: what an empty query needs (id, time, seen) at once,
+// the words later (ObjectSearch splits them when idle, or before a query
+// that needs them). A Prepared without its words matches no token.
+Prepared prepareOrder(const QVariantMap& object);
+void prepareWords(Prepared& prepared, const QVariantMap& object);
+int strength(const Prepared& object, const QString& token);
+double score(const Prepared& object, const QStringList& queryTokens, qint64 nowMs);
+// rank() over prepared objects (pointers, so a caller ranks a subset of its
+// index without copying it).
+QStringList rank(const QList<const Prepared*>& objects, const QString& query, qint64 nowMs);
+
 } // namespace ObjectRanker

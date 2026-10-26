@@ -710,10 +710,18 @@ Rectangle {
         if (root.withCustom) root.widgets = root.withCustom
     }
 
+    // An update() is always answered with resultsChanged, which rebuilds
+    // (the Connections below); rebuilding here as well did everything twice
+    // per query: the pill counts and all the feed's cards (#27). A new
+    // results model is filled before anything listens to it, so that one is
+    // rebuilt here.
     function refreshAll() {
-        if (root.allResults) root.allResults.update(root.rawQuery, {})
-        else root.allResults = shell.search(root.rawQuery, {})
-        rebuildAll()
+        if (root.allResults) {
+            root.allResults.update(root.rawQuery, {})
+        } else {
+            root.allResults = shell.search(root.rawQuery, {})
+            rebuildAll()
+        }
         refreshPill()
     }
     function rebuildAll() {
@@ -724,9 +732,12 @@ Rectangle {
     function refreshPill() {
         root.refreshRelated()
         if (!root.pill) { root.pillRows = []; return }
-        if (root.pillResults) root.pillResults.update(root.rawQuery, M.pillFilter(root.pill))
-        else root.pillResults = shell.search(root.rawQuery, M.pillFilter(root.pill))
-        rebuildPill()
+        if (root.pillResults) {
+            root.pillResults.update(root.rawQuery, M.pillFilter(root.pill))
+        } else {
+            root.pillResults = shell.search(root.rawQuery, M.pillFilter(root.pill))
+            rebuildPill()
+        }
     }
     function rebuildPill() {
         if (!root.pill) return

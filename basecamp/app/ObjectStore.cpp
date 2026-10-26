@@ -514,6 +514,7 @@ QString ObjectStore::publishBatch(const QString& app, const QVariantMap& params,
         o[QStringLiteral("seen")] = !fromHost && existing != m_objects.cend()
             && existing->value(QStringLiteral("seen")).toBool();
         m_objects.insert(id, o);
+        touched(id);
         mine.insert(id);
     }
     evict(app);
@@ -554,6 +555,7 @@ void ObjectStore::removeIds(const QString& app, const QStringList& ids)
     for (const QString& id : ids) {
         if (mine->remove(id)) {
             m_objects.remove(id);
+            dropped(id);
             removed = true;
         }
     }
@@ -580,6 +582,7 @@ void ObjectStore::evict(const QString& app)
     for (int i = 0; i < excess; ++i) {
         mine->remove(byTime.at(i).second);
         m_objects.remove(byTime.at(i).second);
+        dropped(byTime.at(i).second);
     }
     qWarning().noquote() << "ObjectStore:" << app << "over" << kMaxObjectsPerApp
                          << "objects — evicted the" << excess << "oldest";
@@ -631,6 +634,41 @@ void ObjectStore::scheduleExpiry()
     // Capped so a far-off expiry cannot overflow the timer, and re-aimed when it fires.
     const qint64 wait = std::clamp<qint64>(next - now(), 0, 60 * 60 * 1000);
     m_expiry->start(int(wait));
+}
+
+void ObjectStore::touched(const QString& id)
+{
+    m_versionOf.insert(id, ++m_version);
+    m_gone.remove(id);
+}
+
+void ObjectStore::dropped(const QString& id)
+{
+    m_versionOf.remove(id);
+    m_gone.insert(id, ++m_version);
+    if (m_gone.size() > kMaxTombstones) {
+        // Forget every removal: a reader behind this point starts over.
+        m_gone.clear();
+        m_goneFloor = m_version;
+    }
+}
+
+ObjectStore::Changes ObjectStore::changesSince(quint64 since) const
+{
+    const_cast<ObjectStore*>(this)->purgeExpired();
+    Changes out;
+    out.version = m_version;
+    out.reset = since == 0 || since > m_version || since < m_goneFloor;
+    if (!out.reset && since == m_version)
+        return out;
+    for (auto it = m_objects.cbegin(); it != m_objects.cend(); ++it)
+        if (out.reset || m_versionOf.value(it.key()) > since)
+            out.changed << it.value();
+    if (!out.reset)
+        for (auto it = m_gone.cbegin(); it != m_gone.cend(); ++it)
+            if (it.value() > since)
+                out.removed << it.key();
+    return out;
 }
 
 int ObjectStore::total() const
@@ -739,6 +777,7 @@ void ObjectStore::markSeen(const QStringList& ids)
         if (it == m_objects.end() || it->value(QStringLiteral("seen")).toBool())
             continue;
         (*it)[QStringLiteral("seen")] = true;
+        touched(id);
         marked << id;
     }
     if (marked.isEmpty())
