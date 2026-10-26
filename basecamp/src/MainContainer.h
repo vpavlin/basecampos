@@ -8,6 +8,7 @@
 #include <QStackedWidget>
 
 class QQuickWidget;
+class QTimer;
 class WorkspaceArea;
 class DesktopArea;
 class AppWindow;
@@ -115,6 +116,10 @@ private:
     bool homeOverlayOpen() const;
     void openHomeSurface(bool sidebar);
     QStringList hiddenFromWindowLists() const;
+    // Dock auto-hide (BasecampOS): the dock steps aside while a window covers
+    // its place, and comes back from the bottom edge (hover or touch).
+    void updateDockAutoHide();
+    void setDockHidden(bool hidden);
     void onDesktopCloseRequested(const QString& key);
     QWidget* systemAppContent(const QString& key);
     QVariantMap launcherEntry(const QString& name) const;
@@ -141,6 +146,11 @@ private:
     QQuickWidget* m_dockWidget = nullptr;
     QQuickWidget* m_homeScrim = nullptr;         // HomeOverlay.qml, under home's view
     bool m_homeSidebar = false;                  // it is shown as the Activity sidebar
+    QWidget* m_dockReveal = nullptr;   // the bottom-edge strip that brings the hidden dock back
+    QTimer* m_dockTimer = nullptr;
+    bool m_dockAutoHide = false;
+    bool m_dockHidden = false;
+    qint64 m_dockRevealedAt = 0;
     DesktopStatusBar* m_statusBar = nullptr;
     DesktopRoot* m_desktopRoot = nullptr;
     bool m_wentFullScreen = false;
