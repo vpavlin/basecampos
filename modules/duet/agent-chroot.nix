@@ -19,9 +19,11 @@ let
     mountpoint -q $D || mount -t btrfs -o rw,noatime ${cfg.debianRoot} $D || { echo "cannot mount Debian root"; exit 1; }
     mountpoint -q $D/home || mount -t btrfs -o rw,noatime,subvolid=5 ${cfg.debianHome} $D/home || { echo "cannot mount /home top level"; exit 1; }
     for m in proc sys dev; do mountpoint -q $D/$m || mount --rbind /$m $D/$m; done
-    # rslave: later host mounts (logind's /run/user/UID) show up in the chroot,
-    # and the nscd-hiding mount below does not leak back.
-    mountpoint -q $D/run || { mount --bind /run $D/run; mount --make-rslave $D/run; }
+    # rbind: /run/user/UID may already be mounted (the session logged in first),
+    # and a plain bind would hide it: the agent's socket would land on the empty
+    # directory below, out of the host's (Basecamp's) sight. rslave (recursive):
+    # later host mounts still show up, and the nscd-hiding mount does not leak back.
+    mountpoint -q $D/run || { mount --rbind /run $D/run; mount --make-rslave $D/run; }
     # NixOS's nscd socket would make NSS in the chroot resolve the uid as our
     # user, and Debian's sudo breaks.
     # Re-checked by the health loop: a restarted nscd (a live switch) makes a new
