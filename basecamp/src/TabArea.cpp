@@ -104,7 +104,7 @@ QString barStyleSheet()
         "#basecampium\\.bar { background: %1; border-bottom: 1px solid %6; }"
         "QToolButton { background: transparent; border: none; color: %4; font-size: 16px; border-radius: 6px; }"
         "QToolButton:hover { background: %3; color: %5; }"
-        "QToolButton#basecampium\\.newTab { font-size: 22px; border-radius: 8px; }"
+        "QToolButton#basecampium\\.newTab { font-size: 13px; font-weight: 600; border-radius: 8px; padding: 0 8px; }"
         "QToolButton#basecampium\\.close { border-radius: 0; }"
         "QToolButton#basecampium\\.close:hover { background: %7; color: white; }"
         "QToolButton#basecampium\\.minimize, QToolButton#basecampium\\.maximize { border-radius: 0; }"
