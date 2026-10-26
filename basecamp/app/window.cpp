@@ -26,6 +26,11 @@
 #include "logos_api.h"
 #include "win_dll_search.h"
 #include <QPluginLoader>
+#include <QFileInfo>
+#include <QMessageBox>
+#include <QSettings>
+#include <QJsonDocument>
+#include <QJsonObject>
 #ifdef Q_OS_MAC
     #include "trafficLightsTitleBar.h"
     #include "macWindowStyle.h"
@@ -123,34 +128,107 @@ void Window::setupUi(const LogosBasecamp::HostProfile& hostProfile)
             ? embeddedPath
             : LogosBasecampPaths::pluginsDirectory() + "/main_ui/main_ui" + pluginExtension;
 
-    // main_ui lives in its own plugins/main_ui/ directory, so anything vendored
-    // beside it is invisible to Windows' loader without this. No-op elsewhere;
-    // the reference is intentionally held for the process lifetime.
-    ModuleLib::preloadPluginWithOwnDirSearch(mainUiPluginPath);
+    // Loads one shell plugin; on failure says why and leaves nothing loaded.
+    auto loadShell = [](const QString& path, QString* error) -> IShellView* {
+        // main_ui lives in its own directory, so anything vendored beside it
+        // is invisible to Windows' loader without this. No-op elsewhere; the
+        // reference is intentionally held for the process lifetime.
+        ModuleLib::preloadPluginWithOwnDirSearch(path);
+        auto* loader = new QPluginLoader(path);
+        if (!loader->load()) {
+            *error = QStringLiteral("can't load %1: %2").arg(path, loader->errorString());
+            delete loader;
+            return nullptr;
+        }
+        // A real cast, not QMetaObject::invokeMethod("createWidget"): the
+        // string form is a silent-failure path.
+        auto* view = qobject_cast<IShellView*>(loader->instance());
+        if (!view) {
+            *error = QStringLiteral("%1 does not implement IShellView").arg(path);
+            loader->unload();
+            delete loader;
+            return nullptr;
+        }
+        // All that stands between a stale plugin build and a jump through a
+        // mismatched vtable slot: both sides take IShellHost_abi from the one
+        // copy in app/interfaces/.
+        if (view->hostAbiVersion() != IShellHost_abi) {
+            *error = QStringLiteral("%1 was built against IShellHost ABI %2, host is %3")
+                         .arg(path).arg(view->hostAbiVersion()).arg(IShellHost_abi);
+            loader->unload();
+            delete loader;
+            return nullptr;
+        }
+        return view;  // loader intentionally kept for the process lifetime
+    };
 
-    QPluginLoader loader(mainUiPluginPath);
-    if (!loader.load()) {
-        qFatal("Failed to load the main UI plugin from %s: %s",
-               qUtf8Printable(mainUiPluginPath), qUtf8Printable(loader.errorString()));
+    // Another shell (shell packages, prototype): BASECAMP_SHELL, else the
+    // choice saved in Settings. A name means plugins/shells/<name>/ next to the
+    // embedded shell; a path means that folder or file. If it fails, Basecamp
+    // starts with the default shell and says why instead of stopping.
+    QString chosenShell = qEnvironmentVariable("BASECAMP_SHELL");
+    if (chosenShell.isEmpty())
+        chosenShell = QSettings().value(QStringLiteral("BasecampShell/shell")).toString();
+    QString shellError;
+
+    // Safe mode: Shift held at launch, --default-shell, or BASECAMP_SAFE_MODE
+    // starts the default shell whatever is chosen. The escape hatch must not
+    // depend on the chosen shell working.
+    const bool safeMode = (QGuiApplication::queryKeyboardModifiers() & Qt::ShiftModifier)
+                          || QCoreApplication::arguments().contains(QStringLiteral("--default-shell"))
+                          || qEnvironmentVariableIsSet("BASECAMP_SAFE_MODE");
+    // Crash at start: the marker is written before a chosen shell loads and
+    // cleared once it has run for a while. Still there = it didn't survive.
+    QSettings startMarker;
+    const QString lastStart = startMarker.value(QStringLiteral("BasecampShell/starting")).toString();
+    const bool chosen = !chosenShell.isEmpty() && chosenShell != QLatin1String("default");
+    if (chosen && safeMode) {
+        shellError = tr("Basecamp started in safe mode with the default shell. \"%1\" is still selected: "
+                        "choose Default in Settings → Customisation → Shell to keep this one.").arg(chosenShell);
+    } else if (chosen && lastStart == chosenShell) {
+        shellError = tr("The shell \"%1\" didn't start properly last time, so Basecamp is using the default one. "
+                        "Choose it again in Settings → Customisation → Shell to retry.").arg(chosenShell);
+        startMarker.remove(QStringLiteral("BasecampShell/starting"));
+        startMarker.setValue(QStringLiteral("BasecampShell/shell"), QString());
     }
-    QObject* mainUiInstance = loader.instance();
-
-    // A real cast, not QMetaObject::invokeMethod("createWidget"): the string
-    // form is a silent-failure path — change an argument type and both sides
-    // still compile, then miss at runtime.
-    m_shellView = qobject_cast<IShellView*>(mainUiInstance);
+    if (chosen && shellError.isEmpty()) {
+        QString path;
+        if (chosenShell.contains(QLatin1Char('/')) || chosenShell.contains(QLatin1Char('\\'))) {
+            path = QFileInfo(chosenShell).isDir() ? chosenShell + "/main_ui" + pluginExtension : chosenShell;
+        } else {
+            // An installed shell package (manifest type "ui_shell") in the user
+            // plugins folder, else one shipped next to the app (development).
+            const QString pkgDir = LogosBasecampPaths::pluginsDirectory() + "/" + chosenShell;
+            QFile mf(pkgDir + "/manifest.json");
+            QFile vf(pkgDir + "/variant");
+            if (mf.open(QIODevice::ReadOnly)) {
+                const QJsonObject m = QJsonDocument::fromJson(mf.readAll()).object();
+                const QString variant = vf.open(QIODevice::ReadOnly) ? QString::fromUtf8(vf.readAll()).trimmed() : QString();
+                const QString main = m.value(QStringLiteral("main")).toObject().value(variant).toString();
+                if (m.value(QStringLiteral("type")).toString() == QLatin1String("ui_shell") && !main.isEmpty())
+                    path = pkgDir + "/" + main;
+            }
+            if (path.isEmpty())
+                path = LogosBasecampPaths::embeddedPluginsDirectory()
+                     + "/shells/" + chosenShell + "/main_ui" + pluginExtension;
+        }
+        startMarker.setValue(QStringLiteral("BasecampShell/starting"), chosenShell);
+        startMarker.sync();
+        QString why;
+        m_shellView = loadShell(path, &why);
+        if (!m_shellView) {
+            shellError = QStringLiteral("The shell \"%1\" couldn't start, so Basecamp is using the default one.\n\n%2")
+                             .arg(chosenShell, why);
+            qWarning().noquote() << "Shell fallback:" << why;
+            startMarker.remove(QStringLiteral("BasecampShell/starting"));
+        }
+    }
     if (!m_shellView) {
-        qFatal("main_ui at %s does not implement IShellView",
-               qUtf8Printable(mainUiPluginPath));
-    }
-
-    // All that stands between a stale plugin build and a jump through a
-    // mismatched vtable slot. Both sides take IShellHost_abi from the one copy
-    // in app/interfaces/, so a difference means the plugin was built against a
-    // different revision of that header.
-    if (m_shellView->hostAbiVersion() != IShellHost_abi) {
-        qFatal("main_ui was built against IShellHost ABI %d, host is %d",
-               m_shellView->hostAbiVersion(), IShellHost_abi);
+        QString why;
+        m_shellView = loadShell(mainUiPluginPath, &why);
+        // The default shell failing really is a broken install.
+        if (!m_shellView)
+            qFatal("Failed to load the main UI plugin: %s", qUtf8Printable(why));
     }
 
     // Deliberately no "No main UI module found" fallback widget: an error-label
@@ -158,6 +236,15 @@ void Window::setupUi(const LogosBasecamp::HostProfile& hostProfile)
     // mismatched shell is a broken install, and the qFatal paths above say
     // which.
     setCentralWidget(m_shellView->createShell(m_hostAdapter));
+    // The chosen shell survived start-up: clear the crash marker.
+    QTimer::singleShot(8000, this, []() {
+        QSettings().remove(QStringLiteral("BasecampShell/starting"));
+    });
+    if (!shellError.isEmpty()) {
+        QTimer::singleShot(1500, this, [this, shellError]() {
+            QMessageBox::warning(this, tr("Shell couldn't start"), shellError);
+        });
+    }
 
     // The launch width is sized for the Package Manager's full table (category
     // sidebar through the Action and Description columns) without horizontal

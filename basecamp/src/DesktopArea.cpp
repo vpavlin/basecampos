@@ -654,10 +654,21 @@ DesktopStatusBar::DesktopStatusBar(QWidget* parent)
 {
     setFixedHeight(kHeight);
     setMouseTracking(true);
+    // The clock shows minutes, so repaint it on the minute, not every second:
+    // with a Qt Quick view in the window, each repaint costs a whole-window
+    // composite, and an idle desktop never stopped drawing (basecamp-theming#20).
     auto* tick = new QTimer(this);
-    tick->setInterval(1000);
-    connect(tick, &QTimer::timeout, this, qOverload<>(&QWidget::update));
-    tick->start();
+    tick->setSingleShot(true);
+    tick->setTimerType(Qt::PreciseTimer);   // a coarse timer may fire seconds early
+    auto arm = [tick]() {
+        const QTime now = QTime::currentTime();
+        tick->start(60000 - (now.second() * 1000 + now.msec()) + 20);
+    };
+    connect(tick, &QTimer::timeout, this, [this, arm]() {
+        update(QRect(width() - 16 - 150, 0, 150, height()));
+        arm();
+    });
+    arm();
     connect(Logos::ThemeNotifier::instance(), &Logos::ThemeNotifier::currentChanged,
             this, [this]() { m_lambda = QPixmap(); update(); });
 }

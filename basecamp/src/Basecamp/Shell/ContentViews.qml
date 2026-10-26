@@ -100,7 +100,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: "#1e1e1e"
+        color: Theme.palette.background   // was "#1e1e1e": ignored the theme
         visible: !glassBg.visible
     }
 

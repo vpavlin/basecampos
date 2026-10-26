@@ -42,12 +42,25 @@ pkgs.stdenv.mkDerivation {
       -DLOGOS_PORTABLE_BUILD=${if distributed then "ON" else "OFF"} \
       -DLogosDesignSystem_DIR=${logosDesignSystem}/lib/cmake/LogosDesignSystem
 
+    # Basecampium: the same shell with a tab frame, built from the same tree.
+    cmake -S src -B build-basecampium \
+      $cmakeFlags \
+      ${pkgs.lib.escapeShellArgs (pkgs.logosQtCrossCmakeFlags or [ ])} \
+      -GNinja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+      -DLOGOS_DISTRIBUTED_BUILD=${if distributed then "ON" else "OFF"} \
+      -DLOGOS_PORTABLE_BUILD=${if distributed then "ON" else "OFF"} \
+      -DBASECAMPIUM=ON \
+      -DLogosDesignSystem_DIR=${logosDesignSystem}/lib/cmake/LogosDesignSystem
+
     runHook postConfigure
   '';
 
   buildPhase = ''
     runHook preBuild
     cmake --build build
+    cmake --build build-basecampium
     runHook postBuild
   '';
 
@@ -75,6 +88,17 @@ pkgs.stdenv.mkDerivation {
       exit 1
     fi
     echo "Installed $_found"
+
+    # Basecampium is NOT part of Basecamp: it ships as its own shell package
+    # (tools/make-shell-lgx.sh turns this into basecampium.lgx). Kept outside
+    # plugins/ so the app bundle doesn't pick it up.
+    mkdir -p $out/shell-packages/basecampium
+    for _ext in dylib dll so; do
+      if [ -f "build-basecampium/main_ui.$_ext" ]; then
+        cp "build-basecampium/main_ui.$_ext" "$out/shell-packages/basecampium/"
+      fi
+    done
+    ls $out/shell-packages/basecampium/main_ui.* >/dev/null
 
     runHook postInstall
   '';

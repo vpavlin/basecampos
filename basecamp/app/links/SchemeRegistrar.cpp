@@ -37,10 +37,17 @@ bool skipRequested()
 // The path the OS should launch.
 QString launcherPath()
 {
+    // $APPIMAGE only names us when we run from inside that AppImage's mount
+    // ($APPDIR). Started from another AppImage (a terminal shipped as one), we
+    // inherit its APPIMAGE and APPDIR, and the desktop entry would launch that
+    // app instead of Basecamp.
     const QString appImage = qEnvironmentVariable("APPIMAGE");
-    if (!appImage.isEmpty() && QFile::exists(appImage))
+    const QString appDir = qEnvironmentVariable("APPDIR");
+    const QString self = QCoreApplication::applicationFilePath();
+    if (!appImage.isEmpty() && QFile::exists(appImage) && !appDir.isEmpty()
+        && self.startsWith(QDir(appDir).absolutePath() + QLatin1Char('/')))
         return appImage;
-    return QCoreApplication::applicationFilePath();
+    return self;
 }
 
 bool writeIfChanged(const QString& path, const QByteArray& content)

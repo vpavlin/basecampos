@@ -7,6 +7,7 @@
 #include "WorkspaceArea.h"
 #include "DesktopArea.h"
 #include "ShellPrefs.h"
+#include "TabArea.h"
 
 #include <QQuickWidget>
 #include <QQmlEngine>
@@ -31,6 +32,10 @@
 #include <QKeyEvent>
 #include <QApplication>
 #include <QUrl>
+#include <QCursor>
+#include <QSettings>
+#include <QWindow>
+#include <QMouseEvent>
 
 #include <ThemeColors.h>
 
@@ -79,12 +84,23 @@ MainContainer::MainContainer(IShellHost* host, QWidget* parent)
 
     m_prefs = new ShellPrefs(this);
     m_desktopLayout = m_prefs->desktopLayout();
+#ifdef BASECAMPIUM
+    // Basecampium is this shell built with a tab frame instead of the
+    // sidebar / desktop: always tabs, whatever the saved layout says.
+    m_tabsLayout = true;
+    m_desktopLayout = false;
+#endif
 
     setupUi();
 
     // Provider lets the bridge scan the front-most dock's shortcuts
     // when Workspace is the current section.
     m_shortcutBridge = new ShortcutBridge(this, m_contentStack, [this]() -> QQuickWidget* {
+        if (m_tabArea) {
+            QWidget* w = m_tabArea->contentFor(m_tabArea->currentKey());
+            if (auto* qw = qobject_cast<QQuickWidget*>(w)) return qw;
+            return w ? w->findChild<QQuickWidget*>() : nullptr;
+        }
         if (!m_workspaceArea) return nullptr;
         if (QQuickWidget* dock = m_workspaceArea->activeDockWidget()) return dock;
         return m_workspaceArea->welcomePageWidget();
@@ -242,6 +258,12 @@ void MainContainer::setupUi()
             m_sidebarWidget->setClearColor(bg);
         if (m_contentWidget && !m_desktopLayout)
             m_contentWidget->setClearColor(bg);
+        // Settings (desktop window / Basecampium tab) and the New tab page are
+        // separate views; their clear colour shows wherever QML draws nothing.
+        if (m_settingsWidget && !m_desktopLayout)
+            m_settingsWidget->setClearColor(bg);
+        if (m_newTabWidget)
+            m_newTabWidget->setClearColor(bg);
         QWidget* top = window();
         if (top && top != this) {
             QPalette tp = top->palette();
@@ -296,7 +318,7 @@ void MainContainer::setupUi()
         [this](QObject* root) {
             // Desktop layout: this instance is the Applications window, and
             // Settings is a second instance (see systemAppContent).
-            if (!m_desktopLayout)
+            if (!m_desktopLayout && !m_tabsLayout)
                 return;
             root->setProperty("pinnedSection", int(ShellSection::AppManager));
             connect(root, SIGNAL(repositoriesRequested()), this, SLOT(openSettingsRepositories()));
@@ -330,6 +352,24 @@ void MainContainer::setupUi()
         m_desktop = new DesktopArea(desktopColumn);
         column->addWidget(m_desktop, 1);
         m_mainLayout->addWidget(desktopColumn, 1);
+    } else if (m_tabsLayout) {
+        // Basecampium: the sidebar and content stack stay hidden (their wiring
+        // is shared); the tab frame takes the window.
+        m_mainLayout->setContentsMargins(0, 0, 0, 0);
+        m_sidebarWidget->hide();
+        contentArea->hide();
+        m_newTabWidget = new QQuickWidget(this);
+        m_newTabWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
+        m_newTabWidget->setClearColor(bgColor);
+        m_newTabWidget->rootContext()->setContextProperty("backend", m_host->backendObject());
+        ShellDevQml::load(m_newTabWidget,
+            QUrl(QStringLiteral("qrc:/qt/qml/Basecamp/Shell/Basecamp/Shell/NewTabPage.qml")),
+            [this](QObject* root) {
+                connect(root, SIGNAL(openSystemApp(QString)), this, SLOT(tabOpenSystem(QString)));
+                connect(root, SIGNAL(launchApp(QString)), this, SLOT(tabLaunchApp(QString)));
+            });
+        m_tabArea = new TabArea(m_newTabWidget, this);
+        m_mainLayout->addWidget(m_tabArea, 1);
     } else {
         m_mainLayout->addWidget(m_sidebarWidget);
         m_mainLayout->addWidget(contentArea, 1);
@@ -371,6 +411,8 @@ void MainContainer::setupUi()
 
     if (m_desktopLayout)
         setupDesktopUi();
+    if (m_tabsLayout)
+        setupTabsUi();
 }
 
 void MainContainer::resizeEvent(QResizeEvent* event)
@@ -414,6 +456,15 @@ void MainContainer::onSidebarTooltipRequested(const QString& text, qreal y)
 
 bool MainContainer::eventFilter(QObject* watched, QEvent* event)
 {
+    if (m_tabsLayout && tabsEdgeResize(watched, event))
+        return true;
+    if (m_tabsLayout && event->type() == QEvent::KeyPress) {
+        // Only keys meant for the main window: torn-off windows handle their own.
+        auto* w = qobject_cast<QWidget*>(watched);
+        QWidget* target = w ? w->window() : QApplication::activeWindow();
+        if (target == window() && tabsKey(static_cast<QKeyEvent*>(event)))
+            return true;
+    }
     if (m_desktopLayout && m_spotlight && event->type() == QEvent::KeyPress) {
         auto* ke = static_cast<QKeyEvent*>(event);
         const auto mods = ke->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier
@@ -459,9 +510,10 @@ void MainContainer::onSectionIndexChanged(int index)
 
     const int sectionIndex = index;
 
-    // Desktop layout: a section is an app window. Open it, then park the
-    // section back on Workspace so asking for the same one again re-opens it.
-    if (m_desktopLayout) {
+    // Desktop layout: a section is an app window (Basecampium: a tab). Open
+    // it, then park the section back on Workspace so asking for the same one
+    // again re-opens it.
+    if (m_desktopLayout || m_tabsLayout) {
         switch (sectionIndex) {
         case ShellSection::AppManager:     openSystemApp(QStringLiteral("sys:applications")); break;
         case ShellSection::PackageManager: openSystemApp(QStringLiteral("sys:packages")); break;
@@ -512,14 +564,14 @@ void MainContainer::onNavigateToApps()
 
     // This is called when an app is loaded and we need to switch to Apps view.
     // The desktop has no such view: the app's window is already in front.
-    if (m_desktopLayout)
+    if (m_desktopLayout || m_tabsLayout)
         return;
     m_host->setCurrentSectionIndex(ShellSection::Workspace);
 }
 
 void MainContainer::onPluginWindowRequested(QWidget* widget, const QString& title)
 {
-    if (m_desktopLayout && widget) {
+    if ((m_desktopLayout || m_tabsLayout) && widget) {
         if (title == QStringLiteral("package_manager_ui") && !m_pmuiWidget
             && offersSection(ShellSection::PackageManager)) {
             // Preloaded in the background: keep it until Package Manager is opened.
@@ -538,6 +590,10 @@ void MainContainer::onPluginWindowRequested(QWidget* widget, const QString& titl
             icon = QUrl(icon).toLocalFile();
         else if (icon.startsWith(QStringLiteral("qrc:")))
             icon = icon.mid(3);
+        if (m_tabArea) {
+            openAppTab(title, resolved.isEmpty() ? title : resolved, entry.value(QStringLiteral("iconPath")).toString(), widget);
+            return;
+        }
         m_desktop->openWindow(title, resolved.isEmpty() ? title : resolved, icon, widget);
         updateDock();
         return;
@@ -580,6 +636,15 @@ void MainContainer::onPluginWindowRequested(QWidget* widget, const QString& titl
 
 void MainContainer::onPluginWindowRemoveRequested(QWidget* widget)
 {
+    if (m_tabArea) {
+        const QString key = m_tabArea->keyFor(widget);
+        if (!key.isEmpty())
+            m_tabArea->takeTab(key);
+        if (widget && widget == m_pmuiWidget)
+            m_pmuiWidget = nullptr;
+        saveTabs();
+        return;
+    }
     if (m_desktopLayout) {
         if (AppWindow* w = m_desktop->windowFor(widget))
             m_desktop->removeWindow(w);
@@ -608,6 +673,19 @@ void MainContainer::onPluginWindowRemoveRequested(QWidget* widget)
 void MainContainer::onPresentAppRequested(QWidget* widget)
 {
     if (!widget) return;
+
+    if (m_tabArea) {
+        if (widget == m_pmuiWidget) {
+            openSystemApp(QStringLiteral("sys:packages"));
+        } else {
+            const QString key = m_tabArea->keyFor(widget);
+            if (!key.isEmpty()) {
+                m_tabArea->activate(key);
+                dropPendingNewTab();
+            }
+        }
+        return;
+    }
 
     if (m_desktopLayout) {
         if (widget == m_pmuiWidget)
@@ -797,10 +875,12 @@ QWidget* MainContainer::systemAppContent(const QString& key)
             m_settingsWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
             m_settingsWidget->setClearColor(
                 Logos::themeColor(QStringLiteral("background"), QColor("#171717")));
-            m_settingsWidget->engine()->addImageProvider(QStringLiteral("backdrop"),
-                                                         new BackdropProvider(m_desktopRoot));
-            m_settingsWidget->rootContext()->setContextProperty(
-                "glass", new GlassInfo(m_desktopRoot, m_settingsWidget, m_settingsWidget));
+            if (m_desktopRoot) {
+                m_settingsWidget->engine()->addImageProvider(QStringLiteral("backdrop"),
+                                                             new BackdropProvider(m_desktopRoot));
+                m_settingsWidget->rootContext()->setContextProperty(
+                    "glass", new GlassInfo(m_desktopRoot, m_settingsWidget, m_settingsWidget));
+            }
             m_settingsWidget->rootContext()->setContextProperty("backend", m_host->backendObject());
             m_settingsWidget->rootContext()->setContextProperty("shellPrefs", m_prefs);
             ShellDevQml::load(m_settingsWidget,
@@ -817,6 +897,10 @@ QWidget* MainContainer::systemAppContent(const QString& key)
 
 void MainContainer::openSystemApp(const QString& key)
 {
+    if (m_tabArea) {
+        openSystemTab(key);
+        return;
+    }
     if (!m_desktop)
         return;
     if (AppWindow* w = m_desktop->window(key)) {
@@ -975,4 +1059,287 @@ void MainContainer::toggleSpotlight()
         hideSpotlight();
     else
         showSpotlight();
+}
+
+
+// ── Basecampium: tabs ───────────────────────────────────────────────────────
+
+bool MainContainer::event(QEvent* event)
+{
+#ifndef Q_OS_MAC
+    // Basecampium draws its own bar (tabs + window buttons), so the window
+    // loses its system title bar as soon as we are placed in it (before it is
+    // first shown). macOS is already frameless; Basecamp draws the traffic lights.
+    if (m_tabsLayout && event->type() == QEvent::ParentChange) {
+        QWidget* top = window();
+        if (top && top != this && !(top->windowFlags() & Qt::FramelessWindowHint))
+            top->setWindowFlag(Qt::FramelessWindowHint, true);
+    }
+#endif
+    return QWidget::event(event);
+}
+
+void MainContainer::setupTabsUi()
+{
+    connect(m_tabArea, &TabArea::closeRequested, this, &MainContainer::closeTab);
+    connect(m_tabArea, &TabArea::currentKeyChanged, this, [this](const QString& key) {
+        if (!key.isEmpty() && !key.startsWith(QStringLiteral("sys:")) && !TabArea::isNewTabKey(key))
+            m_host->setCurrentVisibleApp(key);
+        if (m_shortcutBridge)
+            m_shortcutBridge->rebindDeferred();
+        saveTabs();
+    });
+    connect(m_tabArea, &TabArea::newTabShown, this, [this]() {
+        if (m_newTabWidget && m_newTabWidget->rootObject()) {
+            QMetaObject::invokeMethod(m_newTabWidget->rootObject(), "clearSearch");
+            m_newTabWidget->setFocus();
+            QMetaObject::invokeMethod(m_newTabWidget->rootObject(), "focusSearch");
+        }
+    });
+
+    // Keys are caught for the whole window in eventFilter (tabsKey): a focused
+    // text field inside an app or Settings would otherwise take Ctrl+W / Ctrl+T
+    // before a QShortcut sees them.
+    if (m_workspaceArea && m_workspaceArea->welcomePageWidget()
+        && m_workspaceArea->welcomePageWidget()->rootObject())
+        m_workspaceArea->welcomePageWidget()->rootObject()->setProperty("searchShortcutEnabled", false);
+
+    // Frameless window: resize from the edges ourselves.
+    qApp->installEventFilter(this);
+
+    QTimer::singleShot(0, this, &MainContainer::restoreTabs);
+}
+
+void MainContainer::openSystemTab(const QString& key)
+{
+    static const QHash<QString, std::pair<QString, QString>> meta = {
+        { QStringLiteral("sys:applications"),
+          { tr("Applications"), QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/dashboard.svg") } },
+        { QStringLiteral("sys:packages"),
+          { tr("Package Manager"), QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/module.svg") } },
+        { QStringLiteral("sys:settings"),
+          { tr("Settings"), QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/settings.svg") } },
+    };
+    if (!meta.contains(key))
+        return;
+    if (m_tabArea->hasKey(key)) {
+        m_tabArea->activate(key);
+        dropPendingNewTab();
+        return;
+    }
+    QWidget* content = systemAppContent(key);
+    if (!content) {
+        // Package Manager arrives from the host; opened when it does.
+        if (key == QStringLiteral("sys:packages")) {
+            m_packagesPending = true;
+            m_host->loadUiModule(QStringLiteral("package_manager_ui"));
+        }
+        return;
+    }
+    if (key == QStringLiteral("sys:packages"))
+        m_packagesPending = false;
+    const auto& [title, icon] = meta.value(key);
+    const QString replace = m_pendingNewTab;
+    m_pendingNewTab.clear();
+    m_tabArea->openContent(key, title, icon, content, replace);
+    if (key == QStringLiteral("sys:applications"))
+        QMetaObject::invokeMethod(m_host->backendObject(), "requestCatalog");
+}
+
+void MainContainer::openAppTab(const QString& module, const QString& label,
+                               const QString& icon, QWidget* widget)
+{
+    const QString replace = m_tabArea->hasKey(m_pendingNewTab) ? m_pendingNewTab : QString();
+    m_pendingNewTab.clear();
+    m_tabArea->openContent(module, label, icon, widget, replace);
+    if (m_shortcutBridge)
+        m_shortcutBridge->rebindDeferred();
+}
+
+void MainContainer::tabOpenSystem(const QString& key)
+{
+    const QString current = m_tabArea->currentKey();
+    m_pendingNewTab = TabArea::isNewTabKey(current) ? current : QString();
+    openSystemTab(key);
+}
+
+void MainContainer::tabLaunchApp(const QString& name)
+{
+    const QString current = m_tabArea->currentKey();
+    m_pendingNewTab = TabArea::isNewTabKey(current) ? current : QString();
+    if (m_tabArea->hasKey(name)) {
+        m_tabArea->activate(name);
+        dropPendingNewTab();
+        return;
+    }
+    QMetaObject::invokeMethod(m_host->backendObject(), "onAppLauncherClicked",
+                              Qt::QueuedConnection, Q_ARG(QString, name));
+}
+
+void MainContainer::dropPendingNewTab()
+{
+    // The app was already open in another tab: the New tab it was picked
+    // from goes, as in a browser switching to an open tab.
+    if (!m_pendingNewTab.isEmpty() && m_tabArea->hasKey(m_pendingNewTab)
+        && m_tabArea->currentKey() != m_pendingNewTab)
+        m_tabArea->takeTab(m_pendingNewTab);
+    m_pendingNewTab.clear();
+}
+
+void MainContainer::closeTab(const QString& key)
+{
+    if (key.isEmpty())
+        return;
+    if (TabArea::isNewTabKey(key)) {
+        m_tabArea->takeTab(key);
+        return;
+    }
+    m_closedKeys.removeAll(key);
+    m_closedKeys.append(key);
+    if (key.startsWith(QStringLiteral("sys:"))) {
+        // The shell's own views are kept for the next open.
+        if (QWidget* content = m_tabArea->takeTab(key)) {
+            content->setParent(this);
+            content->hide();
+        }
+        saveTabs();
+        return;
+    }
+    // An app's tab goes when the host unloads it (onPluginWindowRemoveRequested).
+    m_host->unloadUiModule(key);
+}
+
+void MainContainer::reopenClosedTab()
+{
+    if (m_closedKeys.isEmpty())
+        return;
+    const QString key = m_closedKeys.takeLast();
+    m_pendingNewTab.clear();
+    if (key.startsWith(QStringLiteral("sys:")))
+        openSystemTab(key);
+    else
+        QMetaObject::invokeMethod(m_host->backendObject(), "onAppLauncherClicked",
+                                  Qt::QueuedConnection, Q_ARG(QString, key));
+}
+
+void MainContainer::saveTabs()
+{
+    if (!m_tabArea || m_restoringTabs)
+        return;
+    QStringList keep;
+    for (const QString& k : m_tabArea->keys())
+        if (!TabArea::isNewTabKey(k))
+            keep << k;
+    QSettings().setValue(QStringLiteral("BasecampiumShell/tabs"), keep);
+}
+
+void MainContainer::restoreTabs()
+{
+    const QStringList saved = QSettings().value(QStringLiteral("BasecampiumShell/tabs")).toStringList();
+    m_restoringTabs = true;
+    for (const QString& key : saved) {
+        if (key.startsWith(QStringLiteral("sys:")))
+            openSystemTab(key);
+        else
+            QMetaObject::invokeMethod(m_host->backendObject(), "onAppLauncherClicked",
+                                      Qt::QueuedConnection, Q_ARG(QString, key));
+    }
+    m_restoringTabs = false;
+    // Nothing to restore: start on a New tab. Apps arrive asynchronously; if
+    // none of them comes back, fall back to a New tab rather than an empty bar.
+    if (saved.isEmpty() || m_tabArea->keys().isEmpty()) {
+        if (saved.isEmpty())
+            m_tabArea->addNewTab();
+        else
+            QTimer::singleShot(5000, this, [this]() {
+                if (m_tabArea->keys().isEmpty())
+                    m_tabArea->addNewTab();
+            });
+    }
+}
+
+bool MainContainer::tabsEdgeResize(QObject* watched, QEvent* event)
+{
+    const auto type = event->type();
+    if (type != QEvent::MouseMove && type != QEvent::MouseButtonPress)
+        return false;
+    auto* w = qobject_cast<QWidget*>(watched);
+    QWidget* top = window();
+    if (!w || !top || w->window() != top || top == this)
+        return false;
+    if (top->isMaximized() || top->isFullScreen())
+        return false;
+    auto* me = static_cast<QMouseEvent*>(event);
+    const QPoint p = top->mapFromGlobal(me->globalPosition().toPoint());
+    constexpr int m = 6;
+    Qt::Edges edges;
+    if (p.x() <= m) edges |= Qt::LeftEdge;
+    if (p.x() >= top->width() - m) edges |= Qt::RightEdge;
+    if (p.y() <= m) edges |= Qt::TopEdge;
+    if (p.y() >= top->height() - m) edges |= Qt::BottomEdge;
+
+    if (type == QEvent::MouseMove && me->buttons() == Qt::NoButton) {
+        const int code = int(edges);
+        if (code != m_edgeCursor) {
+            m_edgeCursor = code;
+            if (!edges) {
+                top->unsetCursor();
+            } else if ((edges & (Qt::LeftEdge | Qt::TopEdge)) == (Qt::LeftEdge | Qt::TopEdge)
+                       || (edges & (Qt::RightEdge | Qt::BottomEdge)) == (Qt::RightEdge | Qt::BottomEdge)) {
+                top->setCursor(Qt::SizeFDiagCursor);
+            } else if ((edges & (Qt::RightEdge | Qt::TopEdge)) == (Qt::RightEdge | Qt::TopEdge)
+                       || (edges & (Qt::LeftEdge | Qt::BottomEdge)) == (Qt::LeftEdge | Qt::BottomEdge)) {
+                top->setCursor(Qt::SizeBDiagCursor);
+            } else if (edges & (Qt::LeftEdge | Qt::RightEdge)) {
+                top->setCursor(Qt::SizeHorCursor);
+            } else {
+                top->setCursor(Qt::SizeVerCursor);
+            }
+        }
+        return false;
+    }
+    if (type == QEvent::MouseButtonPress && me->button() == Qt::LeftButton && edges) {
+        if (QWindow* handle = top->windowHandle()) {
+            handle->startSystemResize(edges);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MainContainer::tabsKey(QKeyEvent* e)
+{
+    if (!m_tabArea || !isVisible())
+        return false;
+    const auto mods = e->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier | Qt::MetaModifier);
+    const int key = e->key();
+    if (key == Qt::Key_F11 && mods == Qt::NoModifier) {
+        QWidget* top = window();
+        if (top->isFullScreen()) top->showNormal(); else top->showFullScreen();
+        return true;
+    }
+    const bool ctrl = mods == Qt::ControlModifier;
+    const bool ctrlShift = mods == (Qt::ControlModifier | Qt::ShiftModifier);
+    if (!ctrl && !ctrlShift)
+        return false;
+    if (e->isAutoRepeat() && (key == Qt::Key_W || key == Qt::Key_T))
+        return true;
+    if (ctrl && key == Qt::Key_T) { m_tabArea->addNewTab(); return true; }
+    if (ctrl && key == Qt::Key_W) { closeTab(m_tabArea->currentKey()); return true; }
+    if (ctrl && (key == Qt::Key_Tab || key == Qt::Key_PageDown)) { m_tabArea->nextTab(1); return true; }
+    if ((ctrlShift && (key == Qt::Key_Backtab || key == Qt::Key_Tab)) || (ctrl && key == Qt::Key_PageUp)) {
+        m_tabArea->nextTab(-1); return true;
+    }
+    if (ctrl && key >= Qt::Key_1 && key <= Qt::Key_8) { m_tabArea->goToTab(key - Qt::Key_1); return true; }
+    if (ctrl && key == Qt::Key_9) { m_tabArea->goToTab(-1); return true; }
+    if (ctrl && key == Qt::Key_K) {
+        if (TabArea::isNewTabKey(m_tabArea->currentKey()) && m_newTabWidget->rootObject())
+            QMetaObject::invokeMethod(m_newTabWidget->rootObject(), "focusSearch");
+        else
+            m_tabArea->addNewTab();
+        return true;
+    }
+    if (ctrl && key == Qt::Key_Comma) { openSystemApp(QStringLiteral("sys:settings")); return true; }
+    if (ctrlShift && key == Qt::Key_T) { reopenClosedTab(); return true; }
+    return false;
 }

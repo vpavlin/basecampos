@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QString>
 #include <QUrl>
+#include <QVariantList>
 
 // Shell-level preferences that are not part of a theme: which layout the shell
 // is built with, and the desktop layout's wallpaper. Persisted in QSettings;
@@ -19,6 +20,16 @@ class ShellPrefs : public QObject
     Q_PROPERTY(QUrl wallpaperUrl READ wallpaperUrl NOTIFY wallpaperChanged)
     Q_PROPERTY(QUrl builtinWallpaperUrl READ builtinWallpaperUrl CONSTANT)
     Q_PROPERTY(QUrl customWallpaperUrl READ customWallpaperUrl NOTIFY wallpaperChanged)
+    // Shell packages (prototype): installed shells under plugins/shells/, the
+    // saved choice ("" = default; applies after a restart), and whether this
+    // build is the Basecampium (tabs) shell.
+    Q_PROPERTY(QStringList shells READ shells NOTIFY shellsChanged)
+    // Installed shell packages (manifest type "ui_shell"), each
+    // {id, name, version, author, description, signed, signer, signerUrl, did, file}.
+    Q_PROPERTY(QVariantList shellPackages READ shellPackages NOTIFY shellsChanged)
+    Q_PROPERTY(QString shell READ shell WRITE setShell NOTIFY shellChanged)
+    Q_PROPERTY(QString activeShell READ activeShell CONSTANT)
+    Q_PROPERTY(bool tabsShell READ tabsShell CONSTANT)
     // "fit" (whole image, blurred spare room), "fill" (cover, crops) or "stretch".
     Q_PROPERTY(QString wallpaperFit READ wallpaperFit WRITE setWallpaperFit NOTIFY wallpaperChanged)
 
@@ -45,6 +56,19 @@ public:
     // open behind the full-screen desktop). Returns the chosen file, or empty.
     Q_INVOKABLE QUrl pickFile(const QString& title, const QString& filter);
 
+    QStringList shells() const;
+    QVariantList shellPackages() const;
+    // Install-time style checks over a shell's binary, as hints: each
+    // {title, status: "ok"|"warn"|"fail"|"info", detail}.
+    Q_INVOKABLE QVariantList checkShell(const QString& id) const;
+    // Saves the choice and restarts Basecamp with it.
+    Q_INVOKABLE void switchShell(const QString& id);
+    Q_INVOKABLE void rescanShells() { emit shellsChanged(); }
+    QString shell() const;
+    void setShell(const QString& name);
+    QString activeShell() const;
+    bool tabsShell() const;
+
     Q_INVOKABLE void setWallpaper(const QString& id);
     QString wallpaperFit() const;
     void setWallpaperFit(const QString& fit);
@@ -54,6 +78,8 @@ public:
 
 signals:
     void layoutChanged();
+    void shellChanged();
+    void shellsChanged();
     void wallpaperChanged();
 
 private:

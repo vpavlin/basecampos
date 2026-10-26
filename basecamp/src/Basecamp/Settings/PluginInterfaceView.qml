@@ -270,9 +270,9 @@ Item {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 150
-                    color: "#1e1e1e"
+                    color: Theme.palette.backgroundTertiary
                     radius: 4
-                    border.color: "#4d4d4d"
+                    border.color: Theme.palette.border
                     border.width: 1
                     visible: root.resultText.length > 0
 

@@ -15,6 +15,8 @@ class ShellPrefs;
 class DesktopStatusBar;
 class DesktopRoot;
 class ShortcutBridge;
+class TabArea;
+class QKeyEvent;
 
 // MainContainer — the UI shell. Holds exactly one host-side pointer, an
 // IShellHost*: no LogosAPI*, no QtLogosCore*, no MainUIBackend*. QML reaches
@@ -52,6 +54,7 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
     void showEvent(QShowEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
+    bool event(QEvent* event) override;
 
 private slots:
     // Called from QML when the combined visibility of the three overlay
@@ -73,6 +76,9 @@ private slots:
     void spotlightPackage(const QString& name);
     void spotlightInstall(const QString& name);
     void spotlightShowAll(const QString& typeValue, const QString& query);
+    // Basecampium (tabs): the New tab page's two signals.
+    void tabOpenSystem(const QString& key);
+    void tabLaunchApp(const QString& name);
 
 private:
     void wireSidebar(QObject* sidebarRoot);
@@ -90,6 +96,18 @@ private:
     QVariantMap launcherEntry(const QString& name) const;
     void applyGlass(QWidget* widget);
 
+    // ── Basecampium: tabs (built with BASECAMPIUM) ──
+    void setupTabsUi();
+    void openSystemTab(const QString& key);
+    void openAppTab(const QString& module, const QString& label, const QString& icon, QWidget* widget);
+    void closeTab(const QString& key);
+    void dropPendingNewTab();
+    void reopenClosedTab();
+    void saveTabs();
+    void restoreTabs();
+    bool tabsEdgeResize(QObject* watched, QEvent* event);
+    bool tabsKey(QKeyEvent* event);
+
     ShellPrefs* m_prefs = nullptr;
     bool m_desktopLayout = false;
     DesktopArea* m_desktop = nullptr;
@@ -100,6 +118,14 @@ private:
     DesktopRoot* m_desktopRoot = nullptr;
     bool m_packagesPending = false;
     bool m_wentFullScreen = false;
+
+    bool m_tabsLayout = false;
+    TabArea* m_tabArea = nullptr;
+    QQuickWidget* m_newTabWidget = nullptr;
+    QString m_pendingNewTab;      // the New tab an app was picked from
+    QStringList m_closedKeys;     // for Ctrl+Shift+T
+    bool m_restoringTabs = false;
+    int m_edgeCursor = 0;
 
     QHBoxLayout* m_mainLayout;
 
