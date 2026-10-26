@@ -20,6 +20,7 @@
 #include <QCursor>
 #include <QMouseEvent>
 #include <QStackedWidget>
+#include <QSplitter>
 #include <QToolButton>
 #include <QFontMetrics>
 #include <QPainter>
@@ -790,7 +791,18 @@ TabArea::TabArea(QWidget* newTabPage, QWidget* parent)
 
     m_stack = new QStackedWidget(this);
     m_stack->addWidget(m_newTabPage);
-    column->addWidget(m_stack, 1);
+    // The current tab on the left; a tab shown beside it on the right.
+    m_split = new QSplitter(Qt::Horizontal, this);
+    m_split->setChildrenCollapsible(false);
+    m_split->setHandleWidth(8);
+    m_split->addWidget(m_stack);
+    m_side = new QWidget(m_split);
+    auto* sideLayout = new QVBoxLayout(m_side);
+    sideLayout->setContentsMargins(0, 0, 0, 0);
+    sideLayout->setSpacing(0);
+    m_split->addWidget(m_side);
+    m_side->hide();
+    column->addWidget(m_split, 1);
 
     // Compact layout (narrower than kCompactWidth): one bar, at the bottom
     // within thumb reach, holding everything (docs/MOBILE-LAYOUT.md §8):
@@ -992,6 +1004,8 @@ void TabArea::setCompact(bool on)
     if (on == m_compact)
         return;
     m_compact = on;
+    if (on)
+        backFromSide();
     // Phone layout: one bar at the bottom holds everything; the top bar goes.
     m_bar->setVisible(!on);
     m_bottom->setVisible(on);
@@ -1262,6 +1276,8 @@ void TabArea::detachTab(int index, const QPoint& globalPos)
     const QString key = m_tabs->tabData(index).toString();
     if (isNewTabKey(key))
         return;
+    if (key == m_sideKey)
+        backFromSide();
     QWidget* content = contentFor(key);
     if (!content)
         return;
@@ -1322,6 +1338,8 @@ QWidget* TabArea::takeTab(const QString& key)
     const int i = indexOf(key);
     if (i < 0)
         return nullptr;
+    if (!m_sideKey.isEmpty() && key == m_sideKey)
+        backFromSide();
     // Every New tab shows the same page: closing one must not take it out of
     // the stack, or the other New tabs (and the page shown next) go blank.
     QWidget* content = isNewTabKey(key) ? nullptr : contentFor(key);
@@ -1374,6 +1392,8 @@ QWidget* TabArea::contentFor(const QString& key) const
 {
     if (isNewTabKey(key))
         return m_newTabPage;
+    if (!m_sideKey.isEmpty() && key == m_sideKey)
+        return m_sideContent;
     if (QWidget* win = m_detached.value(key))
         return static_cast<DetachedWindow*>(win)->content();
     for (int i = 0; i < m_stack->count(); ++i) {
@@ -1434,6 +1454,13 @@ void TabArea::onCurrentChanged(int index)
                 takeTab(left);
         });
     }
+    // The tab shown beside: the left keeps what it shows; the pane gets focus.
+    if (!m_sideKey.isEmpty() && key == m_sideKey) {
+        if (m_sideContent)
+            m_sideContent->setFocus();
+        emit currentKeyChanged(key);
+        return;
+    }
     m_prevKey = key;
     if (!isNewTabKey(key))
         m_returnKey = key;
@@ -1484,6 +1511,12 @@ void TabArea::showMenu(int index, const QPoint& globalPos)
     menu.addSeparator();
     QAction* undock = menu.addAction(tr("Move to new window"));
     undock->setEnabled(!isNewTabKey(key) && m_tabs->count() > 1);
+    QAction* beside = nullptr;
+    if (!m_compact) {
+        beside = key == m_sideKey ? menu.addAction(tr("Back to tabs"))
+                                  : menu.addAction(tr("Show beside"));
+        beside->setEnabled(!isNewTabKey(key) && (key == m_sideKey || contentTabCount() > 1));
+    }
     others->setEnabled(m_tabs->count() > 1);
     right->setEnabled(index < m_tabs->count() - 1);
     QAction* chosen = menu.exec(globalPos);
@@ -1491,6 +1524,13 @@ void TabArea::showMenu(int index, const QPoint& globalPos)
         return;
     if (chosen == undock) {
         detachTab(index, QCursor::pos());
+        return;
+    }
+    if (beside && chosen == beside) {
+        if (key == m_sideKey)
+            backFromSide();
+        else
+            showBeside(index);
         return;
     }
     QStringList victims;
@@ -1754,4 +1794,61 @@ void TabArea::setHomePlaceholder(const QString& text)
     if (!m_pillSearch) return;
     m_pillSearch->setPlaceholderText(text.isEmpty() ? tr("Search apps…") : text);
     m_pillSearch->setAccessibleName(text.isEmpty() ? tr("Search apps") : text);
+}
+
+// ── Two apps at once ────────────────────────────────────────────────────────
+
+void TabArea::showBeside(int index)
+{
+    if (m_compact || index < 0 || index >= m_tabs->count())
+        return;
+    const QString key = m_tabs->tabData(index).toString();
+    if (isNewTabKey(key) || key == m_sideKey)
+        return;
+    backFromSide();
+    QWidget* content = contentFor(key);
+    if (!content)
+        return;
+    // The left goes on with another app (or New tab) if this one was shown there.
+    const bool wasCurrent = currentKey() == key;
+    m_stack->removeWidget(content);
+    m_side->layout()->addWidget(content);
+    content->show();
+    m_sideKey = key;
+    m_sideContent = content;
+    m_side->show();
+    const int w = m_split->width();
+    m_split->setSizes({ w / 2, w - w / 2 });
+    if (wasCurrent) {
+        int left = -1;
+        for (int i = 0; i < m_tabs->count() && left < 0; ++i)
+            if (const QString k = m_tabs->tabData(i).toString(); k != key && !isNewTabKey(k))
+                left = i;
+        if (left >= 0) {
+            m_tabs->setCurrentIndex(left);
+            onCurrentChanged(left);
+        } else {
+            m_stack->setCurrentWidget(m_newTabPage);
+            m_newTabPage->show();
+        }
+    }
+}
+
+void TabArea::backFromSide()
+{
+    if (m_sideKey.isEmpty())
+        return;
+    const QString key = m_sideKey;
+    QWidget* content = m_sideContent;
+    m_sideKey.clear();
+    m_sideContent = nullptr;
+    m_side->hide();
+    if (content) {
+        m_side->layout()->removeWidget(content);
+        m_stack->addWidget(content);
+        content->hide();
+    }
+    // Its tab was the one picked: show it on the left now.
+    if (currentKey() == key)
+        onCurrentChanged(m_tabs->currentIndex());
 }

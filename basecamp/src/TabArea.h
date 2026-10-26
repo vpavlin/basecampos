@@ -6,6 +6,7 @@
 #include <QWidget>
 
 class QStackedWidget;
+class QSplitter;
 class QLabel;
 class QLineEdit;
 class QToolButton;
@@ -118,6 +119,11 @@ private:
     void updateCompactBar();
     void rebuildSwitcher();
     void showTabsMenu(QWidget* anchor);
+    // Two apps at once (BasecampOS): one tab shown in a pane beside the
+    // current one, the divider between them draggable. The tab stays in the
+    // strip; picking it focuses the pane. Not in the compact layout.
+    void showBeside(int index);
+    void backFromSide();
 
     QWidget* m_bar = nullptr;
     QToolButton* m_plus = nullptr;
@@ -126,6 +132,10 @@ private:
     QWidget* m_buttons = nullptr;
     QToolButton* m_maxButton = nullptr;
     QStackedWidget* m_stack = nullptr;
+    QSplitter* m_split = nullptr;           // m_stack | m_side
+    QWidget* m_side = nullptr;              // the pane beside (showBeside)
+    QWidget* m_sideContent = nullptr;
+    QString m_sideKey;
     QWidget* m_newTabPage = nullptr;
     int m_newCounter = 0;
     QHash<QString, QWidget*> m_detached;    // key -> its own window
