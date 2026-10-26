@@ -9,15 +9,17 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
-    # Alisher's Basecamp fork with themes + the desktop layout (dock, windows,
-    # Spotlight), plus our shell patches (split view) on branch basecamp-shell
-    # of this repo. Following Alisher: rebase that branch onto his
-    # basecamp-os-theme, push, then `nix flake update basecamp alisher-ds`.
+    # Alisher's Basecamp (github:xAlisher/basecamp-experiments, branch
+    # shell-objects: Basecampium tabs as the default shell, "Basecamp Legacy"
+    # desktop) plus our shell patches (split view, dock auto-hide) on branch
+    # basecamp-shell of this repo; its design system from the same tree.
+    # Following Alisher: rebase that branch onto his shell-objects, push, then
+    # `nix flake update basecamp alisher-ds`.
     basecamp = {
       url = "github:vpavlin/basecampos/basecamp-shell?dir=basecamp";
       inputs.logos-design-system.follows = "alisher-ds";
     };
-    alisher-ds.url = "github:xAlisher/basecamp-theming/basecamp-os-theme?dir=design-system";
+    alisher-ds.url = "github:vpavlin/basecampos/basecamp-shell?dir=design-system";
 
     shrooms = {
       url = "github:vpavlin/shrooms";

@@ -84,6 +84,13 @@ a one-week half-life; closed ones are launched) and the open windows; divider sn
 swaps. Next: "Split with…" on a dock tile's long-press, pairs in Spotlight, grid instead of N columns for
 Tile all.
 
+**2026-10-26: on Alisher's current shell (`shell-objects`).** `basecamp-shell` is now his `shell-objects`
+(xAlisher/basecamp-experiments) + split view + dock auto-hide; the design system comes from the same tree.
+Basecampium (browser-like tabs) is his default shell ("Basecamp"); the windowed desktop is "Basecamp Legacy"
+(Settings → Customisation → Shell, or `BASECAMP_SHELL=legacy` in ~/.config/basecampos/env) and has our split view
+and dock auto-hide (the dock steps aside while a window covers it; tap/hover the bottom edge;
+`BASECAMP_DOCK_AUTOHIDE=0` keeps it). The previous base is kept as branch `basecamp-shell-2026-10-25`.
+
 Next:
 - ~~Boot-test the ISO~~ (done: boots under UEFI into Basecamp + System); then an installer path (disk image + `nixos-install` flow).
 - Try Alisher's `shell-roles` branch (Settings/Packages/Applications as role apps). System could become

@@ -14,18 +14,18 @@
       },
       "locked": {
         "dir": "design-system",
-        "lastModified": 1792488754,
-        "narHash": "sha256-L3x9rDNJ5WwpfjgyAhIlTzN5mm70BbKIYDtEqUJxsao=",
-        "owner": "xAlisher",
-        "repo": "basecamp-theming",
-        "rev": "22ee3febc8f07f4293ca4fd8f73fadbddaaea35f",
+        "lastModified": 1793013232,
+        "narHash": "sha256-xHHhpkEYejPhlHl4mRbPlCg7G5dbUWUVr+fzVFBkhV0=",
+        "owner": "vpavlin",
+        "repo": "basecampos",
+        "rev": "2dcdb882bb075a661f7de7b2e708ab8f9bfdba9c",
         "type": "github"
       },
       "original": {
         "dir": "design-system",
-        "owner": "xAlisher",
-        "ref": "basecamp-os-theme",
-        "repo": "basecamp-theming",
+        "owner": "vpavlin",
+        "ref": "basecamp-shell",
+        "repo": "basecampos",
         "type": "github"
       }
     },
@@ -64,11 +64,11 @@
       },
       "locked": {
         "dir": "basecamp",
-        "lastModified": 1792961049,
-        "narHash": "sha256-obFVd2irCpgKlN4Zq5V8p2WEMrrKCSJ2FWDqkYxOFZI=",
+        "lastModified": 1793013232,
+        "narHash": "sha256-xHHhpkEYejPhlHl4mRbPlCg7G5dbUWUVr+fzVFBkhV0=",
         "owner": "vpavlin",
         "repo": "basecampos",
-        "rev": "1e618b0f16deada197182026ca882e13e64d3176",
+        "rev": "2dcdb882bb075a661f7de7b2e708ab8f9bfdba9c",
         "type": "github"
       },
       "original": {
