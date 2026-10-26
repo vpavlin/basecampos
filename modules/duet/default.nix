@@ -209,9 +209,9 @@ in
         # The camera through PipeWire, as the full-screen one: without it Chromium
         # probes /dev/video* itself, and the MediaTek codec nodes there crash it
         # (SIGTRAP as soon as a page uses the camera; duet/duet, Jitsi).
-        embedCommand = [ "${pkgs.brave}/bin/brave" "--ozone-platform=wayland" "--disable-gpu" "--password-store=basic"
-          "--enable-features=WebRtcPipeWireCamera,WebRTCPipeWireCapturer"
-          "--user-data-dir=~/.config/BraveSoftware/Brave-Basecamp" ];
+        embedCommand = [ "${pkgs.callPackage ../../pkgs/brave-in-basecamp.nix {
+          extraFlags = [ "--password-store=basic" "--enable-features=WebRtcPipeWireCamera,WebRTCPipeWireCapturer" ];
+        }}" ];
       }
       { id = "terminal"; appId = "foot"; name = "Terminal"; command = [ "${pkgs.foot}/bin/foot" ];
         embedCommand = [ "${pkgs.lxqt.qterminal}/bin/qterminal" ]; }

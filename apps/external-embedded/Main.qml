@@ -56,6 +56,27 @@ Item {
     // The app starts once the first output exists.
     property var output: null
     property bool launched: false
+    // Shown when the app didn't open or has closed: a way to start it again,
+    // rather than "Starting…" for good (an app that dies before its first
+    // window says nothing to the compositor).
+    property bool showRetry: false
+    function launch() {
+        launched = true
+        showRetry = false
+        message = "Starting @NAME@…"
+        let r = call("openEmbedded", [externalId, socketName])
+        if (r.error) {
+            message = r.error
+            showRetry = true
+        } else {
+            startTimer.restart()
+        }
+    }
+    Timer {
+        id: startTimer
+        interval: 40000
+        onTriggered: if (!root.toplevel) { root.message = "@NAME@ didn't open."; root.showRetry = true }
+    }
     function attachOutput() {
         let w = root.Window.window
         if (!w || (output && output.window === w))
@@ -64,12 +85,8 @@ Item {
             output.destroy()
         output = outputComponent.createObject(compositor, { compositor: compositor, window: w })
         fit()
-        if (!launched) {
-            launched = true
-            let r = call("openEmbedded", [externalId, socketName])
-            if (r.error)
-                message = r.error
-        }
+        if (!launched)
+            launch()
     }
     Window.onWindowChanged: attachOutput()
     Component.onCompleted: attachOutput()
@@ -92,6 +109,8 @@ Item {
             onToplevelCreated: (toplevel, xdgSurface) => {
                 root.toplevel = toplevel
                 surfaceItem.shellSurface = xdgSurface
+                startTimer.stop()
+                root.showRetry = false
                 root.message = ""
                 root.fit()
                 root.focusApp()
@@ -105,13 +124,23 @@ Item {
         autoCreatePopupItems: true
         focus: true
         TapHandler { onTapped: root.focusApp() }
-        onSurfaceDestroyed: { root.toplevel = null; root.message = "@NAME@ closed." }
+        onSurfaceDestroyed: { root.toplevel = null; root.message = "@NAME@ closed."; root.showRetry = true }
     }
 
-    LogosText {
+    Column {
         anchors.centerIn: parent
+        spacing: 16
         visible: root.message.length > 0
-        text: root.message
-        color: Theme.palette.textSecondary
+        LogosText {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: root.message
+            color: Theme.palette.textSecondary
+        }
+        LogosButton {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: root.showRetry
+            text: "Open again"
+            onClicked: root.launch()
+        }
     }
 }

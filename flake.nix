@@ -110,7 +110,7 @@
             command = [ "${pkgsUnfree.brave}/bin/brave" "--ozone-platform=wayland" ];
             # Inside Basecamp: software rendering (Qt's compositor offers clients no
             # EGL) and a profile of its own, so it never hands off to a running Brave.
-            embedCommand = command ++ [ "--disable-gpu" "--user-data-dir=~/.config/BraveSoftware/Brave-Basecamp" ];
+            embedCommand = [ "${pkgs.callPackage ./pkgs/brave-in-basecamp.nix { brave = pkgsUnfree.brave; }}" ];
             icon = "${pkgsUnfree.brave}/share/icons/hicolor/256x256/apps/brave-browser.png";
           }
           {
