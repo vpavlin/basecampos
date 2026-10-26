@@ -9,7 +9,7 @@ background are drawn here. The shell rounds every app tile when it draws it
 (BasecampAppTile in basecamp; basecamp-experiments#40), so a rounding baked into
 the picture would show as a second, smaller shape inside the tile.
 
-    python3 gen-icons.py           write the two icons
+    python3 gen-icons.py           write the three icons
     python3 gen-icons.py --check   exit 1 if an icon has a transparent corner
 
 Needs Pillow and DejaVu Sans Bold (any Linux font package ships it).
@@ -29,6 +29,7 @@ FONTS = [
 # app -> (letters, background, font size)
 ICONS = {
     "keychain_signer":    ("Si", (46, 125, 140), 99),
+    "keychain_signer_hw": ("Hw", (138, 90, 20), 99),
     "keychain_requester": ("Rq", (176, 96, 64), 99),
 }
 

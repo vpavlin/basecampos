@@ -178,8 +178,11 @@ The 5 minutes run from when a request is the one on screen, so a request queued 
 ## Test apps
 
 - **Stub Signer** (`keychain_signer`): makes "Daily key" (message, login) and "Cold key" (transaction) on first start with TweetNaCl-js 1.0.3 (vendored from the npm tarball through nix, sha256 in the stubs' README), keeps the seeds in `basecamp.appdata`, registers both. Sign screen with Approve / Reject, a "Fail next" switch, its keys with Register again and Remove from Keychain.
+- **Stub Hardware Signer** (`keychain_signer_hw`): a second signer, a pretend hardware wallet, so a request offers keys from two apps. The same code as Stub Signer (shared `common/SignerApp.qml`), with "Vault key" (transaction) and "Badge key" (login) and an amber "Hw" badge where Stub Signer has a teal "Si". Seen headless at 390 and 1280: a transaction offers Cold key (Stub Signer) and Vault key (Stub Hardware Signer); choosing Vault opened the Hardware Signer, Approve gave "Stub Hardware Signer (keychain_signer_hw) signed it with Vault key" and the requester's signature verified; choosing Cold key opened Stub Signer; a login offers Daily key and Badge key. Walkthrough in the stubs' README ("Choosing a key").
 - **Stub Requester** (`keychain_requester`): Sign a message / a login / a transaction (fixed payloads starting `STUB-PAYLOAD`), Send two at once, Cancel my request, the last result and whether it verifies locally.
-- Install: `experiments/keychain-stubs/sync.sh --install <profile>`. Open headless: `backend.loadUiModule("keychain_requester")`.
+- Install: `experiments/keychain-stubs/sync.sh --install <profile>` (all three apps). Open headless: `backend.loadUiModule("keychain_requester")`.
+
+![Choosing a key](keychain/390-choose-key.png) ![The hardware signer asks](keychain/390-hw-signer-asks.png) ![Signed by it](keychain/390-signed-hw.png) ![Keys from two signers](keychain/1280-keys-hw-signer.png)
 
 ## What is left
 

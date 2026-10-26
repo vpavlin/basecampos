@@ -1,34 +1,46 @@
 # Keychain stubs
 
-Two QML-only `ui_qml` apps for testing Keychain (issue #59, epic #62): a signer that holds keys
-and a requester that asks for signatures. They drive every path in #58's test list. Keychain
+Three QML-only `ui_qml` apps for testing Keychain (issue #59, epic #62): two signers that hold
+keys and a requester that asks for signatures. They drive every path in #58's test list, and with
+two signers a transaction or a login offers keys from two apps, so the user really chooses. Keychain
 itself is the `keychain` role app in Basecamp (`apps/basecamp_keychain`, branch `keychain`).
 
 | App | Display name | Uses | Provides |
 |---|---|---|---|
 | `keychain_signer` | Stub Signer | `basecamp.appdata.read`, `.write`, `basecamp.keychain.register`, `.update`, `.remove`, `.keys`, `.complete`, `.reject` | `keychain.sign`, `keychain.ended` |
+| `keychain_signer_hw` | Stub Hardware Signer | the same as Stub Signer | the same as Stub Signer |
 | `keychain_requester` | Stub Requester | `basecamp.keychain.sign`, `.cancel` | none |
 
 Every answer from the shell has `ok: true`; the real outcome is in `data` (`data.ok`,
 `data.error`), because the intent broker rewrites error codes it does not know.
 
-## Stub Signer
+## Stub Signer and Stub Hardware Signer
 
-- **First start** makes two Ed25519 key pairs, "Daily key" (`message`, `login`) and "Cold key"
-  (`transaction`), and keeps them in the data the host holds for this app alone:
-  `basecamp.appdata.read` / `.write` (Basecamp `app/AppDataStore.h`), one JSON object per app in
-  `<profile>/app_data/keychain_signer/appdata.json`, owner-only file mode, keyed by the caller
-  the host attested, so no other app can ask for it. Not QML LocalStorage: every `ui_qml` view
-  runs in the host process, and Qt hands an already open database connection to any engine that
-  asks for the same database name (Basecamp `tests/sandbox/tst_qml_sandbox.cpp`,
-  `localStorageInTheAppsFolder`), so any app could have read the seeds by opening the signer's
-  database name. Uninstalling the app removes its data. Keys are registered only once they are
-  kept. On every start it registers both public keys; a `duplicate` answer is followed by an
-  `update` (name, purposes).
+Both signers are the same code (`common/SignerApp.qml`, see "Shared code" below); each app's
+`Main.qml` gives only its name, its two keys, the letters and colour of its badge:
+
+| App | Keys | Badge |
+|---|---|---|
+| Stub Signer (`keychain_signer`) | "Daily key" (`message`, `login`), "Cold key" (`transaction`) | "Si", teal |
+| Stub Hardware Signer (`keychain_signer_hw`, a pretend hardware wallet) | "Vault key" (`transaction`), "Badge key" (`login`) | "Hw", amber |
+
+The badge sits next to the app's name on its screen and colours the border of the request on
+screen, so it is plain which signer Keychain opened. Below, "the app" is either of them.
+
+- **First start** makes the app's two Ed25519 key pairs and keeps them in the data the host
+  holds for this app alone: `basecamp.appdata.read` / `.write` (Basecamp `app/AppDataStore.h`),
+  one JSON object per app in `<profile>/app_data/<app id>/appdata.json`, owner-only file mode,
+  keyed by the caller the host attested, so no other app (the other signer included) can ask for
+  it. Not QML LocalStorage: every `ui_qml` view runs in the host process, and Qt hands an already
+  open database connection to any engine that asks for the same database name (Basecamp
+  `tests/sandbox/tst_qml_sandbox.cpp`, `localStorageInTheAppsFolder`), so any app could have read
+  the seeds by opening the signer's database name. Uninstalling the app removes its data. Keys
+  are registered only once they are kept. On every start it registers both public keys; a
+  `duplicate` answer is followed by an `update` (name, purposes).
 - **Sign screen.** The shell sends `keychain.sign` `{ requestId, keyId, payload, kind, purpose,
   requesterApp, requesterName, description }`. The app answers `ok` as soon as the request is on
-  screen, then shows who asks (name and the attested app id), their description in quotes as their words, the kind, the key, and the payload
-  in hex (first 64 bytes). **Approve** signs and calls `complete { requestId, signature }`;
+  screen, then shows who asks (name and the attested app id) and its own name, their description
+  in quotes as their words, the kind, the key, and the payload in hex (first 64 bytes). **Approve** signs and calls `complete { requestId, signature }`;
   **Reject** calls `reject { requestId, reason }`. A request for a key the app no longer has is
   rejected at once. `keychain.ended { requestId, status }` takes the request off the screen and
   shows "Request ended: <status>". Both intents are accepted from the shell (`main_ui`) only.
@@ -38,10 +50,32 @@ Every answer from the shell has `ok: true`; the real outcome is in `data` (`data
   and public key), their purposes and a short public key, with **Register again** and **Remove
   from Keychain** (the app keeps the private key; Register again brings it back).
 
-objectNames: `keychain_signer.root`, `.request`, `.request.title`, `.request.description`,
+objectNames, prefixed with the app id (`keychain_signer.` or `keychain_signer_hw.`): `.root`,
+`.header`, `.title`, `.request`, `.request.title`, `.request.description`,
 `.request.key`, `.request.payload`, `.approve`, `.reject`, `.idle`, `.ended`, `.lastAnswer`,
 `.failNext`, `.status`, `.key.<keyId>`, `.key.<keyId>.state`, `.key.<keyId>.register`,
 `.key.<keyId>.remove`, `.registerAll`.
+
+## Choosing a key
+
+With both signers installed and started once (each registers its keys on start):
+
+1. In Stub Requester, **Sign a transaction**. Keychain's request sheet offers **Cold key** (Stub
+   Signer) and **Vault key** (Stub Hardware Signer), each with its app's badge and app id.
+2. Pick **Vault key** and **Continue**. Keychain opens **Stub Hardware Signer** (amber "Hw"
+   badge), which shows "Stub Requester (keychain_requester) asks Stub Hardware Signer to sign a
+   transaction" and "With: Vault key".
+3. **Approve**. The shell's Signed sheet over the requester says "Stub Hardware Signer
+   (keychain_signer_hw) signed it with Vault key", and the requester's last result shows
+   `Vault key (vault) of keychain_signer_hw`, "Verifies here: yes".
+4. Again with **Cold key**: Stub Signer (teal "Si") opens instead. **Sign a login** offers
+   **Daily key** (Stub Signer) and **Badge key** (Stub Hardware Signer). A message has only
+   Daily key to offer.
+
+Keychain preselects the key used last, so pick the key explicitly when a test depends on it
+(`basecampKeychain.request.key.<app id>.<keyId>`).
+
+![Choosing a key](../../docs/keychain/390-choose-key.png) ![The hardware signer asks](../../docs/keychain/390-hw-signer-asks.png) ![Signed](../../docs/keychain/390-signed-hw.png)
 
 ## Stub Requester
 
@@ -91,15 +125,17 @@ keys, same signatures, OpenSSL verifies them), a key from `newSeed` over a UTF-8
 
 ## Shared code and sync.sh
 
-`sync.sh` writes each app's `<Prefix>Crypto.js` (`SignerCrypto.js`, `RequesterCrypto.js`):
-`common/KeychainCrypto.js` with `common/nacl-fast.js` in place of its marker line. Copies,
+`sync.sh` writes each app's `<Prefix>Crypto.js` (`SignerCrypto.js`, `HwSignerCrypto.js`,
+`RequesterCrypto.js`): `common/KeychainCrypto.js` with `common/nacl-fast.js` in place of its
+marker line. For the two signers it also writes the shared signer, `common/SignerApp.qml`, as
+`StubSignerApp.qml` and `HwSignerApp.qml`, each importing its own app's crypto file. Copies,
 because the plugin sandbox keeps each app inside its own folder; renamed, because two `ui_qml`
 apps shipping a file of the same name collide in the host (see `../objects-stubs/README.md`).
 
 ```
-./sync.sh                         write both copies (refuses a nacl-fast.js with another sha256)
+./sync.sh                         write the copies (refuses a nacl-fast.js with another sha256)
 ./sync.sh --check [<bc-apps>]     exit 1 on drift; with a Basecamp checkout, also its test fixture
-./sync.sh --install <profile>     sync, then copy both apps into <profile>/plugins/
+./sync.sh --install <profile>     sync, then copy all three apps into <profile>/plugins/
 ```
 
 Never install into `/extra/tmp/mmorpg/roles-profile`: copy it first. Open an app headless with
@@ -107,6 +143,6 @@ Never install into `/extra/tmp/mmorpg/roles-profile`: copy it first. Open an app
 
 ## Icons
 
-`gen-icons.py` (the objects stubs' generator, two entries) draws each `icon.png`: a full-bleed
+`gen-icons.py` (the objects stubs' generator, three entries) draws each `icon.png`: a full-bleed
 256x256 square with the app's letters, no rounding baked in; the shell rounds tiles when it draws
 them. `python3 gen-icons.py --check` fails on a transparent corner.
