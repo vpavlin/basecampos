@@ -22,7 +22,7 @@ writeShellScript "brave-in-basecamp" ''
   trap 'rm -f "$run_log"' EXIT
   run() {
     : >"$run_log"
-    ${brave}/bin/brave --ozone-platform=wayland --disable-gpu --user-data-dir="$profile" \
+    ${brave}/bin/brave --ozone-platform=wayland --disable-gpu --enable-logging=stderr --user-data-dir="$profile" \
       ${lib.escapeShellArgs extraFlags} "$@" >"$run_log" 2>&1
     rc=$?
     cat "$run_log" >>"$log"
