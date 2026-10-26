@@ -69,10 +69,35 @@
         # Curated apps from the official catalogue, pinned by scripts/pin-catalog.py
         # (dependency order, url + sha256): fetched at build time, installed by lgpm.
         # One .lgx carries every platform's variant; lgpm picks this machine's.
-        catalogApps = map (p: pkgs.runCommand "lgx-${p.name}-${p.version}" { } ''
+        # Built here from the pinned shrooms source instead of the catalogue, until
+        # a release has it: 0.52.0 asks this machine's agent over its own mesh
+        # address, which agents since the F-24 audit refuse (the Duet's agent was
+        # missing from its own Agents view); 0.55.0 asks the agent's socket.
+        fromSource = {
+          # Its dependency shrooms_core publishes no LIDL; the builder takes the
+          # core's C++ header as its contract instead (dependency_overrides).
+          shrooms_agents = (logos-module-builder.lib.mkLogosQmlModule {
+            # (its icon scaled to the builder's 256x256 icon contract)
+            src = pkgs.runCommand "shrooms-agents-src" { nativeBuildInputs = [ pkgs.imagemagick ]; } ''
+              cp -r ${shrooms}/basecamp-agents $out
+              chmod -R u+w $out
+              magick ${shrooms}/basecamp-agents/icon.png -resize 256x256 $out/icon.png
+            '';
+            configFile = builtins.toFile "metadata.json" (builtins.toJSON (
+              builtins.fromJSON (builtins.readFile "${shrooms}/basecamp-agents/metadata.json") // {
+                dependency_overrides.shrooms_core = {
+                  input = "shrooms";
+                  file = "basecamp/core/src/shrooms_core_impl.h";
+                  impl_class = "ShroomsCoreImpl";
+                };
+              }));
+            flakeInputs = { inherit logos-module-builder shrooms; };
+          }).packages.${system}.lgx-portable;
+        };
+        catalogApps = map (p: fromSource.${p.name} or (pkgs.runCommand "lgx-${p.name}-${p.version}" { } ''
           mkdir $out
           ln -s ${pkgs.fetchurl { inherit (p) url sha256; }} $out/${p.name}-${p.version}.lgx
-        '') (builtins.fromJSON (builtins.readFile ./catalog/apps.json)).packages;
+        '')) (builtins.fromJSON (builtins.readFile ./catalog/apps.json)).packages;
 
         # Native apps Basecamp launches (alone on their own workspace, under Sway).
         # Each gets a launcher app in Basecamp's dock and a line in
