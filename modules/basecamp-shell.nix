@@ -130,6 +130,8 @@ in
       program = lib.concatStringsSep " " ([ "${cfg.package}/bin/LogosBasecamp" ] ++ cfg.extraArgs);
       environment = {
         BASECAMP_LAYOUT = cfg.layout;
+        # Full screen, nowhere to show a torn-off window (Basecampium).
+        BASECAMP_NO_DETACH = "1";
         XDG_SESSION_TYPE = "wayland";
         QT_QPA_PLATFORM = cfg.qtPlatform;
         # Logs land in the user's journal next to the session.
@@ -255,6 +257,8 @@ in
   } (lib.mkIf (cfg.session == "sway") (let
     env = lib.concatStringsSep " " (lib.mapAttrsToList (k: v: "${k}=${lib.escapeShellArg v}") ({
       BASECAMP_LAYOUT = cfg.layout;
+      # Full screen, nowhere to show a torn-off window (Basecampium).
+      BASECAMP_NO_DETACH = "1";
       QT_QPA_PLATFORM = cfg.qtPlatform;
       QT_LOGGING_RULES = "qt.qpa.*=false";
     } // cfg.environment));
@@ -284,8 +288,11 @@ in
       output * bg #07090b solid_color
       seat * hide_cursor when-typing enable
 
-      for_window [app_id="logos-basecamp"] mark basecamp, move container to workspace 1, fullscreen enable
-      for_window [class="LogosBasecamp"] mark basecamp, move container to workspace 1, fullscreen enable
+      # Only the main window (titled "Logos Basecamp"): another Basecamp window
+      # made full screen as well took the mark and split the screen in half
+      # (Duet). Tear-off is off in these sessions (BASECAMP_NO_DETACH).
+      for_window [app_id="logos-basecamp" title="^Logos Basecamp$"] mark basecamp, move container to workspace 1, fullscreen enable
+      for_window [class="LogosBasecamp" title="^Logos Basecamp$"] mark basecamp, move container to workspace 1, fullscreen enable
     '' + lib.concatImapStrings (i: a: ''
       for_window [app_id="${a.appId}"] move container to workspace ${toString (i + 1)}, workspace ${toString (i + 1)}
     '') cfg.externalApps + ''
