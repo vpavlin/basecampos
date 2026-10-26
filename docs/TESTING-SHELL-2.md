@@ -105,6 +105,37 @@ Expected: the layout returns to how it was.
 
 Expected: Esc leaves edit mode and home stays on screen.
 
+## 3. Search from the keyboard
+
+Window 600 px or wider (on the phone layout the search is the shell's bottom bar and these keys do not apply). Spec: [SHELL-OBJECTS-SPEC §13](SHELL-OBJECTS-SPEC.md#13-flood-and-keyboard-results).
+
+### 3.1 Highlight while typing
+
+1. On home, click the search field (or press Ctrl+K) and type `ada`, then `12`.
+
+Expected: in cards and app names, the start of each matching word turns accent orange as you type ("Ada", the "12" in "12.00"). Recent apps are not marked.
+
+### 3.2 Move through results
+
+1. With text in the field, press Down.
+2. Use Left and Right along Recent apps, then Down into the Apps rows and the cards. In the widget grid the arrows follow the screen: Left and Right within a widget, Up and Down to the line above or below.
+3. Press Enter on an app, then come back to home and press Enter on a card.
+
+Expected: the focused result has an orange ring. Enter does what a click does: open an app, bring a running one forward, install from the catalog, or the card's first action (for example View or Reply).
+
+### 3.3 Back to the field, and Esc
+
+| Do | Expected |
+|---|---|
+| Type a letter while a result is focused | Focus goes back to the field and the letter is added |
+| Esc while a result is focused | Focus goes back to the field, the text stays |
+| Esc in the field with text | The field empties; the type pill stays |
+| Esc in the empty field | Nothing happens |
+| Up from the first row | Back to the field (or to the Recent apps tile you came from) |
+
+Desktop layout (Settings > Customisation > Shell: Basecamp Legacy): Ctrl+K opens the search overlay above the dock. Esc with text clears it, Esc with an empty field closes the overlay.
+
 ## Not yet checked by a person
+
 
 Real touch on a phone, real mouse drag on a wide monitor, whether **Copy public key** reaches your clipboard, and typing a label then pressing Return to save. Reports welcome: https://github.com/xAlisher/basecamp-experiments/issues
