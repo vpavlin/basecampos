@@ -9,9 +9,15 @@ import Basecamp.Objects
 import "BasecampHomeModules.js" as M
 
 // One home module (SHELL-OBJECTS-SPEC §7): a saved filter and the objects it
-// finds, drawn as one-line rows (small), cards (medium, large) or a sideways
-// strip of cards (row). Its own live results from `shell.search`, narrowed by
-// the bar's text and the pill; hidden while it finds nothing.
+// finds. Its own live results from `shell.search`, narrowed by the bar's
+// text and the pill; hidden while it finds nothing, except in edit mode.
+// Home's grid gives it its place and size (its block of cells), and what it
+// draws fits the block (basecamp-experiments#53): as many items as fit
+// whole under the header, in 1 to 3 columns by its width, one-line rows when
+// it is two rows tall, a one-line summary when not even one fits.
+// A long press on its header asks for edit mode (basecamp-experiments#51);
+// in edit mode its cards are inert and home's grid moves it and holds its
+// controls (#54).
 //
 // (File names here start with BasecampHome: two ui_qml apps shipping a file
 // of the same name collide, spec §11.)
@@ -31,62 +37,95 @@ Rectangle {
     // each one ranks the whole store on every keystroke and every store
     // change, for nothing in the feed view (basecamp-experiments#27).
     property bool live: false
+    // Home's edit mode (#51): shown even when empty, its cards inert.
+    property bool editing: false
+    // Its block's height in rows (0 = not on the grid yet): two rows draw
+    // one-line rows.
+    property int cellRows: 0
+    // Whether it counts what is new (edit mode's switch may say otherwise
+    // than the saved module until Done).
+    property bool notify: mod.module.notify === true
+    // Room the header leaves on its right (edit mode's controls sit there).
+    property real headerEnd: 0
 
-    signal changeRequested(var change)
-    signal removeRequested()
     // The envelopes it now shows (NewTabPage notes the unseen and marks them).
     signal rowsShown(var rows)
     signal raiseRequested(string id, string action, string text)
     // Its results are about to go (it stopped being live): what home noted
     // from them must be marked first, while they still hold it.
     signal releasing()
+    // A long press on the header: home's edit mode.
+    signal editRequested()
 
     readonly property var filter: M.effectiveFilter(mod.module.filter, mod.pill)
     readonly property string query: M.joinQuery(mod.module.query, mod.barQuery)
-    readonly property string size: mod.module.size || "medium"
     property var results: null
+    // The items it built (as many as could fit, M.candidateCount) and how
+    // many objects it found in all.
     property var rows: []
     property int total: 0
     // id -> place, so rows keep their order for the whole visit
     // (M.stableOrder); reset by a new visit, query or filter.
     property var order: null
-    readonly property int newCount: M.newCount(mod.rows, mod.newIds)
+    readonly property int newCount: M.newCount(mod.shownRows, mod.newIds)
+
+    // ── fitting the block (#53) ─────────────────────────────────────────
+    readonly property bool compact: M.compactRows(mod.cellRows)
+    readonly property int itemSpacing: Theme.spacing.small
+    readonly property int columns: M.itemColumns(content.width, mod.itemSpacing)
+    // The px under the header for items.
+    readonly property real available: mod.height - 2 * Theme.spacing.medium - header.height - content.spacing
+    readonly property int candidates: M.candidateCount(mod.available, mod.columns, mod.itemSpacing)
+    // The items' heights as drawn at this width (measure()).
+    property var itemHeights: []
+    // How many show: the ones that fit whole.
+    readonly property int shown: Math.min(mod.rows.length,
+                                          M.fitCount(mod.itemHeights, mod.columns, mod.available, mod.itemSpacing))
+    readonly property var shownRows: mod.rows.slice(0, mod.shown)
+    // Not even one fits (or none measured yet with none built): a line
+    // that says what there is.
+    readonly property bool summarised: mod.hasContent && mod.shown === 0
+                                       && (mod.rows.length === 0 || mod.itemHeights.length > 0)
 
     objectName: "home.module." + mod.module.name
-    visible: mod.filter !== null && mod.rows.length > 0
-    implicitHeight: visible ? content.implicitHeight + 2 * Theme.spacing.medium : 0
+    // Something to show; home's grid takes the cells of one without
+    // (basecamp-experiments#50).
+    readonly property bool hasContent: mod.filter !== null && mod.total > 0
+    visible: mod.hasContent || mod.editing
+    // Home's grid sizes it by its block; what does not fit is not drawn.
+    clip: true
     radius: Theme.spacing.radiusXlarge
     color: Theme.palette.backgroundElevated
     border.width: 1
     border.color: Theme.palette.borderHairline
 
-    // The cards it draws, as the lines they are on, top to bottom: home's
-    // arrow keys step through them (basecamp-experiments#48). One card per
-    // line in a small or medium module; two side by side in a large one with
-    // two columns; a strip is one line of the cards it has made.
+    // The cards it shows, as the lines they are on, top to bottom: home's
+    // arrow keys step through them (basecamp-experiments#48). `columns` to a
+    // line.
     function navGroups() {
         const out = []
-        const live = it => it && it.visible
         if (!mod.visible) return out
-        if (mod.size === "small") {
-            for (let i = 0; i < smallRepeater.count; ++i)
-                if (live(smallRepeater.itemAt(i))) out.push([smallRepeater.itemAt(i)])
-        } else if (cards.visible) {
-            let line = []
-            for (let i = 0; i < cardRepeater.count; ++i) {
-                const it = cardRepeater.itemAt(i)
-                if (!live(it)) continue
-                line.push(it)
-                if (line.length === cards.columns) { out.push(line); line = [] }
-            }
-            if (line.length > 0) out.push(line)
-        } else if (strip.visible) {
-            const line = []
-            for (let i = 0; i < strip.count; ++i)
-                if (live(strip.itemAtIndex(i))) line.push(strip.itemAtIndex(i))
-            if (line.length > 0) out.push(line)
+        let line = []
+        for (let i = 0; i < itemRepeater.count; ++i) {
+            const it = itemRepeater.itemAt(i)
+            if (!it || !it.visible) continue
+            line.push(it)
+            if (line.length === mod.columns) { out.push(line); line = [] }
         }
+        if (line.length > 0) out.push(line)
         return out
+    }
+
+    // The heights of the items built, at their current width; then what
+    // shows is reported (home notes the unseen among them).
+    function measure() {
+        const out = []
+        for (let i = 0; i < itemRepeater.count; ++i) {
+            const it = itemRepeater.itemAt(i)
+            out.push(it ? it.implicitHeight : 0)
+        }
+        if (JSON.stringify(out) !== JSON.stringify(mod.itemHeights)) mod.itemHeights = out
+        mod.rowsShown(mod.shownRows)
     }
 
     function refresh() {
@@ -121,14 +160,21 @@ Rectangle {
         const st = M.stableOrder(mod.order, mod.results.ids.filter(id => byId[id] !== undefined))
         mod.order = st.map
         mod.total = st.ids.length
-        mod.rows = st.ids.slice(0, M.shownCount(mod.size)).map(id => byId[id])
-        mod.rowsShown(mod.rows)
+        mod.rows = st.ids.slice(0, mod.candidates).map(id => byId[id])
+        // What shows is known once they are measured.
+        Qt.callLater(mod.measure)
     }
 
     onQueryChanged: refresh()
     onFilterChanged: refresh()
     onLiveChanged: refresh()
-    onSizeChanged: rebuild()
+    // A taller or wider block builds more (or fewer) of them.
+    onCandidatesChanged: rebuild()
+    onShownChanged: mod.rowsShown(mod.shownRows)
+    // Items wrap differently at another width or in the other form.
+    onColumnsChanged: Qt.callLater(mod.measure)
+    onCompactChanged: Qt.callLater(mod.measure)
+    onWidthChanged: Qt.callLater(mod.measure)
     onVisitChanged: { mod.order = null; rebuild() }
     Component.onCompleted: refresh()
     // A module edit rebuilds every delegate: free this one's results now
@@ -148,30 +194,48 @@ Rectangle {
         width: mod.width - 2 * Theme.spacing.medium
         spacing: Theme.spacing.small
 
-        // Name, how many, what is new, and the module's menu.
+        // Name, how many show of how many, what is new.
         Item {
+            id: header
             width: parent.width
             height: Theme.minTouchTarget
+            // What the name and the count may take. In edit mode the count
+            // gives way when the name would not fit beside it.
+            readonly property real room: width - mod.headerEnd - newBadge.width - 3 * Theme.spacing.small
+            readonly property bool showCount: !mod.editing
+                                              || title.implicitWidth + countText.implicitWidth <= header.room
+
+            // Long press (500 ms) for edit mode. It lets the page take a
+            // drag, so the header still scrolls.
+            MouseArea {
+                objectName: mod.objectName + ".header"
+                anchors.fill: parent
+                enabled: !mod.editing
+                pressAndHoldInterval: 500
+                onPressAndHold: mod.editRequested()
+            }
 
             LogosText {
                 id: title
                 textFormat: Text.PlainText
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                width: Math.min(implicitWidth, parent.width - menuButton.width - newBadge.width
-                                - countText.width - 3 * Theme.spacing.small)
-                text: mod.module.name + (mod.module.pinned ? "  ·  " + qsTr("Pinned") : "")
+                width: Math.max(0, Math.min(implicitWidth, header.room - (header.showCount ? countText.width : 0)))
+                text: mod.module.name
                 elide: Text.ElideRight
                 font.pixelSize: Theme.typography.subtitleText
                 font.weight: Theme.typography.weightMedium
             }
             LogosText {
                 id: countText
+                objectName: mod.objectName + ".count"
                 anchors.left: title.right
                 anchors.leftMargin: Theme.spacing.small
                 anchors.verticalCenter: parent.verticalCenter
-                text: mod.total > mod.rows.length ? qsTr("%1 of %2").arg(mod.rows.length).arg(mod.total)
-                                                  : String(mod.total)
+                visible: header.showCount
+                // "4 of 12": what shows of what it found.
+                text: mod.shown > 0 && mod.total > mod.shown ? qsTr("%1 of %2").arg(mod.shown).arg(mod.total)
+                                                               : String(mod.total)
                 color: Theme.palette.textTertiary
                 font.pixelSize: Theme.typography.secondaryText
             }
@@ -181,136 +245,79 @@ Rectangle {
                 anchors.left: countText.right
                 anchors.leftMargin: Theme.spacing.small
                 anchors.verticalCenter: parent.verticalCenter
-                // Only modules that notify count what is new.
-                visible: mod.module.notify === true && mod.newCount > 0
+                // Only modules that count new do; edit mode has its switch.
+                visible: mod.notify && mod.newCount > 0 && !mod.editing
                 width: visible ? implicitWidth : 0
                 text: qsTr("%1 new").arg(mod.newCount)
                 color: Theme.palette.accentOrange
             }
-            LogosIconButton {
-                id: menuButton
-                objectName: mod.objectName + ".menu"
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                size: Theme.minTouchTarget
-                flat: true
-                iconSource: LogosIcons.more
-                Accessible.name: qsTr("%1 options").arg(mod.module.name)
-                onClicked: menu.popupUnder(menuButton)
-            }
         }
 
-        // small: one-line rows.
-        Column {
-            visible: mod.size === "small"
+        // Edit mode keeps an empty module on the grid; it says why it is empty.
+        LogosText {
+            objectName: mod.objectName + ".empty"
+            visible: mod.editing && !mod.hasContent
             width: parent.width
-            spacing: Theme.spacing.tiny
-            Repeater {
-                id: smallRepeater
-                model: mod.size === "small" ? mod.rows : []
-                delegate: ObjectCard {
-                    required property var modelData
-                    width: parent.width
-                    object: modelData
-                    now: mod.now
-                    compact: true
-                    isNew: mod.newIds[modelData.id] === true
-                    query: mod.query
-                    namePrefix: "home.card." + modelData.key
-                    onActionRequested: (action, text) => mod.raiseRequested(modelData.id, action, text)
-                }
-            }
+            wrapMode: Text.Wrap
+            text: qsTr("Nothing to show here right now.")
+            color: Theme.palette.textTertiary
+            font.pixelSize: Theme.typography.secondaryText
         }
 
-        // medium, large: cards, two side by side in a large module that has
-        // the room.
+        // Too small for one item: what there is, in one line.
+        LogosText {
+            objectName: mod.objectName + ".summary"
+            visible: mod.summarised
+            width: parent.width
+            elide: Text.ElideRight
+            text: mod.summaryText()
+            color: Theme.palette.textSecondary
+            font.pixelSize: Theme.typography.secondaryText
+        }
+
+        // The items: one-line rows at two rows tall, else item cards;
+        // `columns` side by side. Each is built, measured and shown only if
+        // it fits whole (`shown`); Flow leaves out the hidden ones.
         Flow {
-            id: cards
-            visible: mod.size === "medium" || mod.size === "large"
-            readonly property int columns: mod.size === "large" && width >= 600 ? 2 : 1
+            id: items
+            visible: mod.shown > 0
+            enabled: !mod.editing
             width: parent.width
-            spacing: Theme.spacing.small
+            spacing: mod.itemSpacing
+            // Whole pixels, so `columns` of them always fit on one line.
+            readonly property real itemWidth: Math.floor((width - (mod.columns - 1) * spacing) / mod.columns)
             Repeater {
-                id: cardRepeater
-                model: cards.visible ? mod.rows : []
+                id: itemRepeater
+                model: mod.rows
+                onItemAdded: Qt.callLater(mod.measure)
+                onItemRemoved: Qt.callLater(mod.measure)
                 delegate: ObjectCard {
                     required property var modelData
-                    width: (cards.width - (cards.columns - 1) * cards.spacing) / cards.columns
+                    required property int index
+                    width: items.itemWidth
+                    visible: index < mod.shown
                     object: modelData
                     now: mod.now
+                    compact: mod.compact
                     isNew: mod.newIds[modelData.id] === true
                     query: mod.query
                     namePrefix: "home.card." + modelData.key
                     onActionRequested: (action, text) => mod.raiseRequested(modelData.id, action, text)
+                    onImplicitHeightChanged: Qt.callLater(mod.measure)
                 }
             }
         }
-
-        // row: a strip of cards that scrolls sideways.
-        ListView {
-            id: strip
-            visible: mod.size === "row"
-            width: parent.width
-            height: visible ? stripHeight : 0
-            readonly property real cardWidth: Math.min(300, width - Theme.spacing.xlarge)
-            property real stripHeight: 160
-            orientation: ListView.Horizontal
-            spacing: Theme.spacing.small
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            // Left and Right go through home's keys (navKey), which move the focus.
-            keyNavigationEnabled: false
-            model: visible ? mod.rows : []
-            delegate: ObjectCard {
-                required property var modelData
-                required property int index
-                width: strip.cardWidth
-                object: modelData
-                now: mod.now
-                isNew: mod.newIds[modelData.id] === true
-                query: mod.query
-                namePrefix: "home.card." + modelData.key
-                onActionRequested: (action, text) => mod.raiseRequested(modelData.id, action, text)
-                // Focused from the keyboard: scrolled into the strip.
-                onActiveFocusChanged: if (activeFocus) strip.positionViewAtIndex(index, ListView.Contain)
-                // The strip is as tall as its tallest card.
-                onImplicitHeightChanged: if (implicitHeight > strip.stripHeight) strip.stripHeight = implicitHeight
-                Component.onCompleted: if (implicitHeight > strip.stripHeight) strip.stripHeight = implicitHeight
-            }
-        }
     }
 
-    LogosMenu {
-        id: menu
-        LogosMenuItem {
-            objectName: mod.objectName + ".menu.size"
-            text: qsTr("Size: %1 → %2").arg(sizeName(mod.size)).arg(sizeName(M.nextSize(mod.size)))
-            onTriggered: mod.changeRequested({ size: M.nextSize(mod.size) })
-        }
-        LogosMenuItem {
-            objectName: mod.objectName + ".menu.pin"
-            text: mod.module.pinned ? qsTr("Unpin") : qsTr("Pin to the top")
-            onTriggered: mod.changeRequested({ pinned: !mod.module.pinned })
-        }
-        LogosMenuItem {
-            objectName: mod.objectName + ".menu.notify"
-            text: mod.module.notify ? qsTr("Stop counting new") : qsTr("Count new")
-            onTriggered: mod.changeRequested({ notify: !mod.module.notify })
-        }
-        LogosMenuItem {
-            objectName: mod.objectName + ".menu.remove"
-            text: qsTr("Remove")
-            onTriggered: mod.removeRequested()
-        }
-    }
-
-    function sizeName(size) {
-        switch (size) {
-        case "small": return qsTr("Small")
-        case "medium": return qsTr("Medium")
-        case "large": return qsTr("Large")
-        case "row": return qsTr("Row")
-        }
-        return size
+    // "12 messages, 3 new": the type's name when it finds one type, else
+    // "items"; what is new when it counts new.
+    function summaryText() {
+        const types = M.strings((mod.module.filter || {}).types)
+        const what = types.length === 1 ? ObjectCardFormat.typeLabel(types[0], true).toLowerCase() : qsTr("items")
+        const base = qsTr("%1 %2").arg(mod.total).arg(what)
+        let fresh = 0
+        for (const e of mod.rows)
+            if (e && (e.seen !== true || mod.newIds[e.id] === true)) ++fresh
+        return mod.notify && fresh > 0 ? qsTr("%1, %2 new").arg(base).arg(fresh) : base
     }
 }

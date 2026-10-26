@@ -239,6 +239,10 @@ signals:
     void catalogInstallFailed(const QString& name, const QString& error);
     void launchAppRequested(const QString& name);
     void uninstallPlanRequested(const QVariantMap& plan);
+    // package_manager reports a UI plugin uninstalled. Also part of an upgrade
+    // (it uninstalls first), so a listener that forgets the app's data checks
+    // that it is really gone once the metadata is fetched again.
+    void uiPluginUninstalled(const QString& name);
 
     // The resolver's required-package entries, in install order. Published
     // rather than written: this used to call setRequiredPackages() on an

@@ -20,6 +20,8 @@ Rectangle {
     function clearSearch() { if (page.item) page.item.clearSearch() }
     // Esc (#47): true when home had search text and cleared it.
     function escapeSearch() { return page.item ? page.item.escapeSearch() : false }
+    // Esc / Back at phone width (#51): true when home left edit mode.
+    function escapeEdit() { return page.item ? page.item.escapeEdit() : false }
 
     Loader {
         id: page

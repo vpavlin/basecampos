@@ -66,6 +66,17 @@ inline QString moduleDataDirectory()
     return baseDirectory() + "/module_data";
 }
 
+// One folder per ui_qml app (app_data/<name>/): its QML LocalStorage, set
+// as the engine's offlineStoragePath by the sandbox (PluginLoader). "" for a
+// name that is not a plain folder name, so nothing can point outside it.
+inline QString appDataDirectory(const QString& appName)
+{
+    if (appName.isEmpty() || appName.startsWith(QLatin1Char('.'))
+        || appName.contains(QLatin1Char('/')) || appName.contains(QLatin1Char('\\')))
+        return QString();
+    return baseDirectory() + "/app_data/" + appName;
+}
+
 // Directory for app log files (stdout/stderr capture, rotated per session).
 // The "In" form takes the session directory explicitly, so the logging config
 // reader can resolve a default without going through the environment.

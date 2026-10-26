@@ -20,6 +20,8 @@ pkgs.stdenv.mkDerivation {
     pkgs.yaml-cpp
     # workspace_area_test: `// libdeps: Logos::DesignSystem` (ThemeColors.h).
     logosDesignSystem
+    # keychain_broker_test: `// libdeps: OpenSSL::Crypto` (KeychainVerify.cpp).
+    pkgs.openssl
   ];
 
   dontUseCmakeConfigure = true;

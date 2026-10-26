@@ -41,6 +41,7 @@ Item {
                                   || addApplicationDialog.visible
                                   || intentChooserDialog.visible
                                   || intentInstallDialog.visible
+                                  || keychainResultDialog.visible
     property string sidebarTooltipText: ""
     property real   sidebarTooltipY:    0
 
@@ -159,6 +160,15 @@ Item {
 
     }
 
+    // Signed / Not signed, over the app that asked Keychain for a signature
+    // (basecamp-experiments#58). The host brought that app forward first.
+    KeychainResultDialog {
+        id: keychainResultDialog
+        displayNameLookup: _dialogDeps.displayNameLookup
+        // Another app's request waited behind this one: back to Keychain.
+        onClosed: if (waiting > 0) backend.openRole("keychain")
+    }
+
     ConfirmationDialog {
         id: installErrorDialog
         objectName: "confirmationDialog.installError"
@@ -229,6 +239,10 @@ Item {
 
         function onLinkFailed(reason) {
             linkFailedToast.show(undefined, reason);
+        }
+
+        function onKeychainRequestFinished(requester, summary) {
+            keychainResultDialog.openWith(requester, summary);
         }
 
         function onIntentInstallOffered(intent, candidates, details) {

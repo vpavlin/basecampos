@@ -79,6 +79,18 @@ class ShellApi : public QObject {
     // installedApps' row shape plus recentKind ("closed" | "installed").
     // Empty on a fresh profile; home then shows the role apps.
     Q_PROPERTY(QVariantList recentApps READ recentApps NOTIFY recentAppsChanged)
+    // What home saved of its own with saveHomeSettings (its modules and their
+    // layout, basecamp-experiments#51); {} when nothing. This app's only:
+    // another home app starts from nothing.
+    Q_PROPERTY(QVariantMap homeSettings READ homeSettings NOTIFY homeSettingsChanged)
+
+    // ── keychain (basecamp-experiments#55, #56) ──────────────────────────
+    // Every registered key, the user's label and note included, grouped by
+    // owner (Keychain::allKeys rows plus ownerIcon and ownerFullBleed, served
+    // by the host).
+    Q_PROPERTY(QVariantList keychainKeys READ keychainKeys NOTIFY keychainChanged)
+    // Open signing requests' ids, oldest first.
+    Q_PROPERTY(QStringList keychainRequests READ keychainRequests NOTIFY keychainRequestsChanged)
 
 public:
     ShellApi(MainUIBackend* backend, const QString& appName, QObject* parent = nullptr);
@@ -119,6 +131,9 @@ public:
     QString homeQuery() const;
     bool feedOnly() const;
     QVariantList recentApps() const;
+    QVariantMap homeSettings() const;
+    QVariantList keychainKeys() const;
+    QStringList keychainRequests() const;
 
     // settings
     Q_INVOKABLE void refreshRepositories();
@@ -177,6 +192,10 @@ public:
     // the active filter ("Search transactions"); "" gives the shell's own back.
     // Plain text, one line, at most 60 characters.
     Q_INVOKABLE void setBarPlaceholder(const QString& text);
+    // home: keeps `settings` (a JSON object, at most 64 KB) across restarts,
+    // in place of what was saved. False when refused. Every view of the same
+    // app sees homeSettingsChanged.
+    Q_INVOKABLE bool saveHomeSettings(const QVariantMap& settings);
 
     // ── search (SHELL-OBJECTS-SPEC §5) ───────────────────────────────────
     // The envelopes `filter` allows ({ types?, apps?, kinds?, subjects?,
@@ -201,6 +220,23 @@ public:
     // pills. Read when asked, never pushed.
     Q_INVOKABLE QVariantMap counts(const QString& query) const;
 
+    // ── keychain ─────────────────────────────────────────────────────────
+    // The user's own words for a key, never shown to any other app. "" clears;
+    // false for an unknown key or over 40 (label) / 500 (note) characters.
+    Q_INVOKABLE bool setKeyLabel(const QString& ownerApp, const QString& keyId, const QString& label);
+    Q_INVOKABLE bool setKeyNote(const QString& ownerApp, const QString& keyId, const QString& note);
+    // The entry leaves the directory; the signer app keeps its private key.
+    Q_INVOKABLE bool removeKey(const QString& ownerApp, const QString& keyId);
+    // One open request as the Keychain shows it (KeychainBroker::
+    // requestForKeychain): who asks, their words, the kind, the keys that can
+    // sign it and the one this requester used last. {} when unknown.
+    Q_INVOKABLE QVariantMap keychainRequest(const QString& requestId) const;
+    // Continue with this key (it goes to its signer app), or Cancel.
+    Q_INVOKABLE bool chooseKey(const QString& requestId, const QString& ownerApp, const QString& keyId);
+    Q_INVOKABLE bool cancelSignatureRequest(const QString& requestId);
+    // Bring forward the signer app an open request is waiting for.
+    Q_INVOKABLE bool openSigner(const QString& requestId);
+
     // any role app: open whatever fills another role (navigation only).
     Q_INVOKABLE bool openRole(const QString& role);
 
@@ -219,6 +255,7 @@ signals:
     void homeQueryChanged();
     void feedOnlyChanged();
     void recentAppsChanged();
+    void homeSettingsChanged();
     // home: findApps would answer differently (an app opened, closed,
     // installed or removed, the catalog arrived). Coalesced.
     void appResultsChanged();
@@ -232,6 +269,11 @@ signals:
     void searchRequested(const QString& requestId, const QString& query, const QVariantMap& filter);
     // search: what `app` published changed (the host asks again by itself).
     void objectsChanged(const QString& app);
+    // keychain: a key was registered, changed or removed.
+    void keychainChanged();
+    void keychainRequestsChanged();
+    // keychain: a signing request is waiting for the user.
+    void keychainRequestOpened(const QString& requestId);
 
 private:
     bool holds(const char* role) const;

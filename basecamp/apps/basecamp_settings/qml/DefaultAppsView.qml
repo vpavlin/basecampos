@@ -19,7 +19,9 @@ Item {
         { role: "settings", label: qsTr("Settings"),
           hint: qsTr("This screen. The app you choose can change Basecamp's preferences and default apps.") },
         { role: "search", label: qsTr("Search"), allowsNone: true,
-          hint: qsTr("Ranks what apps share with Basecamp when you search or open Home. The app you choose reads everything shared in Settings → Search. With none, Basecamp ranks by itself.") }
+          hint: qsTr("Ranks what apps share with Basecamp when you search or open Home. The app you choose reads everything shared in Settings → Search. With none, Basecamp ranks by itself.") },
+        { role: "keychain", label: qsTr("Keychain"),
+          hint: qsTr("Lists the public keys your apps add, and asks you which key signs when an app wants a signature. The app you choose sees every key, your labels and notes, and every signing request.") }
     ]
 
     Flickable {

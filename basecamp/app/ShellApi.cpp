@@ -1,7 +1,10 @@
 #include "ShellApi.h"
 
 #include "AppSearch.h"
+#include "AppsModel.h"
 #include "IntentRegistry.h"
+#include "Keychain.h"
+#include "KeychainBroker.h"
 #include "MainUIBackend.h"
 #include "ObjectResults.h"
 #include "ObjectSearch.h"
@@ -204,8 +207,11 @@ ShellApi::ShellApi(MainUIBackend* backend, const QString& appName, QObject* pare
         emit homeQueryChanged();
         emit feedOnlyChanged();
         emit recentAppsChanged();
+        emit homeSettingsChanged();
         emit appResultsChanged();
         emit relatedAppsChanged();
+        emit keychainChanged();
+        emit keychainRequestsChanged();
     });
     connect(backend, &MainUIBackend::shellPreferencesChanged, this, &ShellApi::prefsChanged);
     connect(backend, &MainUIBackend::settingsSectionRequested, this, [this](const QString& section) {
@@ -222,6 +228,9 @@ ShellApi::ShellApi(MainUIBackend* backend, const QString& appName, QObject* pare
     });
     connect(backend, &MainUIBackend::homeFeedOnlyChanged, this, [this]() {
         if (holds("home")) emit feedOnlyChanged();
+    });
+    connect(backend, &MainUIBackend::homeSettingsChanged, this, [this](const QString& app) {
+        if (app == m_app && holds("home")) emit homeSettingsChanged();
     });
     // Gated: it moves when the user closes or installs an app, timing only the
     // holder may observe.
@@ -257,6 +266,21 @@ ShellApi::ShellApi(MainUIBackend* backend, const QString& appName, QObject* pare
         };
         connect(store, &ObjectStore::changed, this, schedule);
         connect(store, &ObjectStore::disabledAppsChanged, this, schedule);
+    }
+    // Keychain: its holder alone hears that keys or requests changed. Which
+    // apps register keys, and when an app asks for a signature, is nobody
+    // else's to observe.
+    if (Keychain* keychain = backend->keychain())
+        connect(keychain, &Keychain::keysChanged, this, [this]() {
+            if (holds("keychain")) emit keychainChanged();
+        });
+    if (KeychainBroker* broker = backend->keychainBroker()) {
+        connect(broker, &KeychainBroker::requestsChanged, this, [this]() {
+            if (holds("keychain")) emit keychainRequestsChanged();
+        });
+        connect(broker, &KeychainBroker::requestOpened, this, [this](const QString& id) {
+            if (holds("keychain")) emit keychainRequestOpened(id);
+        });
     }
     // Search: to the holder the request was made of, and only while it holds
     // the role. objectsChanged is a clock of every app's publishing; only the
@@ -440,6 +464,16 @@ QVariantList ShellApi::recentApps() const
     return holds("home") ? withServedIcons(m_backend->recentApps()) : QVariantList();
 }
 
+QVariantMap ShellApi::homeSettings() const
+{
+    return holds("home") ? m_backend->homeSettings(m_app) : QVariantMap();
+}
+
+bool ShellApi::saveHomeSettings(const QVariantMap& settings)
+{
+    return holds("home") && m_backend->setHomeSettings(m_app, settings);
+}
+
 void ShellApi::launch(const QString& name)
 {
     if (holds("home")) emit m_backend->homeLaunchRequested(name);
@@ -569,6 +603,95 @@ void ShellApi::setBarPlaceholder(const QString& text)
 
 // Navigation any app could already ask for (basecamp.apps.launch). From home,
 // the shell also turns the New tab into whatever opens.
+// ── keychain ─────────────────────────────────────────────────────────────────
+
+namespace {
+
+// The tile an app's icon is drawn on, as home's app rows: the host's icon
+// for it, full bleed for a 0.4.0+ package (AppsModel::supportsFullBleedIcon).
+void addAppTile(MainUIBackend* backend, QVariantMap& row, const QString& app,
+                const QString& iconKey, const QString& fullBleedKey)
+{
+    row.insert(iconKey, QStringLiteral("image://basecamp/appicon/") + app);
+    UIPluginManager* plugins = backend->uiPluginManager();
+    row.insert(fullBleedKey,
+               plugins && AppsModel::supportsFullBleedIcon(plugins->pluginManifestVersion(app)));
+}
+
+} // namespace
+
+QVariantList ShellApi::keychainKeys() const
+{
+    if (!holds("keychain") || !m_backend->keychain()) return {};
+    QVariantList rows = m_backend->keychain()->allKeys();
+    for (QVariant& v : rows) {
+        QVariantMap row = v.toMap();
+        addAppTile(m_backend, row, row.value(QStringLiteral("ownerApp")).toString(),
+                   QStringLiteral("ownerIcon"), QStringLiteral("ownerFullBleed"));
+        v = row;
+    }
+    return rows;
+}
+
+QStringList ShellApi::keychainRequests() const
+{
+    return holds("keychain") && m_backend->keychainBroker()
+        ? m_backend->keychainBroker()->openRequests() : QStringList();
+}
+
+bool ShellApi::setKeyLabel(const QString& ownerApp, const QString& keyId, const QString& label)
+{
+    return holds("keychain") && m_backend->keychain()
+        && m_backend->keychain()->setKeyLabel(ownerApp, keyId, label);
+}
+
+bool ShellApi::setKeyNote(const QString& ownerApp, const QString& keyId, const QString& note)
+{
+    return holds("keychain") && m_backend->keychain()
+        && m_backend->keychain()->setKeyNote(ownerApp, keyId, note);
+}
+
+bool ShellApi::removeKey(const QString& ownerApp, const QString& keyId)
+{
+    return holds("keychain") && m_backend->keychain()
+        && m_backend->keychain()->removeEntry(ownerApp, keyId);
+}
+
+QVariantMap ShellApi::keychainRequest(const QString& requestId) const
+{
+    if (!holds("keychain") || !m_backend->keychainBroker()) return {};
+    QVariantMap r = m_backend->keychainBroker()->requestForKeychain(requestId);
+    if (r.isEmpty()) return r;
+    addAppTile(m_backend, r, r.value(QStringLiteral("requesterApp")).toString(),
+               QStringLiteral("requesterIcon"), QStringLiteral("requesterFullBleed"));
+    QVariantList keys = r.value(QStringLiteral("keys")).toList();
+    for (QVariant& v : keys) {
+        QVariantMap row = v.toMap();
+        addAppTile(m_backend, row, row.value(QStringLiteral("ownerApp")).toString(),
+                   QStringLiteral("ownerIcon"), QStringLiteral("ownerFullBleed"));
+        v = row;
+    }
+    r.insert(QStringLiteral("keys"), keys);
+    return r;
+}
+
+bool ShellApi::chooseKey(const QString& requestId, const QString& ownerApp, const QString& keyId)
+{
+    return holds("keychain") && m_backend->keychainBroker()
+        && m_backend->keychainBroker()->chooseKey(requestId, ownerApp, keyId);
+}
+
+bool ShellApi::cancelSignatureRequest(const QString& requestId)
+{
+    return holds("keychain") && m_backend->keychainBroker()
+        && m_backend->keychainBroker()->cancelByUser(requestId);
+}
+
+bool ShellApi::openSigner(const QString& requestId)
+{
+    return holds("keychain") && m_backend->presentKeychainSigner(requestId);
+}
+
 bool ShellApi::openRole(const QString& role)
 {
     if (!holdsAny()) return false;

@@ -1648,11 +1648,16 @@ bool MainContainer::tabsKey(QKeyEvent* e)
         if (top->isFullScreen()) top->showNormal(); else top->showFullScreen();
         return true;
     }
-    // Esc / phone Back in the compact layout: out of the tab switcher, or
-    // from the New tab back to the last tab. Otherwise the key goes on.
+    // Esc / phone Back in the compact layout: out of home's edit mode first
+    // (#51), then out of the tab switcher, or from the New tab back to the
+    // last tab. Otherwise the key goes on.
     if ((key == Qt::Key_Escape || key == Qt::Key_Back) && mods == Qt::NoModifier
-        && !e->isAutoRepeat() && m_tabArea->handleBack())
-        return true;
+        && !e->isAutoRepeat()) {
+        if (TabArea::isNewTabKey(m_tabArea->currentKey()) && HomeEscape::leaveEditInHome(homeRoot()))
+            return true;
+        if (m_tabArea->handleBack())
+            return true;
+    }
     const bool ctrl = mods == Qt::ControlModifier;
     const bool ctrlShift = mods == (Qt::ControlModifier | Qt::ShiftModifier);
     if (!ctrl && !ctrlShift)

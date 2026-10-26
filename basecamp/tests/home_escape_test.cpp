@@ -124,6 +124,24 @@ private slots:
             QCOMPARE(HomeEscape::onEscape(true, false, true, h.get()), HomeEscape::Action::Close);
         }
     }
+
+    // Phone Back (#51): home in edit mode leaves it and keeps the key, so
+    // the shell does not go Back; out of edit mode, or a home app without
+    // escapeEdit(), Back goes on as before.
+    void backLeavesEditModeFirst()
+    {
+        auto h = home(QStringLiteral(
+            "property bool editing: true\n"
+            "function escapeEdit() { if (!editing) return false; editing = false; return true }"));
+        QVERIFY(h);
+        QVERIFY(HomeEscape::leaveEditInHome(h.get()));
+        QCOMPARE(h->property("editing").toBool(), false);
+        QVERIFY(!HomeEscape::leaveEditInHome(h.get()));
+        auto plain = home(QStringLiteral("property bool editing: true"));
+        QVERIFY(plain);
+        QVERIFY(!HomeEscape::leaveEditInHome(plain.get()));
+        QVERIFY(!HomeEscape::leaveEditInHome(nullptr));
+    }
 };
 
 QTEST_MAIN(HomeEscapeTest)

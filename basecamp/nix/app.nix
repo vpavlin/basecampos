@@ -98,6 +98,10 @@ pkgs.stdenv.mkDerivation rec {
     # headers and CMake package on this build's search path, not a second copy.
     pkgs.spdlog
     pkgs.yaml-cpp
+    # The Keychain's Ed25519 check (app/KeychainVerify.cpp) links libcrypto
+    # itself, not only through logos-protocol: named so its headers and CMake
+    # package are on this build's search path.
+    pkgs.openssl
   ] ++ (
     if pkgs.stdenv.isLinux then
       # Linux: WebKitGTK as backend + Wayland platform plugin

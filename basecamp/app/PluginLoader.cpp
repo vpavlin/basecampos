@@ -33,6 +33,7 @@
 #include "logos_consumer.h"
 #include "restricted/QmlSandbox.h"
 #include "utils/DependencyEntry.h"
+#include "utils/LogosBasecampPaths.h"
 #include <ViewModuleHost.h>
 
 PluginLoader::PluginLoader(LogosAPI* logosAPI,
@@ -456,7 +457,8 @@ QQuickWidget* createSandboxedView(const PluginLoadRequest& request)
         const QString appLibDir =
             QDir(QCoreApplication::applicationDirPath() + "/../lib").canonicalPath();
         QmlSandbox::configure(engine, request.installDir, request.qmlViewPath,
-                              appLibDir, request.name);
+                              appLibDir, request.name,
+                              LogosBasecampPaths::appDataDirectory(request.name));
         engine->setBaseUrl(QUrl::fromLocalFile(request.installDir + "/"));
     }
     return qmlWidget;

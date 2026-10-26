@@ -58,6 +58,66 @@ inline const QString kObjectsRetractIntent =
 // rule an app can check on its own side.
 inline const QString kObjectsActionIntent = QStringLiteral("objects.action");
 
+// Keychain (basecamp-experiments#55, #56; Keychain.h, KeychainBroker.h): a
+// directory of public keys and a router for signing requests. Answered in C++
+// like the objects intents, with the caller the broker attested as the owner
+// or requester, never a payload field. Not navigation.
+//
+// Every answer is `ok` with its outcome in `data`: the broker coerces error
+// codes it does not know (busy, duplicate, …) to `failed`, which would hide
+// from an app why it was refused.
+//
+// Signer apps:
+//   register { keyId, name, publicKey, algorithm, purposes? } -> { ok, error? }
+//   update   { keyId, name?, purposes? }                       -> { ok, error? }
+//   remove   { keyId }                                         -> { ok, error? }
+//   keys     {}                                                -> { keys: [ … ] }
+//   complete { requestId, signature }                          -> { ok, status? }
+//   reject   { requestId, reason? }                            -> { ok }
+// Requesting apps:
+//   sign     { payload, kind, description, algorithm?, purpose? }
+//            (purpose, when given, must be the kind: bad_request otherwise)
+//            answered once the request ends, with signatureResult's map
+//            { requestId, status, signature?, publicKey?, keyId?, keyName?,
+//            signerApp?, error? }, or at once with { error } (bad_request, busy,
+//            unavailable, not_in_front). Held open meanwhile: a dispatch the shell is
+//            handling has the broker's 10-minute backstop, above the
+//            Keychain's own 5-minute timeout.
+//   cancel   { requestId? }                                    -> { ok }
+inline const QString kKeychainRole = QStringLiteral("keychain");
+inline const QString kKeychainRegisterIntent = QStringLiteral("basecamp.keychain.register");
+inline const QString kKeychainUpdateIntent   = QStringLiteral("basecamp.keychain.update");
+inline const QString kKeychainRemoveIntent   = QStringLiteral("basecamp.keychain.remove");
+inline const QString kKeychainKeysIntent     = QStringLiteral("basecamp.keychain.keys");
+inline const QString kKeychainSignIntent     = QStringLiteral("basecamp.keychain.sign");
+inline const QString kKeychainCancelIntent   = QStringLiteral("basecamp.keychain.cancel");
+inline const QString kKeychainCompleteIntent = QStringLiteral("basecamp.keychain.complete");
+inline const QString kKeychainRejectIntent   = QStringLiteral("basecamp.keychain.reject");
+inline const QStringList kKeychainIntents = {
+    kKeychainRegisterIntent, kKeychainUpdateIntent, kKeychainRemoveIntent,
+    kKeychainKeysIntent, kKeychainSignIntent, kKeychainCancelIntent,
+    kKeychainCompleteIntent, kKeychainRejectIntent,
+};
+
+// The shell to the signer app that owns the chosen key, and to it alone
+// (submitTo), like `objects.action`: `keychain.sign` { requestId, keyId,
+// payload, kind, purpose, requesterApp, requesterName, description }, answered `ok` once the signer
+// shows it; `keychain.ended` { requestId, status } when the request ended
+// while it had it, for a reason other than its own answer. The signer
+// declares both in "provides"; the shell is their only permitted requester.
+inline const QString kKeychainSignerIntent = QStringLiteral("keychain.sign");
+inline const QString kKeychainEndedIntent  = QStringLiteral("keychain.ended");
+
+// An app's own data, kept by the host (AppDataStore.h): one JSON object per
+// app that no other app can read, which QML LocalStorage cannot promise
+// inside one process. The app is the attested caller. Answered `ok` with the
+// outcome in `data`, as the keychain intents:
+//   read  {}           -> { ok, data }
+//   write { data: {} } -> { ok, error? }   (bad_request, too_big, failed)
+inline const QString kAppDataReadIntent  = QStringLiteral("basecamp.appdata.read");
+inline const QString kAppDataWriteIntent = QStringLiteral("basecamp.appdata.write");
+inline const QStringList kAppDataIntents = { kAppDataReadIntent, kAppDataWriteIntent };
+
 // Bring a named app forward: `{ "app": "wallet_ui" }`.
 inline const QString kAppLaunchIntent = QStringLiteral("basecamp.apps.launch");
 inline const QString kPackageManagerAppName =

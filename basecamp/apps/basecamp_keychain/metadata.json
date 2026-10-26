@@ -1,0 +1,17 @@
+{
+  "author": "Logos",
+  "category": "system",
+  "dependencies": [],
+  "description": "Basecamp's keychain: a directory of the public keys your apps register, and where you choose which key signs when an app asks. It never holds private keys.",
+  "display_name": "Keychain",
+  "icon": "icon.svg",
+  "main": {},
+  "manifestVersion": "0.6.0",
+  "name": "basecamp_keychain",
+  "type": "ui_qml",
+  "version": "0.1.0",
+  "view": "qml/Main.qml",
+  "roles": [
+    "keychain"
+  ]
+}

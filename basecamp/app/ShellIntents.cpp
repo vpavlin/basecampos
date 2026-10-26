@@ -14,12 +14,16 @@ void registerWith(IntentRegistry* registry,
     registry->registerShellUses(shellModuleName,
                                 { QStringLiteral("packages.show"),
                                   QStringLiteral("packages.install"),
-                                  kObjectsActionIntent });
+                                  kObjectsActionIntent,
+                                  kKeychainSignerIntent,
+                                  kKeychainEndedIntent });
 
     QStringList provides = kNavigationIntents;
     provides += kPackageConfirmIntents;
     provides << kNotificationsPostIntent;
     provides << kObjectsPublishIntent << kObjectsRetractIntent;
+    provides += kKeychainIntents;
+    provides += kAppDataIntents;
 
     registry->registerShellProvider(shellModuleName, provides,
                                     kNavigationIntents, displayName, iconSource);
@@ -37,6 +41,12 @@ void registerWith(IntentRegistry* registry,
     // submitTo only stops other apps from NAMING the provider; this stops
     // them asking at all, answered `unavailable` like any denial.
     registry->restrictIntentToRequesters(kObjectsActionIntent, { shellModuleName });
+
+    // The same for the signer's two: an app asking a signer `keychain.sign`
+    // itself would put its own payload and words in front of the user as if
+    // they came through Keychain, past its key choice and its check.
+    registry->restrictIntentToRequesters(kKeychainSignerIntent, { shellModuleName });
+    registry->restrictIntentToRequesters(kKeychainEndedIntent, { shellModuleName });
 }
 
 } // namespace ShellIntents

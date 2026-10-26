@@ -13,8 +13,8 @@ class IntentRegistry;
 // ── ShellRoles ───────────────────────────────────────────────────────────────
 //
 // Which app fills each of the shell's roles: home, launcher, packages,
-// settings, search (docs SHELL-ROLES-SPEC.md, ADR-067; search is
-// SHELL-OBJECTS-SPEC §5).
+// settings, search, keychain (docs SHELL-ROLES-SPEC.md, ADR-067; search is
+// SHELL-OBJECTS-SPEC §5, keychain basecamp-experiments#57).
 //
 // An app CLAIMS a role in its metadata.json (IntentRegistry reads that); the
 // USER assigns it here. The bundled default for a role needs no claim: it is

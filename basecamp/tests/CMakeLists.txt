@@ -17,6 +17,9 @@ find_package(yaml-cpp QUIET)
 # reads theme colours through ThemeColors.h; a test pulling one of those in
 # declares `// libdeps: Logos::DesignSystem`.
 find_package(LogosDesignSystem CONFIG QUIET)
+# The Keychain's signature check (app/KeychainVerify.cpp) links libcrypto:
+# `// libdeps: OpenSSL::Crypto`.
+find_package(OpenSSL QUIET COMPONENTS Crypto)
 
 enable_testing()
 

@@ -340,6 +340,74 @@ private slots:
                  "SANDBOX BREACH: network request was permitted (no error)");
     }
 
+    // LocalStorage lives in the app's own folder (basecamp-experiments#59):
+    // each engine's offlineStoragePath is the folder the host gives the app,
+    // so its database files land there, not in Qt's one default folder for
+    // every engine in the process.
+    //
+    // NOT an isolation boundary inside one process, and this test says so:
+    // Qt names an open database connection after the file name alone (an md5
+    // of the database name, qqmllocalstorage.cpp openDatabaseSync) and hands
+    // the open connection to any engine asking for the same name, whatever
+    // its offlineStoragePath. Every ui_qml view runs in the host process, so
+    // while app A has "keys" open, app B asking for "keys" gets A's database.
+    // The QEXPECT_FAIL below pins that down; if Qt ever keys connections by
+    // path it turns into an XPASS here.
+    void localStorageInTheAppsFolder()
+    {
+        QTemporaryDir dir(workRoot() + QStringLiteral("/tst_qml_sandbox-XXXXXX"));
+        QVERIFY(dir.isValid());
+        const QString viewBody = QStringLiteral(
+            "import QtQml\nimport QtQuick.LocalStorage\n"
+            "QtObject {\n"
+            "    property string got: \"unset\"\n"
+            "    Component.onCompleted: {\n"
+            "        var db = LocalStorage.openDatabaseSync(\"%1\", \"1.0\", \"t\", 1000)\n"
+            "        db.transaction(function (tx) {\n"
+            "            tx.executeSql(\"CREATE TABLE IF NOT EXISTS kv(v TEXT)\")\n"
+            "            %2\n"
+            "        })\n"
+            "        db.readTransaction(function (tx) {\n"
+            "            var r = tx.executeSql(\"SELECT v FROM kv\")\n"
+            "            got = r.rows.length ? r.rows.item(0).v : \"\"\n"
+            "        })\n"
+            "    }\n"
+            "}\n");
+
+        auto run = [&](const QString& app, const QString& db, const QString& write) -> QString {
+            const QString install = dir.path() + "/plugins/" + app;
+            QDir().mkpath(install);
+            const QString view = install + "/view.qml";
+            writeFile(view, viewBody.arg(db, write));
+            QQmlEngine engine;
+            const QString storage = dir.path() + "/app_data/" + app;
+            QmlSandbox::configure(&engine, install, view, /*appLibDir=*/QString(), app, storage);
+            if (engine.offlineStoragePath() != storage) return QStringLiteral("wrong path");
+            QQmlComponent component(&engine, QUrl::fromLocalFile(view));
+            QScopedPointer<QObject> obj(component.create());
+            if (obj.isNull()) return QStringLiteral("error: ") + component.errorString();
+            return obj->property("got").toString();
+        };
+        const auto files = [&](const QString& app) {
+            return QDir(dir.path() + "/app_data/" + app + "/Databases")
+                .entryList({ QStringLiteral("*.sqlite") }, QDir::Files);
+        };
+
+        QCOMPARE(run(QStringLiteral("app_a"), QStringLiteral("a_keys"),
+                     QStringLiteral("tx.executeSql(\"INSERT INTO kv VALUES('SECRET-A')\")")),
+                 QStringLiteral("SECRET-A"));
+        QCOMPARE(files(QStringLiteral("app_a")).size(), 1);
+        // Another app, another name: its own file in its own folder.
+        QCOMPARE(run(QStringLiteral("app_b"), QStringLiteral("b_keys"), QString()), QString());
+        QCOMPARE(files(QStringLiteral("app_b")).size(), 1);
+        QVERIFY(files(QStringLiteral("app_a")) != files(QStringLiteral("app_b")));
+
+        // The same name as A's open database: Qt's connection, not ours.
+        const QString sameName = run(QStringLiteral("app_b"), QStringLiteral("a_keys"), QString());
+        QEXPECT_FAIL("", "Qt reuses an open LocalStorage connection by file name across engines", Continue);
+        QCOMPARE(sameName, QString());
+    }
+
     // Same guarantee for the file:// scheme: counter_qml probes
     // "Read file:///etc/hosts" via XMLHttpRequest. The deny-all NAM must fail
     // that too — the QML engine must not become a file-read primitive.

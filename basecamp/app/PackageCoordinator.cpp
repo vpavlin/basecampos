@@ -176,6 +176,7 @@ void PackageCoordinator::subscribeToPackageInstallationEvents()
     logos.package_manager.on("uiPluginUninstalled", [this](const QVariantList& data) {
         if (data.isEmpty()) return;
         qDebug() << "UI plugin uninstalled:" << data[0].toString();
+        emit uiPluginUninstalled(data[0].toString());
         QTimer::singleShot(100, this, [this]() {
             fetchUiPluginMetadata();
         });

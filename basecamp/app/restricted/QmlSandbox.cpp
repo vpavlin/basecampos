@@ -16,7 +16,8 @@ QStringList configure(QQmlEngine* engine,
                       const QString& installDir,
                       const QString& qmlViewPath,
                       const QString& appLibDir,
-                      const QString& pluginLabel)
+                      const QString& pluginLabel,
+                      const QString& storageDir)
 {
     const QStringList qtDefaultPaths = engine->importPathList();
 
@@ -43,6 +44,10 @@ QStringList configure(QQmlEngine* engine,
     // was prepended here, which — together with the module dir being on the
     // import path — let a qmldir 'plugin' directive load arbitrary native code.)
     engine->setNetworkAccessManagerFactory(new DenyAllNAMFactory(pluginLabel));
+
+    // LocalStorage in the app's own folder (see the header).
+    if (!storageDir.isEmpty())
+        engine->setOfflineStoragePath(storageDir);
 
     // allowedRoots gate ALL local file/qmldir resolution. untrustedRoots is the
     // subset (the module's own dirs) where a qmldir may not declare a native

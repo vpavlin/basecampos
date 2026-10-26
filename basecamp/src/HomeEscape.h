@@ -27,6 +27,19 @@ inline bool clearInHome(QObject* homeRoot)
     return cleared.typeId() == QMetaType::Bool && cleared.toBool();
 }
 
+// Esc / phone Back in the compact layout (basecamp-experiments#51): the
+// shell's Back would leave the New tab, so it asks home first whether the key
+// left edit mode. A home app without escapeEdit() gets the old Back.
+inline bool leaveEditInHome(QObject* homeRoot)
+{
+    if (!homeRoot)
+        return false;
+    QVariant left;
+    if (!QMetaObject::invokeMethod(homeRoot, "escapeEdit", Q_RETURN_ARG(QVariant, left)))
+        return false;
+    return left.typeId() == QMetaType::Bool && left.toBool();
+}
+
 // What Esc does while home is `open`; a dialog up over it takes the key.
 // `inHome`: the key went to home's view (it has the keyboard focus).
 inline Action onEscape(bool open, bool dialogUp, bool inHome, QObject* homeRoot)

@@ -35,6 +35,8 @@ endif()
 
 find_package(spdlog REQUIRED)
 find_package(yaml-cpp REQUIRED)
+# The Keychain checks signers' Ed25519 signatures with libcrypto (EVP).
+find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 
 # QML Inspector (Qt DevTools-like inspection over TCP)
 # Enabled by default in Debug builds, disabled in Release.
@@ -320,6 +322,10 @@ set(PROJECT_SOURCES
     ObjectSearch.cpp
     DesktopNotifier.cpp
     ShellIntents.cpp
+    Keychain.cpp
+    KeychainBroker.cpp
+    KeychainVerify.cpp
+    AppDataStore.cpp
 
     # Deep links: basecamp:// from a browser. LinkUrl.cpp is the parser and is
     # deliberately free of everything else, since it is the one part of this
@@ -338,6 +344,7 @@ set(PROJECT_SOURCES
     CoreModuleManager.cpp
     CoreDependencyLoader.cpp
     RecentlyClosedStore.cpp
+    HomeSettingsStore.cpp
     UIPluginManager.cpp
     PackageCoordinator.cpp
     RepositorySource.cpp
@@ -428,6 +435,7 @@ endif()
 # picks them up.
 target_link_libraries(LogosBasecamp PRIVATE
     spdlog::spdlog
+    OpenSSL::Crypto
     yaml-cpp::yaml-cpp
     Qt6::Widgets
     Qt6::RemoteObjects

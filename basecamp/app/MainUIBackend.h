@@ -15,6 +15,11 @@
 
 class ObjectResults;
 class ObjectSearch;
+class AppDataStore;
+class Keychain;
+class KeychainBroker;
+#include <QHash>
+#include <QSet>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QStringList>
@@ -237,6 +242,13 @@ public:
     //   shellSearch    the shell's own live results (one model, refilled on
     //                  each call), ranked by the holder like any view's.
     ObjectSearch* objectSearch() const { return m_objectSearch; }
+    // Keychain (basecamp-experiments#55, #56): the public-key directory and
+    // the signing request broker, for ShellApi's keychain-role members.
+    Keychain* keychain() const { return m_keychain; }
+    KeychainBroker* keychainBroker() const { return m_keychainBroker; }
+    // "Open <signer>" in the Keychain's waiting view: bring forward the app
+    // holding an open request's chosen key. False when none is.
+    bool presentKeychainSigner(const QString& requestId);
     Q_INVOKABLE QStringList searchObjects(const QString& query,
                                           const QVariantMap& filter = QVariantMap()) const;
     Q_INVOKABLE QObject* shellSearch(const QString& query,
@@ -291,6 +303,10 @@ public:
     // set by the home app; "" = the shell's own ("Search apps…").
     Q_INVOKABLE void setHomePlaceholder(const QString& text);
     Q_INVOKABLE QString homePlaceholder() const { return m_homePlaceholder; }
+    // What a home app keeps of its own (its modules and their layout,
+    // basecamp-experiments#51), stored by the shell for it (HomeSettingsStore).
+    QVariantMap homeSettings(const QString& app) const;
+    bool setHomeSettings(const QString& app, const QVariantMap& settings);
 
     // The shell's preferences object, handed over through IShellHost and given
     // only to the settings role's app (ShellApi).
@@ -444,6 +460,10 @@ signals:
     void lastSearchRankerChanged();
     // The publisher answered an action raised with raiseObjectAction().
     void objectActionAnswered(const QString& requestId, bool ok, const QString& error);
+    // A signing request ended (KeychainBroker::requestFinished) and
+    // `requester`, still running, was brought forward: what the shell's
+    // Signed / Not signed sheet over it says.
+    void keychainRequestFinished(const QString& requester, const QVariantMap& summary);
     void rolesChanged();
     void shellPreferencesChanged();
     void settingsSectionRequested(const QString& section);
@@ -452,6 +472,8 @@ signals:
     void homeQueryAccepted();
     void homeFeedOnlyChanged();
     void homePlaceholderChanged();
+    // `app`'s home settings were saved (from any of its views).
+    void homeSettingsChanged(const QString& app);
     // From the home app: the shell turns the New tab into this app / role.
     void homeLaunchRequested(const QString& name);
     void homeRoleRequested(const QString& role);
@@ -597,6 +619,10 @@ private:
     bool m_registryDeclares(const QString& intent) const;
     void showPackageDetailsFallback(const QString& packageName);
     int beginAppLaunch(const QString& dispatchId, const QVariantMap& params);
+    // The basecamp.keychain.* shell intents, `requester` the attested caller.
+    int beginKeychainIntent(const QString& dispatchId, const QString& intent,
+                            const QVariantMap& params, const QString& requester);
+    void wireKeychain();
 
     // A link named an app that is not installed. Raises the SHELL's install
     // offer if the catalog knows the name, and does nothing at all if it does
@@ -676,6 +702,16 @@ private:
     QVariantList              m_lastSearchApps;
     class QTimer*             m_searchAppsTimer = nullptr;
     class ObjectSearch*       m_objectSearch = nullptr;
+    Keychain*                 m_keychain = nullptr;
+    KeychainBroker*           m_keychainBroker = nullptr;
+    AppDataStore*             m_appData = nullptr;
+    // A requester's open basecamp.keychain.sign dispatch, by Keychain request id.
+    QHash<QString, QString>   m_keychainDispatches;
+    // Reported uninstalled; their keys go once the metadata agrees.
+    QSet<QString>             m_keychainUninstalled;
+    // The keychain role's app was running at the last look: closing it then
+    // cancels the requests still waiting for a key.
+    bool                      m_keychainAppOpen = false;
     QPointer<ObjectResults> m_shellResults;
     // The `search` holder this backend started unseen (ensureSearchHolderRunning).
     QString                   m_backgroundSearchApp;
