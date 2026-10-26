@@ -1,22 +1,25 @@
-# Home grid: module cards on a cell grid
+# Home grid: widgets on a cell grid
 
 Epic [#61](https://github.com/xAlisher/basecamp-experiments/issues/61), issues #49 to #54. Branch `home-grid` in the Basecamp source, tested at commit `aa2e037`. Decision record: [ADR-080](adr/0080-home-cards-on-a-cell-grid.md).
 
 ## What and why
 
-Home has two views. The feed (the default) lists everything, newest first. The modules view shows saved filters as cards: News, Transactions, Communities, Messages, Wallet and custom ones.
+Home has two views. The feed (the default) lists everything, newest first. The widgets view shows saved filters as cards (widgets): News, Transactions, Communities, Messages, Wallet and custom ones.
 
-Before this work the module cards sat in 1 to 3 masonry columns. Height came from content. The only controls were a ⋮ menu with a size cycle and "Pin to the top". You could not put a card where you wanted it.
+Before this work the cards sat in 1 to 3 masonry columns. Height came from content. The only controls were a ⋮ menu with a size cycle and "Pin to the top". You could not put a card where you wanted it.
 
 Now the cards sit on a cell grid. You arrange them in an edit mode: drag to move, drag an edge to resize, or use the keyboard. A card shows what fits in its block. The ⋮ menu is gone.
 
-This changes only the module cards. App windows, the feed, the pills, Recent apps and the search bar are unchanged. The desktop Activity sidebar (feed only) has no grid.
+This changes only the widgets. App windows, the feed, the pills, Recent apps and the search bar are unchanged. The desktop Activity sidebar (feed only) has no grid.
 
-![Modules at 1280](home-grid/1280-grid.png)
+![Widgets at 1280](home-grid/1280-grid.png)
+
+**Naming.** These cards were first called modules. In Basecamp a module is an installed component (package manager, chat, UI modules), so the cards are now **widgets**, in the UI ("Widgets" heading, edit-mode text) and in code (`BasecampHomeWidget.qml`, `BasecampHomeWidgets.js`). Settings saved under the old `modules` key still load: home reads `widgets`, falls back to `modules` once, and saves only `widgets`, so the old key goes on the next save (unit-tested).
 
 ## The grid rules
 
-- **Columns follow the content width:** under 600 px is 1 column, 600 to 999 is 2, 1000 to 1399 is 3, 1400 and up is 4 (`columnsFor`).
+- **Columns follow the window width:** under 600 px is 1 column, then one more every 400 px: 2 from 600, 3 from 1000, 4 from 1400, 5 from 1800, 6 from 2200, 7 from 2600, 8 from 3000 and up (`columnsFor`, at most 8). A 390 px phone has 1, a 1280 px window 3.
+- **The grid spans the full width** of home's page.
 - **Rows are a fixed 120 px** (`kRowHeight`), with the theme's medium gap between cells. The page scrolls down as before.
 - **A card is a block** `{ x, y, w, h }` in cells. Width is 1 to the column count. Height is 2 to 8 rows.
 - **No overlaps, ever.** Moving or resizing a card pushes the cards it covers down, then everything moves up as far as it can (`place`, `resize`, `compact`). Shrinking a card pulls the next card up beside it.
@@ -37,7 +40,7 @@ This changes only the module cards. App windows, the feed, the pills, Recent app
 
 Arranging only happens in edit mode, so a drag never fights scrolling or a card's buttons.
 
-- **Enter:** "Edit home" beside the "Modules" heading (wide screens) or at the end of the grid, or a 500 ms press on a card's header. Both are in the modules view; the feed has no Edit home.
+- **Enter:** the single "Edit home" button at the bottom of the grid, or a 500 ms press on a card's header. Both are in the widgets view; the feed has no Edit home.
 - **In edit mode:** every card shows, outlined, with a six-dot handle, a "Count new" switch and an ×. Card buttons (Reply, View, Vote) are dimmed and do nothing.
 - **The bar at the bottom:** a hint, Undo (after a remove), Reset layout, Cancel and Done. The hint ends "Changes are kept when you press Done."
 - **Drag to move:** press anywhere on the card and drag. It follows the pointer, a ghost marks the cell it lands on, and the others make room live. Near the top or bottom edge the page scrolls.
@@ -73,11 +76,11 @@ Arranging only happens in edit mode, so a drag never fights scrolling or a card'
 
 ## Persistence
 
-- Home's modules and layouts are saved by the shell in `<user dir>/home-settings.json` (`shell.saveHomeSettings`, `HomeSettingsStore`), under the home app's name.
+- Home's widgets and layouts are saved by the shell in `<user dir>/home-settings.json` (`shell.saveHomeSettings`, `HomeSettingsStore`), under the home app's name.
 - **One layout per column count.** A width with no saved layout borrows the widest saved one, keeps its reading order and clamps widths (`fitTo`). Nothing is saved by a window resize alone.
 - **Resizing the window and back** gives the same arrangement.
 - **Restarts keep it.** Home reads the settings once at start and never saves before that.
-- Junk in the saved file is cleaned on read: unknown ids drop out, new modules get a 1x3 block at the end, sizes and positions are clamped (y at most 256 rows).
+- Junk in the saved file is cleaned on read: unknown ids drop out, new widgets get a 1x3 block at the end, sizes and positions are clamped (y at most 256 rows).
 
 ![After a restart](home-grid/1280-after-restart.png)
 
@@ -116,7 +119,7 @@ How things were driven: drags, clicks and long presses were real mouse events fr
 | One-line summary when nothing fits | Not seen in the UI (unit test only) |
 | Keyboard only at 1280: Edit home, move Messages, grow it, Enter saves | Pass (see note on step size) |
 | No ⋮ menu; Count new and × work; Undo restores; Cancel drops both | Pass |
-| Search highlight in module cards; Esc clears the search; arrows navigate | Pass |
+| Search highlight in widgets; Esc clears the search; arrows navigate | Pass |
 | Applications page opens from Recent apps | Pass |
 | Desktop overlay: grid and edit mode work; first Esc cancels edit, overlay stays | Pass |
 | Activity sidebar: feed only, no grid, edit mode refused | Pass |
@@ -125,9 +128,25 @@ How things were driven: drags, clicks and long presses were real mouse events fr
 
 ![Esc at 390 left home before the fix](home-grid/390-after-esc.png)
 
+## Widgets rename and window columns (commit ce1b1f4, headless)
+
+| Check | Result |
+|---|---|
+| Unit suite (49 tests, incl. the old `modules` key and window-width columns) | Pass, 49 of 49 |
+| Old settings file (key `modules`, News moved first, Communities removed, a custom 3-column layout) | Loads as saved: four widgets in the saved places at 1280 |
+| Edit home, then Done | The file has `widgets` and no `modules`; the 3-column layout is kept |
+| Columns by window width | 390: 1, 1280: 3, 1800: 5, 2200: 6 |
+| "Widgets" heading (hidden at phone width, as before) and the edit-mode hint ("Drag a widget…") | Pass |
+| QML errors in the run log | None |
+
+Found in this check and fixed in `ce1b1f4`: Done dropped every saved layout it had not just changed (`pruneLayouts` took only JS arrays, and a layout read back from the file is a list from C++), so Done after a restart saved no layouts.
+
+![6 columns at 2200](home-grid/2200-widgets-6-columns.png)
+![Edit mode at 1280](home-grid/1280-widgets-edit.png)
+
 ## What is left
 
-Fixed after the test in `cd31c69`: Esc at phone width (above), and Done now drops the blocks of removed modules from the saved layouts (`pruneLayouts`).
+Fixed after the test in `cd31c69`: Esc at phone width (above), and Done now drops the blocks of removed widgets from the saved layouts (`pruneLayouts`).
 
 - **Holes.** Cards only move up, so a hole can stay at the top left after a move or a grow to the left. A "fill gaps" step (move left too) would fix it but changes the reading order.
 - **Arranging on a phone first** saves only the 1-column layout. Wider screens then derive from it and every card becomes 1 wide until arranged there.
