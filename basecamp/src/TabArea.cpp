@@ -1484,6 +1484,10 @@ bool TabArea::hasKey(const QString& key) const
 
 void TabArea::detachTab(int index, const QPoint& globalPos)
 {
+    // A full-screen session (BasecampOS on a tablet) has nowhere to show a
+    // second window: no tear-off there (Show beside puts two apps side by side).
+    if (qEnvironmentVariableIsSet("BASECAMP_NO_DETACH"))
+        return;
     if (index < 0 || index >= m_tabs->count() || m_tabs->count() < 2)
         return;  // the last tab stays: that is the main window
     const QString key = m_tabs->tabData(index).toString();
@@ -1728,6 +1732,7 @@ void TabArea::showMenu(int index, const QPoint& globalPos)
     menu.addSeparator();
     QAction* undock = menu.addAction(tr("Move to new window"));
     undock->setEnabled(!isNewTabKey(key) && m_tabs->count() > 1);
+    undock->setVisible(!qEnvironmentVariableIsSet("BASECAMP_NO_DETACH"));
     QAction* beside = nullptr;
     if (!m_compact) {
         beside = key == m_sideKey ? menu.addAction(tr("Back to tabs"))
