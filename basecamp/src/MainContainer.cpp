@@ -38,6 +38,7 @@
 #include <QUrl>
 #include <QCursor>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QSettings>
 #include <QWindow>
 #include <QMouseEvent>
@@ -1325,15 +1326,26 @@ void MainContainer::setupTabsUi()
     setupNotifications();
     connect(m_tabArea, &TabArea::closeRequested, this, &MainContainer::closeTab);
     connect(m_tabArea, &TabArea::currentKeyChanged, this, [this](const QString& key) {
+        // Tab switches must feel instant: log what takes long (BasecampOS, the Duet).
+        QElapsedTimer switchTimer;
+        switchTimer.start();
+        auto lap = [&switchTimer, key](const char* what) {
+            const qint64 ms = switchTimer.restart();
+            if (ms > 50)
+                qInfo().noquote() << "tab switch to" << key << ":" << what << ms << "ms";
+        };
         if (!key.isEmpty() && !key.startsWith(QStringLiteral("sys:")) && !TabArea::isNewTabKey(key))
             m_host->setCurrentVisibleApp(key);
+        lap("setCurrentVisibleApp");
         if (m_notifyWidget && m_notifyWidget->rootObject())
             m_notifyWidget->rootObject()->setProperty("currentApp", key);
         positionNotifications();   // on a phone, home's pills move the toast up
         onNotificationsChanged();   // the tab now shown has been seen
+        lap("notifications");
         if (m_shortcutBridge)
             m_shortcutBridge->rebindDeferred();
         saveTabs();
+        lap("saveTabs");
     });
     connect(m_tabArea, &TabArea::newTabShown, this, [this]() {
         if (QObject* root = homeRoot()) {

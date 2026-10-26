@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QTime>
 #include <QFileInfo>
 #include <QFile>
@@ -1676,6 +1677,8 @@ void TabArea::onCurrentChanged(int index)
     m_prevKey = key;
     if (!isNewTabKey(key))
         m_returnKey = key;
+    QElapsedTimer showTimer;
+    showTimer.start();
     if (QWidget* w = contentFor(key)) {
         if (m_stack->indexOf(w) < 0)
             m_stack->addWidget(w);
@@ -1686,6 +1689,8 @@ void TabArea::onCurrentChanged(int index)
         for (int i = 0; i < m_stack->count(); ++i)
             if (QWidget* other = m_stack->widget(i); other != w && other->isVisible())
                 other->hide();
+        if (const qint64 ms = showTimer.elapsed(); ms > 50)
+            qInfo().noquote() << "tab switch to" << key << ": showing the page" << ms << "ms";
         if (w == m_newTabPage) {
             emit newTabShown();
             if (m_compact) {

@@ -732,7 +732,10 @@ void UIPluginManager::setCurrentVisibleApp(const QString& pluginName)
     if (m_currentVisibleApp != pluginName) {
         m_currentVisibleApp = pluginName;
         emit currentVisibleAppChanged();
-        emit launcherAppsChanged();
+        // Not launcherAppsChanged: no row depends on which app is in front,
+        // and recomputing every row (dependency checks per app) and rebuilding
+        // every view bound to the list made each tab switch take ~1 s on the
+        // Duet (BasecampOS).
     }
 }
 
