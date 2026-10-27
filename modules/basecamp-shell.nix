@@ -50,6 +50,15 @@ in
       # QT_QUICK_BACKEND=software shows the wallpaper but loses the Quick content).
       default = "xcb";
     };
+    # The keyboard layout everywhere in the session: Sway's keyboards and the
+    # Wayland compositors inside Basecamp windows (the embedded browser and
+    # terminal). Those get their keymap from the XKB_DEFAULT_* environment
+    # (Qt's compositor leaves the names empty; libxkbcommon fills them from
+    # it), so without this the Duet's Czech typing fell back to US there.
+    keyboard = {
+      layout = lib.mkOption { type = lib.types.str; default = "us"; example = "cz,us"; };
+      options = lib.mkOption { type = lib.types.str; default = ""; example = "grp:alt_shift_toggle"; };
+    };
     swayExtraConfig = lib.mkOption {
       type = lib.types.lines;
       default = "";
@@ -132,6 +141,8 @@ in
         BASECAMP_LAYOUT = cfg.layout;
         # Full screen, nowhere to show a torn-off window (Basecampium).
         BASECAMP_NO_DETACH = "1";
+        XKB_DEFAULT_LAYOUT = cfg.keyboard.layout;
+        XKB_DEFAULT_OPTIONS = cfg.keyboard.options;
         XDG_SESSION_TYPE = "wayland";
         QT_QPA_PLATFORM = cfg.qtPlatform;
         # Logs land in the user's journal next to the session.
@@ -259,6 +270,8 @@ in
       BASECAMP_LAYOUT = cfg.layout;
       # Full screen, nowhere to show a torn-off window (Basecampium).
       BASECAMP_NO_DETACH = "1";
+      XKB_DEFAULT_LAYOUT = cfg.keyboard.layout;
+      XKB_DEFAULT_OPTIONS = cfg.keyboard.options;
       QT_QPA_PLATFORM = cfg.qtPlatform;
       QT_LOGGING_RULES = "qt.qpa.*=false";
     } // cfg.environment));
@@ -296,6 +309,11 @@ in
     '' + lib.concatImapStrings (i: a: ''
       for_window [app_id="${a.appId}"] move container to workspace ${toString (i + 1)}, workspace ${toString (i + 1)}
     '') cfg.externalApps + ''
+
+      input type:keyboard {
+          xkb_layout ${cfg.keyboard.layout}
+          ${lib.optionalString (cfg.keyboard.options != "") "xkb_options ${cfg.keyboard.options}"}
+      }
 
       # Back to Basecamp from anywhere.
       bindsym $mod+Escape [con_mark="basecamp"] focus

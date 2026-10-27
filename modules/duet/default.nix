@@ -155,6 +155,7 @@ in
     # Czech layout never reached it. Basecampium has no wallpaper, the reason
     # for xcb elsewhere (it rendered black in the Legacy desktop).
     basecampos.shell.qtPlatform = "wayland";
+    basecampos.shell.keyboard = { layout = "cz,us"; options = "grp:alt_shift_toggle"; };
 
     # The tablet's Sway rules (panel, touch, keyboard cover) and the kit's
     # session daemons, on top of BasecampOS's own Sway config.
@@ -162,10 +163,6 @@ in
       output DSI-1 transform 270 scale 1.2
       input type:touch map_to_output DSI-1
       input type:tablet_tool map_to_output DSI-1
-      input type:keyboard {
-          xkb_layout cz,us
-          xkb_options grp:alt_shift_toggle
-      }
       input type:touchpad {
           tap enabled
           natural_scroll enabled
