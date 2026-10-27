@@ -887,10 +887,11 @@ std::string BasecamposSystemImpl::setScreenShare(const std::string& state)
 namespace {
 std::string screenshotPath(const std::string& home, std::time_t t)
 {
-    std::string dir = home + "/Pictures";
+    // Where the keyboard's screenshot key saves too (Duet: Ctrl+F5), named alike.
+    std::string dir = home + "/Pictures/Screenshots";
     run({ "mkdir", "-p", dir });
     char name[64];
-    std::strftime(name, sizeof name, "/screenshot-%Y%m%d-%H%M%S.png", std::localtime(&t));
+    std::strftime(name, sizeof name, "/%Y-%m-%d_%H-%M-%S.png", std::localtime(&t));
     return dir + name;
 }
 }

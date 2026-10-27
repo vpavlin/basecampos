@@ -131,7 +131,7 @@ public:
     /// Starts ("on") or stops ("off") screen sharing.
     std::string setScreenShare(const std::string& state);
 
-    /// Takes a screenshot of the whole screen into ~/Pictures; returns its path.
+    /// Takes a screenshot of the whole screen into ~/Pictures/Screenshots; returns its path.
     std::string screenshot();
 
     /// Takes one after `seconds` (1-30), in the background: time to switch to
