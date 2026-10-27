@@ -70,11 +70,11 @@
     },
     {
       "name": "shrooms_core",
-      "version": "0.26.0",
+      "version": "0.28.0",
       "type": "core",
       "repo": "vpavlin-modules",
-      "url": "https://github.com/vpavlin/logos-basecamp-modules/releases/download/shrooms_core-v0.26.0/shrooms_core-0.26.0.lgx",
-      "sha256": "b4b4fc05250eb4b5b63fbfb16f1a7bbea6d9ae00472185b2e8a30b045b4a7166"
+      "url": "https://github.com/vpavlin/logos-basecamp-modules/releases/download/shrooms_core-v0.28.0/shrooms_core-0.28.0.lgx",
+      "sha256": "587d579b271caa032e18eafab4e0432d0f658e60be5452fd24d89c9b9a9a9613"
     },
     {
       "name": "shrooms",
@@ -86,11 +86,11 @@
     },
     {
       "name": "shrooms_agents",
-      "version": "0.52.0",
+      "version": "0.58.0",
       "type": "ui_qml",
       "repo": "vpavlin-modules",
-      "url": "https://github.com/vpavlin/logos-basecamp-modules/releases/download/shrooms_agents-v0.52.0/shrooms_agents-0.52.0.lgx",
-      "sha256": "875abe774a21ec5b8e82a8bc7ac10c5a50e0f0dd9529326a5d25e38273f26e09"
+      "url": "https://github.com/vpavlin/logos-basecamp-modules/releases/download/shrooms_agents-v0.58.0/shrooms_agents-0.58.0.lgx",
+      "sha256": "49d1bd31d43cb8a5befe62e122de4d9976ac45214921527592d61699279e1895"
     }
   ]
 }
