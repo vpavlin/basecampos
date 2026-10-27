@@ -15,7 +15,7 @@ let
   bootMode = config.basecampos.duet.boot;
 in
 {
-  imports = [ ../modules/duet/depthcharge.nix ../modules/duet/agent-chroot.nix ];
+  imports = [ ../modules/duet/depthcharge.nix ../modules/duet/agent-chroot.nix ../modules/duet/keep-default.nix ];
 
   options.basecampos.duet.boot = lib.mkOption {
     type = lib.types.enum [ "subvol" "usb" ];
@@ -66,6 +66,8 @@ in
       # (NixOS applies the fileSystems options when it remounts later).
       # NixOS sees only its subvolume, never the Debian /home tree beside it.
       boot.initrd.enable = false;
+      # BasecampOS boots by default; Debian (KERN-B) stays the fallback.
+      basecampos.duet.keepDefault.enable = true;
       boot.loader.grub.enable = false;
       boot.loader.generic-extlinux-compatible.enable = false;
       fileSystems."/" = {

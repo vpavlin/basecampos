@@ -305,11 +305,20 @@ std::string BasecamposSystemImpl::info()
     return "{\"hostname\":\"" + esc(readFile("/proc/sys/kernel/hostname"))
         + "\",\"os\":\"" + esc(osRelease("PRETTY_NAME"))
         + "\",\"kernel\":\"" + esc(readFile("/proc/sys/kernel/osrelease"))
-        + "\",\"uptime\":" + std::to_string(up) + battery + "}";
+        + "\",\"uptime\":" + std::to_string(up) + battery
+        + ",\"bootDebian\":" + (readFile("/etc/basecampos/boot-debian").empty() ? "false" : "true") + "}";
 }
 
 std::string BasecamposSystemImpl::power(const std::string& action)
 {
+    // "debian": a dual-boot device's restart into its other system (the unit
+    // named in /etc/basecampos/boot-debian; polkit lets the session start it).
+    if (action == "debian") {
+        std::string unit = trim(readFile("/etc/basecampos/boot-debian"));
+        if (unit.empty())
+            return error("no other system to restart into");
+        return okOrError(run({ "systemctl", "start", "--no-block", unit }));
+    }
     if (action != "poweroff" && action != "reboot" && action != "suspend")
         return error("unknown power action: " + action);
     return okOrError(run({ "systemctl", action }));

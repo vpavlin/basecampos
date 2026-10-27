@@ -23,7 +23,8 @@ public:
     /// Hostname, OS release, kernel, uptime in seconds, and battery if any.
     std::string info();
 
-    /// Runs a power action: "poweroff", "reboot" or "suspend".
+    /// Runs a power action: "poweroff", "reboot", "suspend", or "debian" (restart
+    /// into a dual-boot device's other system, where /etc/basecampos/boot-debian names its unit).
     std::string power(const std::string& action);
 
     /// Network devices and their state, and whether networking is online.

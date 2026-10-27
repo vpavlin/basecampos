@@ -164,11 +164,13 @@ Item {
                 RowLayout {
                     spacing: Theme.spacing.medium
                     Repeater {
+                        // On a dual-boot device (the Duet): its other system too.
                         model: [
                             { action: "poweroff", label: "Shut down" },
                             { action: "reboot", label: "Restart" },
                             { action: "suspend", label: "Sleep" }
-                        ]
+                        ].concat(root.sys && root.sys.bootDebian
+                            ? [{ action: "debian", label: "Restart into Debian" }] : [])
                         LogosButton {
                             required property var modelData
                             objectName: "power_" + modelData.action
