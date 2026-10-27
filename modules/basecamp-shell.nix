@@ -243,6 +243,12 @@ in
       extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
       config.common.default = "*";
     };
+    # The system file chooser is the one way to pick files (Václav): made for
+    # fingers and dark like Basecamp. A theme of its own, set for the portal
+    # only (no files in the user's home), on top of Adwaita dark.
+    systemd.user.services.xdg-desktop-portal-gtk.environment.GTK_THEME = "BasecampOS";
+    # "Other Locations" reaches servers (WebDAV/dufs, SFTP, SMB) in the same dialog.
+    services.gvfs.enable = true;
 
     # Camera through the portal (browsers' PipeWire camera): the portal asks
     # with a dialog, which opens as its own window behind full-screen Basecamp,
@@ -264,6 +270,14 @@ in
       cfg.package
       pkgs.grim     # screenshots of the Wayland session (agents use these)
       pkgs.wlr-randr
+      # the file chooser's theme (xdg-desktop-portal-gtk, above)
+      (pkgs.writeTextDir "share/themes/BasecampOS/gtk-3.0/gtk.css" ''
+        @import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+        filechooser treeview { -GtkTreeView-vertical-separator: 22px; }
+        filechooser placessidebar row { min-height: 44px; }
+        filechooser button, filechooser entry { min-height: 40px; }
+        filechooser headerbar button, dialog headerbar button { min-height: 40px; min-width: 64px; }
+      '')
     ];
   } (lib.mkIf (cfg.session == "sway") (let
     env = lib.concatStringsSep " " (lib.mapAttrsToList (k: v: "${k}=${lib.escapeShellArg v}") ({
