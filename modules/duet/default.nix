@@ -27,6 +27,10 @@ let
 
   # The kit's home tree with Debian paths rewritten. Scripts in .local/bin are
   # wrapped so their GTK4/libadwaita panels find typelibs and schemas.
+  # wvkbd with the Duet's Czech layer (a top row of ě š č ř ž ý á í é ú ů; from
+  # atlas/duet-kit, for v0.15, applies as is to nixpkgs' 0.19).
+  wvkbd = pkgs.wvkbd.overrideAttrs (o: { patches = (o.patches or [ ]) ++ [ ../../pkgs/patches/wvkbd-czech.patch ]; });
+
   homeTree = pkgs.runCommand "duet-kit-home" {
     nativeBuildInputs = [ pkgs.makeWrapper python ];
   } ''
@@ -36,7 +40,7 @@ let
       -e 's|%h/Apps/Basecamp.AppImage|${shell.package}/bin/LogosBasecamp|g' \
       -e 's|/home/linux/Apps/Basecamp.AppImage|${shell.package}/bin/LogosBasecamp|g' \
       -e 's|/home/linux|${home}|g' \
-      -e 's|/usr/local/bin/wvkbd-mobintl|${pkgs.wvkbd}/bin/wvkbd-mobintl|g' \
+      -e 's|/usr/local/bin/wvkbd-mobintl|${wvkbd}/bin/wvkbd-mobintl|g' \
       -e 's|/usr/local/bin/shrooms-agent|/run/current-system/sw/bin/shrooms-agent|g' \
       -e 's|/usr/bin/pipewire|${pkgs.pipewire}/bin/pipewire|g' \
       -e 's|/usr/bin/wireplumber|${pkgs.wireplumber}/bin/wireplumber|g' \
@@ -45,9 +49,6 @@ let
       -e 's|/usr/bin/brave-browser|${pkgs.brave}/bin/brave|g' \
       -e 's|/usr/bin/wayvnc|${pkgs.wayvnc}/bin/wayvnc|g' \
       -e 's|/usr/bin/waybar|${pkgs.waybar}/bin/waybar|g'
-    # The `czech` layer exists only in the Duet's patched wvkbd (the patch is not in
-    # duet-kit yet); stock wvkbd exits on an unknown layer, so use its own layers.
-    sed -i -e 's| --landscape-layers czech,landscapespecial||' $out/.local/bin/osk
     # foot 1.2x renamed [colors] (Debian's foot still reads it).
     sed -i -e 's|^\[colors\]$|[colors-dark]|' $out/.config/foot/foot.ini
     # The Debian unit trusts a self-signed LAN repo; that bundle
@@ -265,10 +266,12 @@ in
     fonts.packages = with pkgs; [ font-awesome symbola noto-fonts-color-emoji tablerFont ];
 
     environment.systemPackages = with pkgs; [
-      swaybg swayidle swaylock waybar foot fuzzel wvkbd mako libnotify
+      swaybg swayidle swaylock waybar foot fuzzel mako libnotify
       brightnessctl networkmanagerapplet wlr-randr grim wtype wl-mirror wayvnc
       pulseaudio pavucontrol alsa-utils bluez blueman iw libinput evtest ffmpeg htop
       portfolio-filemanager loupe brave python
+    ] ++ [
+      wvkbd   # patched: the Czech layer
       pipewire wireplumber libcamera
       iio-sensor-proxy
     ];
