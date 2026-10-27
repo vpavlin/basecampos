@@ -306,6 +306,10 @@ in
       # (Duet). Tear-off is off in these sessions (BASECAMP_NO_DETACH).
       for_window [app_id="logos-basecamp" title="^Logos Basecamp$"] mark basecamp, move container to workspace 1, fullscreen enable
       for_window [class="LogosBasecamp" title="^Logos Basecamp$"] mark basecamp, move container to workspace 1, fullscreen enable
+      # Portal dialogs (file chooser, device access) have no parent window Sway
+      # knows, so they opened tiled behind full-screen Basecamp, unseen
+      # ("the paperclip opens nothing", Duet): on top and in focus instead.
+      for_window [app_id="xdg-desktop-portal-gtk"] floating enable, resize set 85 ppt 85 ppt, move position center, focus
     '' + lib.concatImapStrings (i: a: ''
       for_window [app_id="${a.appId}"] move container to workspace ${toString (i + 1)}, workspace ${toString (i + 1)}
     '') cfg.externalApps + ''
