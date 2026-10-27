@@ -39,9 +39,64 @@ Item {
         surfaceItem.takeFocus()
     }
 
+    // Scale: the output follows the window's pixel size, so pixels per view
+    // unit = output width / window width (2 on the Duet: sway's 1.2 reaches
+    // Basecamp as a whole 2). Qt shows a surface at output scale / that ratio,
+    // so with the output's scale equal to it the app draws sharp, sized in view
+    // units, and its popups (menus, the address bar's suggestions) land where
+    // and as big as it means them. A fractional ratio has no whole scale: then
+    // scale 1 and sizes in pixels (right geometry, smaller text). Sizes in view
+    // units at scale 1 got stretched to fit, and the popups (not stretched) came
+    // out half size and off target (Duet).
+    function pixelRatio() {
+        let w = root.Window.window
+        return output && w && w.width > 0 && output.geometry.width > 0 ? output.geometry.width / w.width : 1
+    }
+    function applyScale() {
+        if (!output)
+            return
+        let r = pixelRatio(), whole = Math.round(r)
+        let s = whole >= 1 && Math.abs(r - whole) < 0.02 ? whole : 1
+        if (output.scaleFactor !== s)
+            output.scaleFactor = s
+        fit()
+    }
+    property var watchedPopups: []
+    function watchPopups(parentItem) {
+        watchedPopups = watchedPopups.filter(c => !!c)
+        for (let i = 0; i < parentItem.children.length; i++) {
+            let c = parentItem.children[i]
+            if (c.shellSurface === undefined || watchedPopups.indexOf(c) >= 0)
+                continue
+            watchedPopups.push(c)
+            let clamp = () => root.keepInView(c)
+            c.xChanged.connect(clamp); c.yChanged.connect(clamp)
+            c.widthChanged.connect(clamp); c.heightChanged.connect(clamp)
+            c.childrenChanged.connect(() => Qt.callLater(root.watchPopups, c))
+            clamp()
+        }
+    }
+    property bool sliding: false
+    function slide(pos, size, room) {
+        let d = Math.min(0, room - (pos + size))
+        return d - Math.min(0, pos + d)
+    }
+    function keepInView(item) {
+        if (sliding || item.width <= 0 || item.height <= 0)
+            return
+        let p = item.parent.mapToItem(surfaceItem, item.x, item.y)
+        let x = item.x + slide(p.x, item.width, surfaceItem.width)
+        let y = item.y + slide(p.y, item.height, surfaceItem.height)
+        sliding = true
+        item.x = x
+        item.y = y
+        sliding = false
+    }
     function fit() {
-        if (toplevel && width > 0 && height > 0)
-            toplevel.sendMaximized(Qt.size(Math.round(width), Math.round(height)))
+        if (!toplevel || width <= 0 || height <= 0 || !output)
+            return
+        let k = pixelRatio() / output.scaleFactor
+        toplevel.sendMaximized(Qt.size(Math.round(width * k), Math.round(height * k)))
     }
     onWidthChanged: fit()
     onHeightChanged: fit()
@@ -84,7 +139,8 @@ Item {
         if (output)
             output.destroy()
         output = outputComponent.createObject(compositor, { compositor: compositor, window: w })
-        fit()
+        output.geometryChanged.connect(applyScale)
+        applyScale()
         if (!launched)
             launch()
     }
@@ -93,7 +149,9 @@ Item {
 
     Component {
         id: outputComponent
-        WaylandOutput { sizeFollowsWindow: false }
+        // A real mode (the window's size): with none, Brave crashed opening its
+        // menu and squeezed the suggestions into a strip.
+        WaylandOutput { sizeFollowsWindow: true }
     }
 
     WaylandCompositor {
@@ -124,6 +182,12 @@ Item {
         autoCreatePopupItems: true
         focus: true
         TapHandler { onTapped: root.focusApp() }
+        // Qt places popups where the app asks and ignores the positioner's
+        // "slide into view" (a TODO in Qt): Brave's menu, anchored at the right
+        // edge, ran off the view. Popup items are created as children of their
+        // parent's item; slid back inside the view here, nested ones too. (Later:
+        // the signal comes while the new item is still being constructed.)
+        onChildrenChanged: Qt.callLater(root.watchPopups, surfaceItem)
         onSurfaceDestroyed: { root.toplevel = null; root.message = "@NAME@ closed."; root.showRetry = true }
     }
 
