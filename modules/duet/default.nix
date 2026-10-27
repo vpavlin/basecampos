@@ -149,6 +149,11 @@ in
 
   config = lib.mkIf cfg.enable {
     basecampos.shell.session = "sway";
+    # Native Wayland: under XWayland, Basecamp kept the keymap of whichever
+    # keyboard spoke last (the on-screen keyboard's US one), so the cover's
+    # Czech layout never reached it. Basecampium has no wallpaper, the reason
+    # for xcb elsewhere (it rendered black in the Legacy desktop).
+    basecampos.shell.qtPlatform = "wayland";
 
     # The tablet's Sway rules (panel, touch, keyboard cover) and the kit's
     # session daemons, on top of BasecampOS's own Sway config.
