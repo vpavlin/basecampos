@@ -186,6 +186,8 @@ in
       no_focus [app_id="at.yrlf.wl_mirror"]
 
       bindsym Print exec ${bin}/screenshot
+      # the cover has no Print key: Ctrl + the window-switcher key (F5), as on ChromeOS
+      bindsym ctrl+F5 exec ${bin}/screenshot
       # keyboard top row (Chromebook layout; the keys send plain F1-F10 and F13)
       bindsym F1 exec wtype -M alt -k Left -m alt
       bindsym F2 exec wtype -M alt -k Right -m alt

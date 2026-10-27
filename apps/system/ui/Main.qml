@@ -319,6 +319,13 @@ Item {
                         text: "Screenshot"
                         onClicked: { let r = root.call("screenshot"); root.shotMessage = r.error || ("Saved " + r.path) }
                     }
+                    // This button captures the System page itself; this one gives
+                    // time to switch to the app to capture (no Print key on the cover).
+                    LogosButton {
+                        objectName: "screenshotIn"
+                        text: "Screenshot in 5 s"
+                        onClicked: { let r = root.call("screenshotIn", [5]); root.shotMessage = r.error || ("Switch to what to capture: saving " + r.path) }
+                    }
                     LogosButton {
                         objectName: "keyboardLayout"
                         visible: !!root.kbd.available && root.kbd.layouts > 1

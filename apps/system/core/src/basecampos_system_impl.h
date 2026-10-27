@@ -133,4 +133,8 @@ public:
 
     /// Takes a screenshot of the whole screen into ~/Pictures; returns its path.
     std::string screenshot();
+
+    /// Takes one after `seconds` (1-30), in the background: time to switch to
+    /// the app to capture. Returns the path it will have.
+    std::string screenshotIn(int64_t seconds);
 };

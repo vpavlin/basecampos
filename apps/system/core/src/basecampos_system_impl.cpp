@@ -884,14 +884,32 @@ std::string BasecamposSystemImpl::setScreenShare(const std::string& state)
     return okOrError(run({ "systemctl", "--user", state == "on" ? "start" : "stop", "screen-share.service" }));
 }
 
-std::string BasecamposSystemImpl::screenshot()
+namespace {
+std::string screenshotPath(const std::string& home, std::time_t t)
 {
-    std::string dir = home() + "/Pictures";
+    std::string dir = home + "/Pictures";
     run({ "mkdir", "-p", dir });
     char name[64];
-    std::time_t t = std::time(nullptr);
     std::strftime(name, sizeof name, "/screenshot-%Y%m%d-%H%M%S.png", std::localtime(&t));
-    std::string path = dir + name;
+    return dir + name;
+}
+}
+
+std::string BasecamposSystemImpl::screenshotIn(int64_t seconds)
+{
+    if (seconds < 1 || seconds > 30)
+        return error("seconds must be 1-30");
+    std::string path = screenshotPath(home(), std::time(nullptr) + seconds);
+    // No shell parsing of the path: it is $1 of a fixed script.
+    Result r = detach({ "sh", "-c", "sleep " + std::to_string(seconds) + "; exec grim \"$1\"", "sh", path });
+    if (r.code != 0)
+        return error("screenshot failed to start");
+    return "{\"ok\":true,\"path\":\"" + esc(path) + "\"}";
+}
+
+std::string BasecamposSystemImpl::screenshot()
+{
+    std::string path = screenshotPath(home(), std::time(nullptr));
     Result r = run({ "grim", path });
     if (r.code != 0)
         return error(r.out.empty() ? "screenshot failed" : r.out);
