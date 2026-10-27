@@ -293,10 +293,13 @@ in
     runBasecamp = pkgs.writeShellScript "basecamp-session" ''
       # Restarts Basecamp while its compositor lives, and no longer: a loop that
       # outlives its sway (greetd restarted) would respawn an old bundle forever.
-      # SWAYSOCK names this sway's PID: a new sway reuses the Wayland socket's
-      # name (wayland-1), so that alone kept old loops going (Duet).
+      # Asks this loop's own sway (SWAYSOCK): a new sway reuses the Wayland
+      # socket's name (wayland-1), and a killed sway leaves its IPC socket file
+      # behind, so neither file test told an old loop to stop (Duet).
       alive() {
-        if [ -n "''${SWAYSOCK:-}" ]; then [ -S "$SWAYSOCK" ]; return; fi
+        if [ -n "''${SWAYSOCK:-}" ]; then
+          ${config.programs.sway.package}/bin/swaymsg -s "$SWAYSOCK" -t get_version >/dev/null 2>&1; return
+        fi
         [ -z "''${WAYLAND_DISPLAY:-}" ] || [ -S "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$WAYLAND_DISPLAY" ]
       }
       while alive; do
