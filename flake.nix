@@ -198,7 +198,7 @@
         basecampos-duet-vm = mkHost "x86_64-linux" [ ./hosts/duet-vm.nix ];
         basecampos-live = mkHost "x86_64-linux" [ ./hosts/live.nix ];
         # Generic arm64 desktop (UEFI): the whole aarch64 closure, built on CI.
-        basecampos-arm = mkHost "aarch64-linux" [ ./hosts/desktop.nix { basecampos.shell.session = "sway"; } ];
+        basecampos-arm = mkHost "aarch64-linux" [ ./hosts/desktop.nix ];
         basecampos-duet = mkHost "aarch64-linux" [ ./hosts/duet.nix ];
         # The unattended first test on the tablet (watchdog, 20-min window, reports).
         basecampos-duet-test = mkHost "aarch64-linux" [ ./hosts/duet.nix {

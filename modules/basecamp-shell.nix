@@ -21,7 +21,9 @@ in
     };
     session = lib.mkOption {
       type = lib.types.enum [ "cage" "sway" "external" ];
-      default = "cage";
+      # sway everywhere: under cage the native apps (browser, terminal) have
+      # nowhere to go (the x86_64 ISO and disk image booted cage, issue #1).
+      default = "sway";
       description = ''
         "cage": Basecamp is the whole session (a kiosk compositor runs nothing else).
         "sway": Basecamp is the only UI, on a bar-less Sway that also runs the
