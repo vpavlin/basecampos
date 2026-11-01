@@ -219,9 +219,13 @@ in
     };
 
     # cage restarts with the shell, so a Basecamp crash isn't a black screen.
-    systemd.services."cage-tty1".serviceConfig = lib.mkIf (cfg.session == "cage") {
-      Restart = lib.mkForce "always";
-      RestartSec = 2;
+    # The whole unit under the condition: with only its settings under it, the
+    # sway images still got an empty cage-tty1.service ("bad-setting", issue #1).
+    systemd.services."cage-tty1" = lib.mkIf (cfg.session == "cage") {
+      serviceConfig = {
+        Restart = lib.mkForce "always";
+        RestartSec = 2;
+      };
     };
 
     programs.xwayland.enable = true;
