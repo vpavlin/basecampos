@@ -2,8 +2,16 @@
 # Rotate DSI-1 to follow the accelerometer. Touch follows via map_to_output.
 # Sensor "normal" = Duet held landscape with the keyboard cover attached.
 # ~/.cache/rotation-lock present = rotation paused.
+#
+# Ends with the sway that started it (it asks that sway over IPC, SWAYSOCK),
+# monitor-sensor included: otherwise each sway restart left another one
+# running (duet/duet, two greetd restarts: 2-3 stale copies).
 LOCK="$HOME/.cache/rotation-lock"
-monitor-sensor --accel | while read -r line; do
+fifo=$(mktemp -u "${XDG_RUNTIME_DIR:-/tmp}/autorotate.XXXXXX")
+mkfifo "$fifo" || exit 1
+monitor-sensor --accel >"$fifo" &
+sensor=$!
+while read -r line; do
   case "$line" in
     *"orientation changed: normal"*)    t=270 ;;
     *"orientation changed: bottom-up"*) t=90 ;;
@@ -11,10 +19,12 @@ monitor-sensor --accel | while read -r line; do
     *"orientation changed: right-up"*)  t=0 ;;
     *) continue ;;
   esac
-  if [ ! -e "$LOCK" ]; then
-    swaymsg output DSI-1 transform "$t" >/dev/null
-    # portrait uses a two-row bar, landscape one row: relaunch waybar when the shape changes
-    case "$t" in 0|180) shape=portrait ;; *) shape=landscape ;; esac
-    [ "$shape" = "$last" ] || { systemctl --user restart waybar; last=$shape; }
-  fi
+  [ -e "$LOCK" ] || swaymsg output DSI-1 transform "$t" >/dev/null
+done <"$fifo" &
+reader=$!
+trap 'kill $sensor $reader 2>/dev/null; rm -f "$fifo"' EXIT
+trap 'exit' INT TERM
+while kill -0 "$sensor" 2>/dev/null; do
+  sleep 5
+  swaymsg -t get_version >/dev/null 2>&1 || break
 done
