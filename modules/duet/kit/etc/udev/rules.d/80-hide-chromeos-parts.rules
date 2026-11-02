@@ -1,0 +1,2 @@
+# Leftover ChromeOS partitions on the eMMC: keep them out of file managers
+ENV{ID_PART_ENTRY_NAME}=="ROOT-A|ROOT-C|KERN-A|KERN-C|OEM|EFI-SYSTEM|RWFW|reserved", ENV{UDISKS_IGNORE}="1"

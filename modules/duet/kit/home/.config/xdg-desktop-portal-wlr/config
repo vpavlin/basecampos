@@ -1,0 +1,5 @@
+; Duet: one built-in screen, no chooser UI - sharing the screen shares DSI-1
+[screencast]
+output_name=HEADLESS-3
+chooser_type=none
+max_fps=15

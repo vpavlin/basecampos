@@ -1,0 +1,15 @@
+[Unit]
+Description=WirePlumber for the camera-only PipeWire (libcamera monitor only)
+Documentation=https://github.com/vpavlin/mt8183-camera
+BindsTo=camera-pipewire.service
+After=camera-pipewire.service
+Before=xdg-desktop-portal.service
+
+[Service]
+Type=simple
+ExecStart=@wireplumber@/bin/wireplumber
+Restart=on-failure
+Slice=session.slice
+
+[Install]
+WantedBy=camera-pipewire.service

@@ -1,0 +1,6 @@
+[Unit]
+Description=Share the Duet screen over VNC (wayvnc)
+[Service]
+Environment=WAYLAND_DISPLAY=wayland-1
+ExecStart=@wayvnc@/bin/wayvnc -o DSI-1 -k cz -f 15 -r -C %h/.config/wayvnc/config
+Restart=on-failure

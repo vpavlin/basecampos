@@ -1,101 +1,66 @@
-# The Lenovo IdeaPad Duet (krane, MT8183), from duet-kit (github.com/vpavlin/duet-kit).
+# The Lenovo IdeaPad Duet (krane, MT8183).
 #
-# Basecamp is the UI (basecampos.shell.session = "sway"): duet-kit's own UI
-# (waybar, launcher, quick-settings/Wi-Fi/Bluetooth/display panels, app tabs)
-# is NOT used; the System app covers it. What is taken from the kit is what
-# makes the hardware work, with the kit as the source of truth (the Duet agent
-# keeps tuning it; `nix flake update duet-kit` picks it up):
+# Basecamp is the UI (basecampos.shell.session = "sway"). What makes the
+# hardware work came from duet-kit (github.com/vpavlin/duet-kit, the Debian
+# side's kit) and now lives here, in ./kit, written for NixOS:
 #
-#   etc/   -> udev, logind, journald, NetworkManager, tmpfiles, battery-limit
-#   home/  -> a whitelist (camera graph, portals, notifications, VNC, theme)
-#             linked into the user's home; the session daemons (autorotate,
-#             idle-dim, keyboard-layout keeper, on-screen keyboard, F-keys) are
-#             run from the Sway config with Debian paths rewritten
+#   kit/etc/  -> udev, logind, journald, NetworkManager, battery-limit
+#   kit/home/ -> camera graph, portals, notifications, VNC, theme: linked into
+#                the user's home
+#   kit/bin/  -> the session daemons (on-screen keyboard, autorotate, idle dim
+#                and suspend, keyboard-layout keeper, screenshot, F-keys), run
+#                from the Sway config
 #
-# Hardware-only parts (cros_ec battery limit, keyboard cover wakeup, CPU
-# governor) sit behind `hardware`, so the session also runs in an x86 VM.
+# Store paths are @placeholders@ in those files, filled in below. Hardware-only
+# parts (cros_ec battery limit, keyboard cover wakeup, CPU governor) sit behind
+# `hardware`, so the session also runs in an x86 VM.
 { config, lib, pkgs, ... }:
 
 let
   cfg = config.basecampos.duet;
   shell = config.basecampos.shell;
-  home = "/home/${cfg.user}";
-  kit = cfg.kit;
 
   python = pkgs.python3.withPackages (ps: [ ps.pygobject3 ]);
-  typelibs = with pkgs; [ gobject-introspection gtk4 libadwaita gst_all_1.gstreamer gst_all_1.gst-plugins-base glib gdk-pixbuf pango harfbuzz graphene ];
 
-  # The kit's home tree with Debian paths rewritten. Scripts in .local/bin are
-  # wrapped so their GTK4/libadwaita panels find typelibs and schemas.
   # wvkbd with the Duet's Czech layer (a top row of ě š č ř ž ý á í é ú ů; from
   # atlas/duet-kit, for v0.15, applies as is to nixpkgs' 0.19).
   wvkbd = pkgs.wvkbd.overrideAttrs (o: { patches = (o.patches or [ ]) ++ [ ../../pkgs/patches/wvkbd-czech.patch ]; });
 
-  homeTree = pkgs.runCommand "duet-kit-home" {
-    nativeBuildInputs = [ pkgs.makeWrapper python ];
-  } ''
-    cp -r ${kit}/home $out
-    chmod -R u+w $out
-    find $out -type f -print0 | xargs -0 sed -i \
-      -e 's|%h/Apps/Basecamp.AppImage|${shell.package}/bin/LogosBasecamp|g' \
-      -e 's|/home/linux/Apps/Basecamp.AppImage|${shell.package}/bin/LogosBasecamp|g' \
-      -e 's|/home/linux|${home}|g' \
-      -e 's|/usr/local/bin/wvkbd-mobintl|${wvkbd}/bin/wvkbd-mobintl|g' \
-      -e 's|/usr/local/bin/shrooms-agent|/run/current-system/sw/bin/shrooms-agent|g' \
-      -e 's|/usr/bin/pipewire|${pkgs.pipewire}/bin/pipewire|g' \
-      -e 's|/usr/bin/wireplumber|${pkgs.wireplumber}/bin/wireplumber|g' \
-      -e 's|/usr/bin/foot|${pkgs.foot}/bin/foot|g' \
-      -e 's|/usr/bin/python3|${python}/bin/python3|g' \
-      -e 's|/usr/bin/brave-browser|${pkgs.brave}/bin/brave|g' \
-      -e 's|/usr/bin/wayvnc|${pkgs.wayvnc}/bin/wayvnc|g' \
-      -e 's|/usr/bin/waybar|${pkgs.waybar}/bin/waybar|g'
-    # foot 1.2x renamed [colors] (Debian's foot still reads it).
-    sed -i -e 's|^\[colors\]$|[colors-dark]|' $out/.config/foot/foot.ini
-    # The Debian unit trusts a self-signed LAN repo; that bundle
-    # is not part of the kit, and a missing CA file breaks every download.
-    sed -i -e '/basecamp-ca-bundle.pem/d' $out/.config/systemd/user/basecamp.service
-    ${lib.optionalString (shell.layout != "sidebar") ''
-      sed -i -e '/^\[Service\]/a Environment=BASECAMP_LAYOUT=${shell.layout}' $out/.config/systemd/user/basecamp.service
-    ''}
+  # The session daemons. They find their tools (swaymsg, wtype, brightnessctl,
+  # swayidle, grim...) on the session's PATH, from systemPackages.
+  sessionBin = pkgs.runCommand "duet-session-bin" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+    mkdir -p $out/bin
+    cp ${./kit/bin}/* $out/bin/
+    chmod -R u+w $out/bin
+    substituteInPlace $out/bin/osk --subst-var-by wvkbd ${wvkbd}
+    substituteInPlace $out/bin/idle-dim --subst-var out
+    patchShebangs $out/bin
+  '';
+  bin = "${sessionBin}/bin";
 
-    for f in $out/.local/bin/*; do
-      if head -1 "$f" | grep -q python3; then
-        sed -i -e '1s|.*|#!${python}/bin/python3|' "$f"
-        wrapProgram "$f" \
-          --prefix GI_TYPELIB_PATH : "${lib.makeSearchPathOutput "out" "lib/girepository-1.0" typelibs}" \
-          --prefix XDG_DATA_DIRS : "${pkgs.gtk4}/share/gsettings-schemas/${pkgs.gtk4.name}:${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}"
-      else
-        sed -i -e '1s|^#!/bin/sh|#!${pkgs.bash}/bin/sh|; 1s|^#!/bin/bash|#!${pkgs.bash}/bin/bash|' "$f"
-      fi
-    done
+  homeTree = pkgs.runCommand "duet-home" { } ''
+    cp -r ${./kit/home} $out
+    chmod -R u+w $out
+    substituteInPlace $out/.config/systemd/user/camera-pipewire.service --subst-var-by pipewire ${pkgs.pipewire}
+    substituteInPlace $out/.config/systemd/user/camera-wireplumber.service --subst-var-by wireplumber ${pkgs.wireplumber}
+    substituteInPlace $out/.config/systemd/user/screen-share.service --subst-var-by wayvnc ${pkgs.wayvnc}
   '';
 
   # Files the kit's own scripts rewrite at runtime: copied once, then the user's.
   mutable = [ ".config/xdg-desktop-portal-wlr/config" ];
 
-  # Every file under home/, as a path relative to it.
+  # Every file under kit/home, as a path relative to it.
   listFiles = dir: prefix: lib.concatLists (lib.mapAttrsToList (name: type:
     if type == "directory" then listFiles "${dir}/${name}" "${prefix}${name}/"
     else [ "${prefix}${name}" ]) (builtins.readDir dir));
-  # duet-kit's home files that are not UI: the camera graph, portals (screen
-  # sharing), notifications, VNC, theme and terminal settings.
-  keep = f: builtins.any (p: lib.hasPrefix p f) [
-    ".config/systemd/user/camera-" ".config/systemd/user/screen-share.service"
-    ".config/libcamera/" ".config/xdg-desktop-portal" ".config/mako/"
-    ".config/gtk-3.0/" ".config/gtk-4.0/" ".config/foot/" ".config/wayvnc/"
-    # Keeps the camera WirePlumber video-only: if it enumerates the sound card
-    # too, it holds the device and PulseAudio gets no working profile (no sink).
-    ".config/wireplumber/"
-  ];
-  homeFiles = builtins.filter keep (listFiles "${kit}/home" "");
-  bin = "${homeTree}/.local/bin";
+  homeFiles = listFiles ./kit/home "";
 
   # `systemctl --user enable` on Debian: link each unit into its WantedBy's .wants.
   unitDir = ".config/systemd/user";
   enableLinks = lib.concatLists (map (f:
     let
       unit = lib.removePrefix "${unitDir}/" f;
-      wanted = builtins.match ".*\nWantedBy=([^\n]+).*" (builtins.readFile "${kit}/home/${f}");
+      wanted = builtins.match ".*\nWantedBy=([^\n]+).*" (builtins.readFile (./kit/home + "/${f}"));
     in lib.optional (lib.hasPrefix "${unitDir}/" f && !(lib.hasInfix "/" unit) && wanted != null)
       "${unitDir}/${builtins.head wanted}.wants/${unit} ${homeTree}/${f}")
     homeFiles);
@@ -128,15 +93,11 @@ let
 
   batteryLimit = pkgs.writeScript "battery-limit" (
     builtins.replaceStrings [ "#!/usr/bin/env python3" ] [ "#!${pkgs.python3}/bin/python3" ]
-      (builtins.readFile "${kit}/usr/local/sbin/battery-limit"));
+      (builtins.readFile ./kit/battery-limit));
 in
 {
   options.basecampos.duet = {
-    enable = lib.mkEnableOption "the Duet tablet session from duet-kit";
-    kit = lib.mkOption {
-      type = lib.types.path;
-      description = "A duet-kit checkout (flake input).";
-    };
+    enable = lib.mkEnableOption "the Duet tablet session";
     user = lib.mkOption {
       type = lib.types.str;
       default = shell.user;
@@ -278,7 +239,7 @@ in
     users.users.${cfg.user}.extraGroups = [ "video" "input" "audio" "networkmanager" "bluetooth" ];
 
     systemd.services.duet-home = {
-      description = "Link duet-kit's home files for ${cfg.user}";
+      description = "Link the Duet's home files for ${cfg.user}";
       wantedBy = [ "multi-user.target" ];
       before = [ "display-manager.service" ];
       path = [ pkgs.coreutils ];
@@ -296,28 +257,28 @@ in
         "w /sys/devices/system/cpu/cpufreq/policy0/scaling_governor - - - - schedutil"
         "w /sys/devices/system/cpu/cpufreq/policy4/scaling_governor - - - - schedutil"
         # owned by the user so the quick-settings slider can write it
-        "C /etc/default/battery-limit 0644 ${cfg.user} users - ${kit}/etc/default/battery-limit"
+        "C /etc/default/battery-limit 0644 ${cfg.user} users - ${./kit/etc/default/battery-limit}"
         # Debian's mixer state, restored at boot (see hardware.alsa above); only if none yet
         "C /var/lib/alsa/asound.state 0644 root root - ${./asound.state}"
       ];
 
     # Wi-Fi power save off (else the tablet stops answering ARP); DNS via resolved.
     environment.etc."NetworkManager/conf.d/50-wifi-powersave-off.conf".source =
-      "${kit}/etc/NetworkManager/conf.d/50-wifi-powersave-off.conf";
+      ./kit/etc/NetworkManager/conf.d/50-wifi-powersave-off.conf;
     environment.etc."NetworkManager/conf.d/50-dns-resolved.conf".source =
-      "${kit}/etc/NetworkManager/conf.d/50-dns-resolved.conf";
+      ./kit/etc/NetworkManager/conf.d/50-dns-resolved.conf;
     environment.etc."systemd/journald.conf.d/50-duet.conf".source =
-      "${kit}/etc/systemd/journald.conf.d/50-duet.conf";
+      ./kit/etc/systemd/journald.conf.d/50-duet.conf;
     environment.etc."systemd/logind.conf.d/50-duet-powerkey.conf".source =
-      "${kit}/etc/systemd/logind.conf.d/50-duet-powerkey.conf";
+      ./kit/etc/systemd/logind.conf.d/50-duet-powerkey.conf;
 
     services.udev.extraRules = lib.concatStringsSep "\n" ([
-      (builtins.readFile "${kit}/etc/udev/rules.d/80-hide-chromeos-parts.rules")
-      (builtins.replaceStrings [ "/bin/chgrp" "/bin/chmod" ] [ "${pkgs.coreutils}/bin/chgrp" "${pkgs.coreutils}/bin/chmod" ]
-        (builtins.readFile "${kit}/etc/udev/rules.d/90-backlight.rules"))
+      (builtins.readFile ./kit/etc/udev/rules.d/80-hide-chromeos-parts.rules)
+      (builtins.replaceStrings [ "@coreutils@" ] [ "${pkgs.coreutils}" ]
+        (builtins.readFile ./kit/etc/udev/rules.d/90-backlight.rules))
     ] ++ lib.optional cfg.hardware
       # suspend aborts unless the keyboard cover's USB wakeup is off
-      (builtins.readFile "${kit}/etc/udev/rules.d/80-hammer-no-wakeup.rules"));
+      (builtins.readFile ./kit/etc/udev/rules.d/80-hammer-no-wakeup.rules));
 
     # Keeps the battery between LOWER and UPPER on AC via the ChromeOS EC.
     systemd.services.battery-limit = lib.mkIf cfg.hardware {

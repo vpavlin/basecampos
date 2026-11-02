@@ -26,11 +26,6 @@
       flake = false;
     };
 
-    # The Duet tablet's Sway session and fixes, maintained by the Duet agent.
-    duet-kit = {
-      url = "github:vpavlin/duet-kit";
-      flake = false;
-    };
 
     # The Duet's kernel: hexdump0815's mt81xx config + patches (see pkgs/duet-kernel.nix).
     hexkernel = {
@@ -42,7 +37,7 @@
     logos-module-builder.url = "github:logos-co/logos-module-builder";
   };
 
-  outputs = { self, nixpkgs, basecamp, shrooms, logos-module-builder, duet-kit, hexkernel, ... }:
+  outputs = { self, nixpkgs, basecamp, shrooms, logos-module-builder, hexkernel, ... }:
     let
       lib = nixpkgs.lib;
       systems = [ "x86_64-linux" "aarch64-linux" ];
@@ -146,7 +141,6 @@
           ./modules/shrooms
           ./modules/duet
           ({ ... }: {
-            basecampos.duet.kit = duet-kit;
             nixpkgs.config.allowUnfreePredicate = pkg:
               builtins.elem (lib.getName pkg) [ "claude-code" "brave" "symbola" ];
             # Portable bundle: the catalogue's apps install into it (the

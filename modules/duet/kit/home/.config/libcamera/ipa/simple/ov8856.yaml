@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: CC0-1.0
+# libcamera soft-ISP tuning for ov8856 on MT8183 krane (uncalibrated base).
+# The 0.7.1 soft-ISP AGC targets a fixed mid-grey and has no exposure
+# compensation; a scaled identity CCM brings the output down (~ -1/2 stop)
+# without clipping. Gamma/Contrast stay at the defaults.
+%YAML 1.1
+---
+version: 1
+algorithms:
+  - BlackLevel:
+  - Awb:
+  - Ccm:
+      ccms:
+        - ct: 6500
+          ccm: [ 0.7, 0, 0,
+                 0, 0.7, 0,
+                 0, 0, 0.7 ]
+  - Adjust:
+  - Agc:
+...

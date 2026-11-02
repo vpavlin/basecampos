@@ -1,0 +1,1 @@
+ACTION=="add", SUBSYSTEM=="backlight", RUN+="@coreutils@/bin/chgrp video /sys/class/backlight/%k/brightness", RUN+="@coreutils@/bin/chmod g+w /sys/class/backlight/%k/brightness"

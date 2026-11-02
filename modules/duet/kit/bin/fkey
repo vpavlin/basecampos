@@ -1,0 +1,7 @@
+#!/bin/sh
+# Search+F<n> on the Duet keyboard types the real F<n> key: the bare top row is bound to media actions in sway,
+# so switch to a mode without those bindings, send the key, and switch back.
+swaymsg mode fkey >/dev/null
+wtype -k "F$1"
+sleep 0.25   # let sway handle the virtual key while still in the empty mode
+swaymsg mode default >/dev/null

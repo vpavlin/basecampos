@@ -1,0 +1,9 @@
+#!/bin/sh
+# Idle handling for the Duet:
+#  - 3 min: dim the backlight (not panel off: the touch controller dies with the panel)
+#  - 10 min on battery: suspend (on the charger it stays awake)
+exec swayidle -w \
+  timeout 180 'brightnessctl -q -s set 1' \
+  resume 'brightnessctl -q -r' \
+  timeout 600 '@out@/bin/suspend-if-on-battery' \
+  before-sleep 'brightnessctl -q -r'

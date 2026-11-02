@@ -1,0 +1,71 @@
+/* Shrooms — a palette layer over Adwaita (dark) for GTK 3.
+   void #07090b  panel #0e1216  line #1c2229  bone #d6dde3  ash #6b7680
+   phosphor #35f0a0  blossom #ff6fb5  violet #9a7bff  amber #f0b429  sky #5aa9ff  rust #e05252 */
+@define-color theme_bg_color #0e1216;
+@define-color theme_fg_color #d6dde3;
+@define-color theme_base_color #07090b;
+@define-color theme_text_color #d6dde3;
+@define-color theme_selected_bg_color #35f0a0;
+@define-color theme_selected_fg_color #07090b;
+@define-color insensitive_fg_color #6b7680;
+@define-color borders #1c2229;
+@define-color warning_color #f0b429;
+@define-color error_color #e05252;
+@define-color success_color #35f0a0;
+
+window, .background, dialog, popover, .popover { background-color: #0e1216; color: #d6dde3; }
+headerbar, .titlebar, toolbar, .toolbar, menubar, .menubar, statusbar, .inline-toolbar, actionbar {
+  background: #07090b; color: #d6dde3; border-color: #1c2229; box-shadow: none; }
+menubar > menuitem:hover, menubar > menuitem:hover label { color: #35f0a0; box-shadow: inset 0 -2px #35f0a0; }
+menu, .menu, .context-menu { background: #0e1216; border: 1px solid #1c2229; }
+menu menuitem:hover, .menu menuitem:hover { background: #1c2229; color: #35f0a0; }
+
+/* views, lists, sidebars */
+.view, iconview, treeview, textview text, list, row, .sidebar, placessidebar, .thunar .standard-view {
+  background-color: #07090b; color: #d6dde3; }
+.sidebar, placessidebar, placessidebar list, .sidebar row { background-color: #0e1216; }
+.view:selected, iconview:selected, treeview:selected, row:selected, .sidebar row:selected,
+placessidebar row:selected, *:selected, selection {
+  background-color: #35f0a0; color: #07090b; }
+row:hover:not(:selected), .sidebar row:hover:not(:selected) { background-color: #1c2229; }
+treeview header button { background: #0e1216; color: #6b7680; border-color: #1c2229; }
+
+/* buttons */
+button { background: #1c2229; color: #d6dde3; border: 1px solid #1c2229; border-radius: 8px;
+  box-shadow: none; text-shadow: none; -gtk-icon-shadow: none; }
+button:hover { background: #262e37; border-color: #35f0a0; }
+button:active, button:checked { background: #35f0a0; color: #07090b; border-color: #35f0a0; }
+button:disabled { background: #0e1216; color: #6b7680; }
+button.suggested-action { background: #35f0a0; color: #07090b; border-color: #35f0a0; }
+button.destructive-action { background: #e05252; color: #07090b; border-color: #e05252; }
+button.flat, toolbar button, headerbar button { background: transparent; border-color: transparent; }
+button.flat:hover, toolbar button:hover, headerbar button:hover { background: #1c2229; }
+
+/* text entries */
+entry, spinbutton, .entry { background: #07090b; color: #d6dde3; border: 1px solid #1c2229;
+  border-radius: 8px; box-shadow: none; caret-color: #35f0a0; }
+entry:focus, spinbutton:focus { border-color: #35f0a0; box-shadow: 0 0 0 1px #35f0a0; }
+entry selection, textview text selection { background: #9a7bff; color: #07090b; }
+
+/* toggles */
+switch { background: #1c2229; border-color: #1c2229; border-radius: 99px; }
+switch:checked { background: #35f0a0; border-color: #35f0a0; }
+switch slider { background: #d6dde3; border-radius: 99px; border: none; }
+check, radio { background: #07090b; border: 1px solid #6b7680; color: #07090b; }
+check:checked, radio:checked { background: #9a7bff; border-color: #9a7bff; }
+scale trough, progressbar trough, levelbar trough { background: #1c2229; border: none; }
+scale highlight, progressbar progress, levelbar block.filled { background: #35f0a0; border: none; }
+scale slider { background: #d6dde3; border: none; }
+
+/* scrollbars, separators, links, notebook tabs */
+scrollbar, scrollbar trough { background: transparent; border: none; }
+scrollbar slider { background: #1c2229; border-radius: 99px; min-width: 6px; min-height: 6px; border: none; }
+scrollbar slider:hover { background: #6b7680; }
+separator, paned > separator { background: #1c2229; }
+*:link, link { color: #ff6fb5; }
+notebook > header { background: #07090b; border-color: #1c2229; }
+notebook > header tab { color: #6b7680; }
+notebook > header tab:checked { color: #d6dde3; box-shadow: inset 0 -3px #35f0a0; }
+infobar.warning > revealer > box { background: #f0b429; color: #07090b; }
+infobar.error > revealer > box { background: #e05252; color: #07090b; }
+tooltip, tooltip.background { background: #0e1216; color: #d6dde3; border: 1px solid #9a7bff; border-radius: 8px; }

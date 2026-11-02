@@ -14,13 +14,13 @@ Status: experimental. Works in VMs (x86_64); arm64 builds on CI, and the tablet 
 
 | Path | What |
 |---|---|
-| `flake.nix` | Inputs (nixpkgs 26.05, Alisher's Basecamp + design system, shrooms, duet-kit, logos-module-builder) and outputs for x86_64 and aarch64 |
+| `flake.nix` | Inputs (nixpkgs 26.05, Alisher's Basecamp + design system, shrooms, the Duet kernel, logos-module-builder) and outputs for x86_64 and aarch64 |
 | `modules/basecamp-shell.nix` | `basecampos.shell`: the session (`sway`, the default: bar-less Sway with Basecamp as the only UI; `cage`: kiosk, no native apps), portable Basecamp + nix-ld, bundled apps and repositories installed at first boot |
 | `apps/system/` | The **System** Basecamp app: a core module (power, network/Wi-Fi, volume, native app launching, URLs) and its view |
 | `apps/external/`, `apps/external-embedded/` | Launchers of native apps (Browser = Brave, Terminal = qterminal): on their own workspace, or inside a Basecamp tab (a small Wayland compositor) |
 | `catalog/apps.json` | Catalogue apps preinstalled into the image, pinned by `scripts/pin-catalog.py` |
 | `modules/shrooms/` | `services.shrooms`: [shrooms](https://github.com/vpavlin/shrooms) mesh daemon, DNS, `shrooms-agent` |
-| `modules/duet/` | Lenovo IdeaPad Duet (MT8183) support from [duet-kit](https://github.com/vpavlin/duet-kit) |
+| `modules/duet/` | Lenovo IdeaPad Duet (MT8183) support; `kit/` holds its hardware files and session daemons (from [duet-kit](https://github.com/vpavlin/duet-kit), which now only configures the tablet's Debian) |
 | `hosts/` | `vm` (dev VM), `live` (ISO), `desktop` (disk image; also the generic `basecampos-arm` aarch64 system), `duet-vm` |
 
 ## Build
@@ -37,5 +37,5 @@ The desktop image's user `basecamp` logs in automatically; its password (only ne
 
 ## Following upstream
 
-`nix flake update basecamp alisher-ds` pulls Alisher's latest work; `nix flake update duet-kit` pulls the
-Duet fixes. `scripts/pin-catalog.py <apps…>` re-pins the preinstalled catalogue apps.
+`nix flake update basecamp alisher-ds` pulls Alisher's latest work. Duet hardware fixes go straight into
+`modules/duet/kit/`. `scripts/pin-catalog.py <apps…>` re-pins the preinstalled catalogue apps.

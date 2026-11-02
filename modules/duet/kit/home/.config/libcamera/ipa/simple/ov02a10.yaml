@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: CC0-1.0
+# libcamera soft-ISP tuning for ov02a10 on MT8183 krane (uncalibrated base).
+# The 0.7.1 soft-ISP AGC targets a fixed mid-grey and has no exposure
+# compensation; a scaled identity CCM brings the output down (~ -1/2 stop)
+# without clipping. Gamma/Contrast stay at the defaults.
+%YAML 1.1
+---
+version: 1
+algorithms:
+  - BlackLevel:
+  - Awb:
+  - Ccm:
+      ccms:
+        - ct: 6500
+          # diag 0.7 = brightness scale; R +4 %, B -0.5 % in linear light to remove the cyan-green tint in the mid-tones (measured 2026-10-07)
+          # duet-camera-app white balance 20261007-124232: rows scaled by 1.0059/1.0000/1.1362
+          # duet-camera-app white balance 20261007-124520: rows scaled by 1.0986/1.0000/0.9823
+          ccm: [ 0.8045, 0.0000, 0.0000,
+                0.0000, 0.7000, 0.0000,
+                0.0000, 0.0000, 0.7773 ]
+  - Adjust:
+  - Agc:
+...

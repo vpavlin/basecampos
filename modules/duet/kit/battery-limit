@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""Keep the Duet battery between LOWER and UPPER percent while on AC (ChromeOS EC charge control v1).
+
+On this EC "idle" stops charging (the battery then carries the load, so it drifts down slowly),
+"normal" charges. Config: /etc/default/battery-limit (UPPER=80, LOWER=75; UPPER=100 disables the limit).
+`battery-limit --normal` forces normal charging (used on stop). Needs root (/dev/cros_ec).
+"""
+import fcntl, os, signal, struct, sys, time
+
+IOCXCMD = (3 << 30) | (20 << 16) | (0xEC << 8) | 0   # _IOWR(0xEC, 0, struct cros_ec_command_v2)
+BAT = "/sys/class/power_supply/sbs-12-000b"
+AC = "/sys/class/power_supply/CROS_USBPD_CHARGER0/online"
+CONF = "/etc/default/battery-limit"
+NORMAL, IDLE = 0, 1
+
+
+def ec_charge_mode(mode):
+    buf = bytearray(struct.pack("<5II", 1, 0x0096, 4, 0, 0, mode))      # EC_CMD_CHARGE_CONTROL v1
+    fd = os.open("/dev/cros_ec", os.O_RDWR)
+    try:
+        fcntl.ioctl(fd, IOCXCMD, buf, True)
+    finally:
+        os.close(fd)
+    return struct.unpack_from("<I", buf, 16)[0]
+
+
+def read(path):
+    with open(path) as f:
+        return f.read().strip()
+
+
+def limits():
+    upper, lower = 80, 75
+    try:
+        for line in open(CONF):
+            k, _, v = line.strip().partition("=")
+            if k == "UPPER": upper = int(v)
+            if k == "LOWER": lower = int(v)
+    except (OSError, ValueError):
+        pass
+    upper = max(50, min(100, upper))          # the config is user-writable: never trust it
+    return upper, max(0, min(lower, upper - 1))
+
+
+def main():
+    if "--normal" in sys.argv:
+        print("result", ec_charge_mode(NORMAL)); return
+    state = {"mode": None}
+
+    def set_mode(m):
+        if state["mode"] != m:
+            r = ec_charge_mode(m)
+            print("charge mode ->", "idle" if m == IDLE else "normal", "result", r, flush=True)
+            state["mode"] = m
+
+    def stop(*_):
+        try: ec_charge_mode(NORMAL)
+        finally: sys.exit(0)
+    signal.signal(signal.SIGTERM, stop); signal.signal(signal.SIGINT, stop)
+    set_mode(NORMAL)
+    while True:
+        try:
+            upper, lower = limits()
+            cap, ac = int(read(BAT + "/capacity")), read(AC) == "1"
+            temp = int(read(BAT + "/temp")) / 10
+            if not ac or upper >= 100 or temp > 45:
+                set_mode(NORMAL)                      # on battery / limit off / hot: never hold idle
+            elif cap >= upper:
+                set_mode(IDLE)
+            elif cap <= lower:
+                set_mode(NORMAL)
+        except (OSError, ValueError) as e:
+            print("read error:", e, flush=True)
+            try: set_mode(NORMAL)
+            except OSError: pass
+        time.sleep(20)
+
+
+if __name__ == "__main__":
+    main()

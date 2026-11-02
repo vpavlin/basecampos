@@ -336,22 +336,6 @@
         "type": "github"
       }
     },
-    "duet-kit": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1792943070,
-        "narHash": "sha256-csRM134O2OJOJUTamNJhviJI7F2AwkAJ7vyeqpMHK0g=",
-        "owner": "vpavlin",
-        "repo": "duet-kit",
-        "rev": "4dfd57bcd78b2a523288e58ae1d379974b1a31e0",
-        "type": "github"
-      },
-      "original": {
-        "owner": "vpavlin",
-        "repo": "duet-kit",
-        "type": "github"
-      }
-    },
     "hexkernel": {
       "flake": false,
       "locked": {
@@ -41954,7 +41938,6 @@
       "inputs": {
         "alisher-ds": "alisher-ds",
         "basecamp": "basecamp",
-        "duet-kit": "duet-kit",
         "hexkernel": "hexkernel",
         "logos-module-builder": "logos-module-builder_12",
         "nixpkgs": "nixpkgs_364",

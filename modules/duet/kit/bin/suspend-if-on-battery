@@ -1,0 +1,6 @@
+#!/bin/sh
+# Suspend only when no charger is connected.
+for s in /sys/class/power_supply/*/online; do
+  [ "$(cat "$s" 2>/dev/null)" = 1 ] && exit 0
+done
+exec systemctl suspend

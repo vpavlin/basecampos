@@ -41,7 +41,8 @@ call) or an arm64 builder from Václav. the dev host rules: VMs ≤4 GB, nix max
 screen (desktop layout) on workspace 1; native apps (Brave, foot) start from Basecamp's dock through the
 System core module and live alone on their own workspaces; Super+Esc / 3-finger swipe returns. The System
 app absorbs the tablet panels (display, Bluetooth, battery, rotation, on-screen keyboard, mirroring). On the
-Duet, duet-kit supplies hardware fixes and tablet daemons only. arm64 builds run on GitHub Actions.
+Duet, the hardware fixes and tablet daemons live in `modules/duet/kit/` (taken over from duet-kit on
+2026-11-02; duet-kit stays the Debian side's kit). arm64 builds run on GitHub Actions.
 
 **2026-10-25: BasecampOS boots on the Lenovo Duet (arm64, real hardware).** Our kernel (hexdump0815's stb-cbm
 6.12.50 config + patches, built on GitHub's arm runners), no initrd, root on a btrfs subvolume of the tablet's

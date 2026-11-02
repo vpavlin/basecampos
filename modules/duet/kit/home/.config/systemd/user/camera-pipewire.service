@@ -1,0 +1,14 @@
+[Unit]
+Description=PipeWire for the cameras only (audio and Bluetooth stay on PulseAudio)
+Documentation=https://github.com/vpavlin/mt8183-camera
+# the camera portal connects to PipeWire when it starts
+Before=xdg-desktop-portal.service
+
+[Service]
+Type=simple
+ExecStart=@pipewire@/bin/pipewire
+Restart=on-failure
+Slice=session.slice
+
+[Install]
+WantedBy=default.target

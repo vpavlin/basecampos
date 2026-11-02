@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""Remember the keyboard layout you last chose and re-apply it when Sway resets it.
+
+Sway starts every newly seen keyboard (keyboard cover re-attached) and every new session on the
+first layout of `xkb_layout`. This keeps the last layout in ~/.cache/kbd-layout-index and puts it
+back. Events right after a new keyboard / keymap reload are ignored for saving, because they are
+the reset itself, not you pressing Alt+Shift.
+"""
+import json, os, subprocess, time
+
+STATE = os.path.expanduser("~/.cache/kbd-layout-index")
+QUIET = 2.5   # seconds after added/xkb_keymap in which xkb_layout events are not a user choice
+
+
+def sway(*args):
+    return subprocess.run(["swaymsg", *args], capture_output=True, text=True).stdout
+
+
+def load():
+    try:
+        return int(open(STATE).read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def save(idx):
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    with open(STATE, "w") as f:
+        f.write(str(idx))
+
+
+def apply(idx):
+    sway("input", "type:keyboard", "xkb_switch_layout", str(idx))
+
+
+def physical(inp):
+    return inp.get("type") == "keyboard" and "virtual" not in (inp.get("identifier") or "")
+
+
+class Keeper:
+    def __init__(self, saved, now):
+        self.saved = saved
+        self.quiet_until = now + QUIET
+
+    def handle(self, event, now, do_apply=apply, do_save=save, pause=time.sleep):
+        inp = event.get("input", {})
+        if not physical(inp):
+            return
+        change = event.get("change")
+        if change in ("added", "xkb_keymap"):
+            self.quiet_until = now + QUIET
+            if change == "added" and self.saved is not None:
+                pause(0.5)                      # let sway finish setting the device up
+                do_apply(self.saved)
+        elif change == "xkb_layout" and now > self.quiet_until:
+            idx = inp.get("xkb_active_layout_index")
+            if idx is not None and idx != self.saved:
+                self.saved = idx
+                do_save(idx)
+
+
+def current_index():
+    for i in json.loads(sway("-t", "get_inputs", "-r") or "[]"):
+        if physical(i) and i.get("xkb_active_layout_index") is not None:
+            return i["xkb_active_layout_index"]
+    return None
+
+
+def main():
+    saved = load()
+    if saved is None:
+        saved = current_index()
+        if saved is not None:
+            save(saved)
+    elif saved != current_index():
+        time.sleep(1)
+        apply(saved)                            # new session: restore the last choice
+    keeper = Keeper(saved, time.time())
+    proc = subprocess.Popen(["swaymsg", "-m", "-t", "subscribe", '["input"]'],
+                            stdout=subprocess.PIPE, text=True)
+    for line in proc.stdout:
+        try:
+            keeper.handle(json.loads(line), time.time())
+        except ValueError:
+            continue
+
+
+if __name__ == "__main__":
+    main()

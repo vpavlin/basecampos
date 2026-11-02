@@ -1,4 +1,4 @@
-# basecampos-duet-vm: the Duet session (duet-kit's Sway tablet + Basecamp) in an
+# basecampos-duet-vm: the Duet session (the tablet's Sway + Basecamp) in an
 # x86 VM on the dev host, to develop it without the tablet. Same disk/ssh/VNC as
 # basecampos-vm, so run one at a time:
 #   RESULT=result-duet-vm DISK=$PWD/vm/duet.qcow2 scripts/vm-run.sh

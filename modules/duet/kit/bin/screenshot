@@ -1,0 +1,9 @@
+#!/bin/sh
+# Full-screen screenshot into ~/Pictures/Screenshots; tapping the notification opens it.
+dir="$HOME/Pictures/Screenshots"
+mkdir -p "$dir"
+f="$dir/$(date +%Y-%m-%d_%H-%M-%S).png"
+sleep 0.3   # let the tap ripple on the bar fade
+grim "$f" || exit 1
+action=$(notify-send -t 5000 -A default=Open "Screenshot saved" "Tap to open — $(basename "$f")")
+[ "$action" = default ] && exec xdg-open "$f"

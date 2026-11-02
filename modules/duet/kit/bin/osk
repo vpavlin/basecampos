@@ -1,0 +1,6 @@
+#!/bin/sh
+# (Re)start the on-screen keyboard hidden, Czech layer first, Shrooms colours.
+# Restarting also clears a latched Ctrl/Shift.
+pkill -x wvkbd-mobintl
+exec @wvkbd@/bin/wvkbd-mobintl --hidden -L 340 --landscape-layers czech,landscapespecial \
+  --bg 07090b --fg 1c2229 --fg-sp 0e1216 --press 35f0a0 --press-sp 9a7bff --text d6dde3 --text-sp ff6fb5

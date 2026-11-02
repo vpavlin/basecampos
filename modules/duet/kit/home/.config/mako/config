@@ -1,0 +1,11 @@
+on-button-left=invoke-default-action
+on-touch=invoke-default-action
+font=sans 12
+background-color=#0e1216f2
+text-color=#d6dde3
+border-color=#35f0a0
+border-size=2
+border-radius=8
+default-timeout=6000
+[urgency=high]
+border-color=#ff6fb5
