@@ -113,7 +113,26 @@ diff -ru a/src/main.c b/src/main.c
 diff -ru a/src/pointer.c b/src/pointer.c
 --- a/src/pointer.c
 +++ b/src/pointer.c
-@@ -186,6 +186,15 @@
+@@ -122,9 +122,15 @@
+ 
+ static void pointer_update_cursor_left_ptr(struct pointer* self)
+ {
+-	struct wl_cursor* cursor = wl_cursor_theme_get_cursor(
+-			self->cursor_theme, "left_ptr");
+-	assert(cursor && cursor->image_count > 0);
++	/* No cursor theme found (e.g. started without a session's XCURSOR_*):
++	 * no local cursor rather than a NULL dereference. */
++	struct wl_cursor* cursor = self->cursor_theme
++		? wl_cursor_theme_get_cursor(self->cursor_theme, "left_ptr")
++		: NULL;
++	if (!cursor || cursor->image_count == 0) {
++		pointer_update_cursor_none(self);
++		return;
++	}
+ 
+ 	struct wl_cursor_image* image = cursor->images[0];
+ 
+@@ -186,6 +192,15 @@
  	pointer->serial = serial;
  }
  
@@ -129,7 +148,7 @@ diff -ru a/src/pointer.c b/src/pointer.c
  static void pointer_motion(void* data, struct wl_pointer* wl_pointer,
  		uint32_t t, wl_fixed_t x, wl_fixed_t y)
  {
-@@ -199,6 +208,7 @@
+@@ -199,6 +214,7 @@
  
  	pointer->x = x;
  	pointer->y = y;
@@ -137,7 +156,7 @@ diff -ru a/src/pointer.c b/src/pointer.c
  }
  
  static void pointer_set_button_state(struct pointer* self,
-@@ -240,6 +250,7 @@
+@@ -240,6 +256,7 @@
  		break;
  	// TODO: More buttons
  	}
@@ -145,7 +164,7 @@ diff -ru a/src/pointer.c b/src/pointer.c
  }
  
  static void pointer_axis(void* data, struct wl_pointer* wl_pointer, uint32_t t,
-@@ -261,6 +272,7 @@
+@@ -261,6 +278,7 @@
  		break;
  	default:;
  	}

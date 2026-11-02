@@ -13,17 +13,21 @@
 # for 5 (a fatal protocol error) and waited for pointer frames, which only 5
 # sends; and Qt holds on to shm buffers longer than wlvncc assumed, which then
 # drew into buffers still on screen (garbled moving parts). It has no touch
-# support: its launcher passes fingers on as the mouse.
+# support: its launcher passes fingers on as the mouse. Without a cursor theme
+# (started outside a session) it dereferenced NULL on the first pointer enter;
+# patched to show no local cursor then, and the launcher names one.
 #
 # embedded = false: the own-workspace launcher, on sway itself (decorations
 # left to sway).
-{ lib, writeShellScript, coreutils, wlvncc, name, embedded ? true }:
+{ lib, writeShellScript, coreutils, wlvncc, adwaita-icon-theme, name, embedded ? true }:
 
 let
   wlvncc' = wlvncc.overrideAttrs (o: { patches = (o.patches or [ ]) ++ [ ./patches/wlvncc-qt-compositor.patch ]; });
 in
 writeShellScript "remote-desktop-${name}${lib.optionalString (!embedded) "-window"}" ''
   PATH=${lib.makeBinPath [ coreutils ]}:$PATH
+  export XCURSOR_PATH="''${XCURSOR_PATH:+$XCURSOR_PATH:}${adwaita-icon-theme}/share/icons"
+  export XCURSOR_THEME="''${XCURSOR_THEME:-Adwaita}" XCURSOR_SIZE="''${XCURSOR_SIZE:-24}"
   dir="$HOME/.config/${name}"
   log="$HOME/.cache/basecampos/${name}.log"
   mkdir -p "$(dirname "$log")"
