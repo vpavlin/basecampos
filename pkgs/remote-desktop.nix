@@ -3,8 +3,10 @@
 #
 # Where to connect stays on the device, not in the image: ~/.config/<name>/
 #   target  one line: "<address> <port>" (a mesh address)
-#   pass    the VNC password, first line (mode 600; copied by hand)
-# Without them the tab says so and exits. wlvncc fits the remote framebuffer to
+#   pass    optional: the VNC password, first line (mode 600). Without it
+#           wlvncc connects without VNC auth (a server reachable only on the
+#           mesh).
+# Without a target the tab says so and exits. wlvncc fits the remote framebuffer to
 # the tab; size the remote display to the tab's aspect.
 #
 # Patched for the tab's compositor (Qt 6.9): it offers wl_seat 4, wlvncc asked
@@ -22,15 +24,17 @@ writeShellScript "remote-desktop-${name}" ''
   dir="$HOME/.config/${name}"
   log="$HOME/.cache/basecampos/${name}.log"
   mkdir -p "$(dirname "$log")"
-  if [ ! -r "$dir/target" ] || [ ! -r "$dir/pass" ]; then
-    echo "$(date -Is) $dir/target or $dir/pass missing" >>"$log"
+  if [ ! -r "$dir/target" ]; then
+    echo "$(date -Is) $dir/target missing (one line: <address> <port>)" >>"$log"
     exit 1
   fi
   read -r address port <"$dir/target"
+  auth=()
+  [ -r "$dir/pass" ] && auth=(-A "head -n1 '$dir/pass'")
   # -s: the tab's compositor offers no EGL; -d: the tab is the frame.
   # zlib/hextile: in a tab, Tight and ZRLE frames came out garbled (in the VM,
   # at any frame rate; clean on plain sway with the same binary), raw, hextile
   # and zlib clean. Lossless, more bytes than Tight's JPEG.
   exec ${wlvncc'}/bin/wlvncc -s -d -a ${name} -e zlib,hextile,copyrect -c 6 \
-    -A "head -n1 '$dir/pass'" "$address" ''${port:-5900} >>"$log" 2>&1
+    "''${auth[@]}" "$address" ''${port:-5900} >>"$log" 2>&1
 ''
