@@ -146,34 +146,21 @@ Item {
     }
     Window.onWindowChanged: attachOutput()
     Component.onCompleted: attachOutput()
+    // Closing the tab: disconnect the app while the compositor still exists.
+    // Its buffers are then marked destroyed; otherwise Qt's texture provider,
+    // deleted later, sent wl_buffer.release through a destroyed display and
+    // took Basecamp down (SIGSEGV in wl_resource_post_event). The app (Brave,
+    // the VNC viewer) exits instead of lingering without a window.
+    Component.onDestruction: {
+        if (surfaceItem.surface && surfaceItem.surface.client)
+            surfaceItem.surface.client.close()
+    }
 
     Component {
         id: outputComponent
         // A real mode (the window's size): with none, Brave crashed opening its
         // menu and squeezed the suggestions into a strip.
         WaylandOutput { sizeFollowsWindow: true }
-    }
-
-    WaylandCompositor {
-        id: compositor
-        socketName: root.socketName
-
-        // The Basecamp window is the frame: apps draw no title bar of their own.
-        // (Client-drawn ones also break: their shm pool grows while Qt still
-        // holds the old one, and the compositor rejects the app's next buffer.)
-        XdgDecorationManagerV1 { preferredMode: XdgToplevel.ServerSideDecoration }
-
-        XdgShell {
-            onToplevelCreated: (toplevel, xdgSurface) => {
-                root.toplevel = toplevel
-                surfaceItem.shellSurface = xdgSurface
-                startTimer.stop()
-                root.showRetry = false
-                root.message = ""
-                root.fit()
-                root.focusApp()
-            }
-        }
     }
 
     ShellSurfaceItem {
@@ -208,6 +195,33 @@ Item {
             visible: root.showRetry
             text: "Open again"
             onClicked: root.launch()
+        }
+    }
+
+    // Last on purpose: a view's children are deleted in the order they are
+    // declared. The surface items (and their popups) must go while their output
+    // and compositor still exist, or the view's destructor removes itself from
+    // a deleted output: closing the tab took Basecamp down (SIGSEGV/SIGBUS,
+    // QWaylandOutputPrivate::removeView, Duet and VM).
+    WaylandCompositor {
+        id: compositor
+        socketName: root.socketName
+
+        // The Basecamp window is the frame: apps draw no title bar of their own.
+        // (Client-drawn ones also break: their shm pool grows while Qt still
+        // holds the old one, and the compositor rejects the app's next buffer.)
+        XdgDecorationManagerV1 { preferredMode: XdgToplevel.ServerSideDecoration }
+
+        XdgShell {
+            onToplevelCreated: (toplevel, xdgSurface) => {
+                root.toplevel = toplevel
+                surfaceItem.shellSurface = xdgSurface
+                startTimer.stop()
+                root.showRetry = false
+                root.message = ""
+                root.fit()
+                root.focusApp()
+            }
         }
     }
 }
