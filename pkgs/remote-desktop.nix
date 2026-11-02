@@ -14,12 +14,15 @@
 # sends; and Qt holds on to shm buffers longer than wlvncc assumed, which then
 # drew into buffers still on screen (garbled moving parts). It has no touch
 # support: its launcher passes fingers on as the mouse.
-{ lib, writeShellScript, coreutils, wlvncc, name }:
+#
+# embedded = false: the own-workspace launcher, on sway itself (decorations
+# left to sway).
+{ lib, writeShellScript, coreutils, wlvncc, name, embedded ? true }:
 
 let
   wlvncc' = wlvncc.overrideAttrs (o: { patches = (o.patches or [ ]) ++ [ ./patches/wlvncc-qt-compositor.patch ]; });
 in
-writeShellScript "remote-desktop-${name}" ''
+writeShellScript "remote-desktop-${name}${lib.optionalString (!embedded) "-window"}" ''
   PATH=${lib.makeBinPath [ coreutils ]}:$PATH
   dir="$HOME/.config/${name}"
   log="$HOME/.cache/basecampos/${name}.log"
@@ -31,10 +34,11 @@ writeShellScript "remote-desktop-${name}" ''
   read -r address port <"$dir/target"
   auth=()
   [ -r "$dir/pass" ] && auth=(-A "head -n1 '$dir/pass'")
-  # -s: the tab's compositor offers no EGL; -d: the tab is the frame.
+  # -s: the tab's compositor offers no EGL (kept on sway too: wlvncc's GPU
+  # path is untested on the Duet); -d: in a tab, the tab is the frame.
   # zlib/hextile: in a tab, Tight and ZRLE frames came out garbled (in the VM,
   # at any frame rate; clean on plain sway with the same binary), raw, hextile
   # and zlib clean. Lossless, more bytes than Tight's JPEG.
-  exec ${wlvncc'}/bin/wlvncc -s -d -a ${name} -e zlib,hextile,copyrect -c 6 \
+  exec ${wlvncc'}/bin/wlvncc -s ${lib.optionalString embedded "-d"} -a ${name} -e zlib,hextile,copyrect -c 6 \
     "''${auth[@]}" "$address" ''${port:-5900} >>"$log" 2>&1
 ''

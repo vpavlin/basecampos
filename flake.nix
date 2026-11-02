@@ -100,7 +100,7 @@
             # tab and, as the fallback, alone on its own workspace.
             id = "freecad"; appId = "freecad"; name = "FreeCAD"; touchAsMouse = true;
             embedCommand = [ "${pkgs.callPackage ./pkgs/remote-desktop.nix { name = "freecad"; }}" ];
-            command = embedCommand;
+            command = [ "${pkgs.callPackage ./pkgs/remote-desktop.nix { name = "freecad"; embedded = false; }}" ];
             icon = pkgs.runCommand "freecad-icon.png" { } ''
               ${pkgs.librsvg}/bin/rsvg-convert -w 256 -h 256 ${pkgs.fetchurl {
                 url = "https://raw.githubusercontent.com/FreeCAD/FreeCAD/1.0.0/src/Gui/Icons/freecad.svg";
