@@ -180,6 +180,9 @@ Item {
         id: surfaceItem
         anchors.fill: parent
         autoCreatePopupItems: true
+        // false for apps without touch support (wlvncc): fingers then reach
+        // them as the mouse (Qt Quick turns the unhandled touch into clicks).
+        touchEventsEnabled: @TOUCH_EVENTS@
         focus: true
         TapHandler { onTapped: root.focusApp() }
         // Qt places popups where the app asks and ignores the positioner's

@@ -1,0 +1,155 @@
+diff -ru a/src/buffer.c b/src/buffer.c
+--- a/src/buffer.c
++++ b/src/buffer.c
+@@ -31,6 +31,10 @@
+ extern struct gbm_device* gbm_device;
+ extern struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf_v1;
+ 
++/* Called when the compositor hands a buffer back (main.c presents a frame
++ * that had to wait for one). */
++void (*wlvncc_buffer_released)(void) = NULL;
++
+ static void buffer_release(void* data, struct wl_buffer* wl_buffer)
+ {
+ 	(void)wl_buffer;
+@@ -39,7 +43,11 @@
+ 
+ 	if (self->please_clean_up) {
+ 		buffer_destroy(self);
++		return;
+ 	}
++
++	if (wlvncc_buffer_released)
++		wlvncc_buffer_released();
+ }
+ 
+ static const struct wl_buffer_listener buffer_listener = {
+diff -ru a/src/main.c b/src/main.c
+--- a/src/main.c
++++ b/src/main.c
+@@ -184,7 +184,9 @@
+ 		decoration_manager = wl_registry_bind(registry, id, &zxdg_decoration_manager_v1_interface, 1);
+ 	} else if (strcmp(interface, "wl_seat") == 0) {
+ 		struct wl_seat* wl_seat;
+-		wl_seat = wl_registry_bind(registry, id, &wl_seat_interface, 5);
++		// Up to 5, as offered: Qt's compositor (6.9) has wl_seat 4.
++		wl_seat = wl_registry_bind(registry, id, &wl_seat_interface,
++				version < 5 ? version : 5);
+ 
+ 		struct seat* seat = seat_new(wl_seat, id);
+ 		if (!seat) {
+@@ -868,28 +870,60 @@
+ 	}
+ }
+ 
++/* A compositor may hold on to all of our buffers for a while (Qt's does, and
++ * then reads what we write into them: garbled frames). Draw only into a
++ * buffer it has released; every buffer keeps the damage it has missed, so a
++ * frame that has to wait is drawn complete once one comes back. */
++extern void (*wlvncc_buffer_released)(void);
++static bool frame_pending = false;
++
++static bool window_take_free_buffer(struct window* w)
++{
++	for (int i = 0; i < 3; ++i) {
++		int j = (w->buffer_index + i) % 3;
++		if (!w->buffers[j]->is_attached) {
++			w->buffer_index = j;
++			w->back_buffer = w->buffers[j];
++			return true;
++		}
++	}
++	return false;
++}
++
++static void window_present(struct window* w)
++{
++	if (!window_take_free_buffer(w)) {
++		frame_pending = true;
++		return;
++	}
++	frame_pending = false;
++
++	window_attach(w);
++	window_damage_region(w, &w->back_buffer->damage);
++	window_transfer_pixels(w);
++	window_commit(w);
++	window_swap(w);
++}
++
++static void on_buffer_released(void)
++{
++	if (frame_pending && window && window->vnc->n_av_frames == 0)
++		window_present(window);
++}
++
+ void on_vnc_client_update_fb(struct vnc_client* client)
+ {
+ 	if (!pixman_region_not_empty(&client->damage) &&
+ 			client->n_av_frames == 0)
+ 		return;
+ 
+-	if (window->back_buffer->is_attached)
+-		fprintf(stderr, "Oops, back-buffer is still attached.\n");
+-
+-	window_attach(window);
+-
+ 	struct pixman_region16 frame_damage = { 0 };
+ 	get_frame_damage(window->vnc, &frame_damage);
+-
+ 	apply_buffer_damage(&frame_damage);
+-	window_damage_region(window, &frame_damage);
+ 	pixman_region_fini(&frame_damage);
+ 
+-	window_transfer_pixels(window);
+-
+-	window_commit(window);
+-	window_swap(window);
++	wlvncc_buffer_released = on_buffer_released;
++	window_present(window);
+ }
+ 
+ void on_vnc_client_event(struct aml_handler* handler)
+diff -ru a/src/pointer.c b/src/pointer.c
+--- a/src/pointer.c
++++ b/src/pointer.c
+@@ -186,6 +186,15 @@
+ 	pointer->serial = serial;
+ }
+ 
++static void pointer_frame(void* data, struct wl_pointer* wl_pointer);
++
++/* wl_pointer before version 5 sends no frame events: every event is one. */
++static void pointer_frame_if_unframed(void* data, struct wl_pointer* wl_pointer)
++{
++	if (wl_pointer_get_version(wl_pointer) < WL_POINTER_FRAME_SINCE_VERSION)
++		pointer_frame(data, wl_pointer);
++}
++
+ static void pointer_motion(void* data, struct wl_pointer* wl_pointer,
+ 		uint32_t t, wl_fixed_t x, wl_fixed_t y)
+ {
+@@ -199,6 +208,7 @@
+ 
+ 	pointer->x = x;
+ 	pointer->y = y;
++	pointer_frame_if_unframed(data, wl_pointer);
+ }
+ 
+ static void pointer_set_button_state(struct pointer* self,
+@@ -240,6 +250,7 @@
+ 		break;
+ 	// TODO: More buttons
+ 	}
++	pointer_frame_if_unframed(data, wl_pointer);
+ }
+ 
+ static void pointer_axis(void* data, struct wl_pointer* wl_pointer, uint32_t t,
+@@ -261,6 +272,7 @@
+ 		break;
+ 	default:;
+ 	}
++	pointer_frame_if_unframed(data, wl_pointer);
+ }
+ 
+ static void pointer_axis_source(void* data, struct wl_pointer* wl_pointer,

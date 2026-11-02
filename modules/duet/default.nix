@@ -181,6 +181,10 @@ in
       }
       { id = "terminal"; appId = "foot"; name = "Terminal"; command = [ "${pkgs.foot}/bin/foot" ];
         embedCommand = [ "${pkgs.lxqt.qterminal}/bin/qterminal" ]; }
+      # FreeCAD on another machine (as in flake.nix; target and password are
+      # files in ~/.config/freecad on the tablet).
+      (let c = [ "${pkgs.callPackage ../../pkgs/remote-desktop.nix { name = "freecad"; }}" ]; in
+        { id = "freecad"; appId = "freecad"; name = "FreeCAD"; command = c; embedCommand = c; })
     ];
 
     # Audio as on the device: PulseAudio for sound, PipeWire only as the

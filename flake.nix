@@ -94,6 +94,20 @@
               ${pkgs.librsvg}/bin/rsvg-convert -w 256 -h 256 ${pkgs.foot}/share/icons/hicolor/scalable/apps/foot.svg -o $out
             '';
           }
+          rec {
+            # FreeCAD running on another machine (wlvncc; the target and
+            # password are files on the device, pkgs/remote-desktop.nix). In a
+            # tab and, as the fallback, alone on its own workspace.
+            id = "freecad"; appId = "freecad"; name = "FreeCAD"; touchAsMouse = true;
+            embedCommand = [ "${pkgs.callPackage ./pkgs/remote-desktop.nix { name = "freecad"; }}" ];
+            command = embedCommand;
+            icon = pkgs.runCommand "freecad-icon.png" { } ''
+              ${pkgs.librsvg}/bin/rsvg-convert -w 256 -h 256 ${pkgs.fetchurl {
+                url = "https://raw.githubusercontent.com/FreeCAD/FreeCAD/1.0.0/src/Gui/Icons/freecad.svg";
+                hash = "sha256-EKcMXOwPVFbJlfJp/Ctzl4+bS36xk8X6t2XqlyVGgro=";
+              }} -o $out
+            '';
+          }
         ];
         launcherMeta = app: {
           name = "basecampos_${app.launcherId or app.id}";
@@ -117,6 +131,7 @@
           src = pkgs.runCommand "launcher-${app.launcherId}-src" { } ''
             mkdir $out
             sed -e 's|@ID@|${app0.id}|g' -e 's|@NAME@|${app.name}|g' \
+              -e 's|@TOUCH_EVENTS@|${lib.boolToString (!(app0.touchAsMouse or false))}|g' \
               ${if embedded then ./apps/external-embedded/Main.qml else ./apps/external/Main.qml} > $out/Main.qml
             cp ${app.icon} $out/icon.png
             cp ${builtins.toFile "metadata.json" (builtins.toJSON (launcherMeta app))} $out/metadata.json
