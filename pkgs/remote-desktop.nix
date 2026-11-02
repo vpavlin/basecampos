@@ -28,6 +28,9 @@ writeShellScript "remote-desktop-${name}" ''
   fi
   read -r address port <"$dir/target"
   # -s: the tab's compositor offers no EGL; -d: the tab is the frame.
-  exec ${wlvncc'}/bin/wlvncc -s -d -a ${name} -e tight,zrle,copyrect -q 8 -c 6 \
+  # zlib/hextile: in a tab, Tight and ZRLE frames came out garbled (in the VM,
+  # at any frame rate; clean on plain sway with the same binary), raw, hextile
+  # and zlib clean. Lossless, more bytes than Tight's JPEG.
+  exec ${wlvncc'}/bin/wlvncc -s -d -a ${name} -e zlib,hextile,copyrect -c 6 \
     -A "head -n1 '$dir/pass'" "$address" ''${port:-5900} >>"$log" 2>&1
 ''
