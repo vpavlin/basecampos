@@ -5,7 +5,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p "$root/vm" "$root/logs"
 export NIX_DISK_IMAGE="${DISK:-$root/vm/basecampos-vm.qcow2}"
-export QEMU_OPTS="-serial file:$root/logs/vm-console.log -monitor unix:$root/vm/monitor.sock,server,nowait"
+export QEMU_OPTS="-serial file:$root/logs/vm-console.log -monitor unix:$root/vm/monitor.sock,server,nowait -qmp unix:$root/vm/qmp.sock,server,nowait"
 export QEMU_KERNEL_PARAMS="console=ttyS0"
 # virgl: Nix's QEMU looks for Mesa in /run/opengl-driver, which only NixOS has.
 if [ ! -e /run/opengl-driver ]; then

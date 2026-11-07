@@ -125,7 +125,8 @@
         # embedded = true: inside the launcher's Basecamp window (the view is a
         # Wayland compositor; apps/external-embedded).
         mkExternalLauncher' = embedded: app0: let
-          app = if embedded then app0 // { name = "${app0.name} (in Basecamp)"; launcherId = "${app0.id}_embedded"; }
+          # (on a phone every app is in a tab: no "(in Basecamp)" to tell apart)
+          app = if embedded then app0 // { name = if app0.embedOnly or false then app0.name else "${app0.name} (in Basecamp)"; launcherId = "${app0.id}_embedded"; }
                 else app0 // { launcherId = app0.id; };
         in (logos-module-builder.lib.mkLogosQmlModule {
           src = pkgs.runCommand "launcher-${app.launcherId}-src" { } ''
@@ -155,7 +156,21 @@
           ./modules/basecamp-shell.nix
           ./modules/shrooms
           ./modules/duet
-          ({ ... }: {
+          ./modules/phone
+          ({ config, ... }: let
+            # A phone (phoc) has no workspaces for apps beside Basecamp: every
+            # native app runs in a tab there, and it gets a Phone app (Calls).
+            phone = config.basecampos.phone.enable;
+            apps = map (a: a // { embedOnly = phone; }) (externalApps ++ lib.optional phone {
+              id = "phone"; appId = "org.gnome.Calls"; name = "Phone";
+              command = [ "${pkgs.calls}/bin/gnome-calls" ];
+              # GTK 4 draws with GL by default; the tab's compositor offers no EGL.
+              embedCommand = [ "${pkgs.writeShellScript "phone-in-basecamp" "GSK_RENDERER=cairo exec ${pkgs.calls}/bin/gnome-calls"}" ];
+              icon = pkgs.runCommand "calls-icon.png" { } ''
+                ${pkgs.librsvg}/bin/rsvg-convert -w 256 -h 256 ${pkgs.calls}/share/icons/hicolor/scalable/apps/org.gnome.Calls.svg -o $out
+              '';
+            });
+          in {
             nixpkgs.config.allowUnfreePredicate = pkg:
               builtins.elem (lib.getName pkg) [ "claude-code" "brave" "symbola" ];
             # Portable bundle: the catalogue's apps install into it (the
@@ -164,9 +179,9 @@
             basecampos.shell.package = lib.mkDefault basecamp.packages.${system}.bin-bundle-dir;
             services.shrooms.agent.package = shrooms-agent;
             basecampos.shell.lgpm = lgpm;
-            basecampos.shell.apps = systemApps ++ map mkExternalLauncher externalApps
-              ++ map (mkExternalLauncher' true) (lib.filter (a: a ? embedCommand) externalApps) ++ catalogApps;
-            basecampos.shell.externalApps = map (a: { inherit (a) id appId name command; embedCommand = a.embedCommand or null; }) externalApps;
+            basecampos.shell.apps = systemApps ++ lib.optionals (!phone) (map mkExternalLauncher apps)
+              ++ map (mkExternalLauncher' true) (lib.filter (a: a ? embedCommand) apps) ++ catalogApps;
+            basecampos.shell.externalApps = map (a: { inherit (a) id appId name command; embedCommand = a.embedCommand or null; }) apps;
             basecampos.shell.repositories = [ "https://apps.vpavlin.xyz/logos-repo.json" ];
           })
         ];
@@ -205,6 +220,8 @@
         ];
         basecampos-desktop = mkHost "x86_64-linux" [ ./hosts/desktop.nix ];
         basecampos-duet-vm = mkHost "x86_64-linux" [ ./hosts/duet-vm.nix ];
+        # BasecampOS on a phone, in an x86 VM with a phone-shaped screen.
+        basecampos-phone-vm = mkHost "x86_64-linux" [ ./hosts/phone-vm.nix ];
         basecampos-live = mkHost "x86_64-linux" [ ./hosts/live.nix ];
         # Generic arm64 desktop (UEFI): the whole aarch64 closure, built on CI.
         basecampos-arm = mkHost "aarch64-linux" [ ./hosts/desktop.nix ];
@@ -226,6 +243,7 @@
         host-mesa = x86.pkgs.mesa;
         vm = self.nixosConfigurations.basecampos-vm.config.system.build.vm;
         duet-vm = self.nixosConfigurations.basecampos-duet-vm.config.system.build.vm;
+        phone-vm = self.nixosConfigurations.basecampos-phone-vm.config.system.build.vm;
         iso = self.nixosConfigurations.basecampos-live.config.system.build.isoImage;
         disk-image = self.nixosConfigurations.basecampos-desktop.config.system.build.images.raw-efi;
       };
