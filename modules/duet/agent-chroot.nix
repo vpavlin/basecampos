@@ -93,6 +93,36 @@ let
     echo "=== $(date) a child exited, restarting via systemd"
     exit 1
   '';
+  # `claude` in BasecampOS's terminal is the agent's own Claude (Debian's, in
+  # the Debian user's home), so `/login` lands where the agent reads it
+  # (~/.claude of that user). Entered without sudo: bubblewrap in a user
+  # namespace, as the same uid. Becomes nixpkgs' claude-code once the agent
+  # runs natively in BasecampOS.
+  claude = pkgs.writeShellScriptBin "claude" ''
+    D=/mnt/debian
+    H=/home/${cfg.debianUser}
+    if ! mountpoint -q $D/home; then
+      echo "claude: Debian is not mounted (is duet-agent-chroot running?)" >&2; exit 1
+    fi
+    for c in $H/.local/bin/claude /usr/local/bin/claude /usr/bin/claude; do
+      [ -x "$D$c" ] && bin=$c && break
+    done
+    [ -n "''${bin:-}" ] || { echo "claude: not found in the Debian userland" >&2; exit 1; }
+    u=$(id -u)
+    # Without user namespaces in the kernel: the same chroot the agent uses (sudo).
+    if ! ${pkgs.util-linux}/bin/unshare -U true 2>/dev/null; then
+      exec sudo chroot --userspec=$u:$u $D /usr/bin/env -i HOME=$H USER=${cfg.debianUser} LOGNAME=${cfg.debianUser} \
+        TERM="''${TERM:-xterm-256color}" LANG="''${LANG:-C.UTF-8}" XDG_RUNTIME_DIR=/run/user/$u \
+        PATH=$H/.local/bin:/usr/local/bin:/usr/bin:/bin sh -c 'cd "$HOME" && exec "$0" "$@"' "$bin" "$@"
+    fi
+    exec ${pkgs.bubblewrap}/bin/bwrap --bind $D / --dev-bind /dev /dev --proc /proc \
+      --ro-bind /sys /sys --bind /run/user/$u /run/user/$u --bind /tmp /tmp \
+      --clearenv --setenv HOME $H --setenv USER ${cfg.debianUser} --setenv LOGNAME ${cfg.debianUser} \
+      --setenv TERM "''${TERM:-xterm-256color}" --setenv LANG "''${LANG:-C.UTF-8}" \
+      --setenv XDG_RUNTIME_DIR /run/user/$u \
+      --setenv PATH $H/.local/bin:/usr/local/bin:/usr/bin:/bin --chdir $H \
+      "$bin" "$@"
+  '';
 in
 {
   options.basecampos.duet.agentChroot = {
@@ -115,6 +145,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    environment.systemPackages = [ claude ];
     assertions = [ {
       assertion = !config.services.shrooms.enable;
       message = "duet agentChroot runs the tablet's own shrooms daemon: services.shrooms must stay off";
